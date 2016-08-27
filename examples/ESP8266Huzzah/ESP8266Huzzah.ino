@@ -7,12 +7,15 @@
  *
  */
 
-#include <ESP8266WiFi.h>
-#include <WiFiUDP.h>
+ #include <ESP8266WiFi.h>          //https://github.com/esp8266/Arduino
 
-int status = WL_IDLE_STATUS;
-const char* ssid = "867";  //  your network SSID (name)
-const char* pass = "penthouse867";       // your network password
+ //needed for library
+ #include <DNSServer.h>
+ #include <ESP8266WebServer.h>
+ #include <WiFiManager.h>
+
+const uint8_t maxRand = 91;
+const uint8_t minRand = 48;
 
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
@@ -23,49 +26,39 @@ WiFiUDP Udp;
 
 IPAddress client;
 
+WiFiServer server(80);
+
 unsigned long lastSerialRead = 0;
 boolean packing = false;
+boolean clientSet = false;
 
-void setup()
-{
-  pinMode(0, OUTPUT);
-  digitalWrite(0, HIGH);
-  // Open serial communications and wait for port to open:
-  Serial.begin(115200);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for Leonardo only
-  }
+void setup() {
 
-  // setting up Station AP
-  WiFi.begin(ssid, pass);
-
-  // Wait for connect to AP
-//  Serial.print("[Connecting]");
-//  Serial.print(ssid);
-  int tries=0;
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-//    Serial.print(".");
-    tries++;
-    if (tries > 30){
-      break;
-    }
-  }
-//  Serial.println();
-
-
-//printWifiStatus();
-
-//  Serial.println("Connected to wifi");
-//  Serial.print("Udp server started at port ");
-//  Serial.println(localPort);
   Udp.begin(localPort);
+
+  // put your setup code here, to run once:
+  Serial.begin(115200);
+
+  //WiFiManager
+  //Local intialization. Once its business is done, there is no need to keep it around
+  WiFiManager wifiManager;
+  // wifiManager.setDebugOutput(false);
+  WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
+  wifiManager.addParameter(&custom_text);
+
+  wifiManager.setAPCallback(configModeCallback);
+
+  //fetches ssid and pass from eeprom and tries to connect
+  //if it does not connect it starts an access point with the specified name
+  //here  "AutoConnectAP"
+  //and goes into a blocking loop awaiting configuration
+  wifiManager.autoConnect("OpenBCI");
 }
 
 
-void loop()
-{
-  if (Serial.available()) {
+void loop() {
+
+  if (Serial.available() && clientSet) {
     if (packing == false) {
       Udp.beginPacket(client,2391);
       packing = true;
@@ -77,21 +70,15 @@ void loop()
 
   }
 
-  if (micros() > (3000 + lastSerialRead) && packing) {
+  if (micros() > (500 + lastSerialRead) && packing) {
     packing = false;
     Udp.endPacket();
   }
 
   int noBytes = Udp.parsePacket();
   if ( noBytes ) {
-//    Serial.print(millis() / 1000);
-//    Serial.print(":Packet of ");
-//    Serial.print(noBytes);
-//    Serial.print(" received from ");
-//    Serial.print(Udp.remoteIP());
     client = Udp.remoteIP();
-//    Serial.print(":");
-//    Serial.println(Udp.remotePort());
+    clientSet = true;
 
     // We've received a packet, read the data from it
     Udp.read(packetBuffer,noBytes); // read the packet into the buffer
@@ -99,16 +86,40 @@ void loop()
     // display the packet contents in HEX
     for (int i=1;i<=noBytes;i++){
       Serial.write(packetBuffer[i-1]);
-//      Serial.print(packetBuffer[i-1],HEX);
-//      if (i % 32 == 0){
-//        Serial.println();
-//      }
-//      else Serial.print(' ');
-    } // end for
-//    Serial.println();
-  } // end if
+    }
+  }
 
 
+}
+
+void configModeCallback (WiFiManager *myWiFiManager) {
+  Serial.println("Entered config mode");
+  Serial.println(WiFi.softAPIP());
+
+  Serial.println(myWiFiManager->getConfigPortalSSID());
+}
+
+String getName() {
+  // WiFi.mode(WIFI_AP);
+
+  // Do a little work to get a unique-ish name. Append the
+  // last two bytes of the MAC (HEX'd) to "Thing-":
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  macID.toUpperCase();
+  String AP_NameString = "OpenBCI-" + macID;
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  // WiFi.softAP(AP_NameChar, WiFiAPPSK);
+
+  return AP_NameString;
 }
 
 void printWifiStatus() {
