@@ -28,6 +28,8 @@ boolean packing = false;
 
 void setup()
 {
+  pinMode(0, OUTPUT);
+  digitalWrite(0, HIGH);
   // Open serial communications and wait for port to open:
   Serial.begin(115200);
   while (!Serial) {
