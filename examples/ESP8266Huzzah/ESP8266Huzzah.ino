@@ -37,7 +37,7 @@ void setup() {
   Udp.begin(localPort);
 
   // put your setup code here, to run once:
-  Serial.begin(115200);
+  Serial.begin(230400);
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
@@ -62,9 +62,12 @@ void loop() {
     if (packing == false) {
       Udp.beginPacket(client,2391);
       packing = true;
+      // Serial.print("packing: ");
     }
 
-    Udp.write(Serial.read());
+    char c = Serial.read();
+    Serial.print(c);
+    Udp.write(c);
 
     lastSerialRead = micros();
 
@@ -73,12 +76,14 @@ void loop() {
   if (micros() > (500 + lastSerialRead) && packing) {
     packing = false;
     Udp.endPacket();
+    // Serial.println(" done!");
   }
 
   int noBytes = Udp.parsePacket();
   if ( noBytes ) {
     client = Udp.remoteIP();
     clientSet = true;
+    // Serial.println("client set");
 
     // We've received a packet, read the data from it
     Udp.read(packetBuffer,noBytes); // read the packet into the buffer
@@ -93,7 +98,7 @@ void loop() {
 }
 
 void configModeCallback (WiFiManager *myWiFiManager) {
-  Serial.println("Entered config mode");
+  // Serial.println("Entered config mode");
   Serial.println(WiFi.softAPIP());
 
   Serial.println(myWiFiManager->getConfigPortalSSID());
