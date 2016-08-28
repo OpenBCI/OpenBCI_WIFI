@@ -22,21 +22,22 @@ let packetSize = 33;
 udpRx.on('message', (msg, rinfo) => {
   let good = true;
 
-  if (last + 1 != msg[0]) {
-    console.log(`missed packet: expected ${last + 1} got ${msg[0]}`);
-    last = msg[0];
-    good = false;
-  }
-  if (last + 2 != msg[packetSize]) {
-    console.log(`missed packet: expected ${last + 2} got ${msg[packetSize]}`);
-    last = msg[packetSize];
-    good = false;
-  }
-  if (last + 3 != msg[packetSize * 2]) {
-    console.log(`missed packet: expected ${last + 3} got ${msg[packetSize * 2]}`);
-    last = msg[packetSize * 2];
-    good = false;
-  }
+  console.log(`${msg.length}`);
+  // if (last + 1 != msg[0]) {
+  //   console.log(`missed packet: expected ${last + 1} got ${msg[0]}`);
+  //   last = msg[0];
+  //   good = false;
+  // }
+  // if (last + 2 != msg[packetSize]) {
+  //   console.log(`missed packet: expected ${last + 2} got ${msg[packetSize]}`);
+  //   last = msg[packetSize];
+  //   good = false;
+  // }
+  // if (last + 3 != msg[packetSize * 2]) {
+  //   console.log(`missed packet: expected ${last + 3} got ${msg[packetSize * 2]}`);
+  //   last = msg[packetSize * 2];
+  //   good = false;
+  // }
 
   if (good) {
     last += 3;

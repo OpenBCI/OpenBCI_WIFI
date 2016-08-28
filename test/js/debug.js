@@ -4,7 +4,7 @@ bufferEqual = require('buffer-equal');
 // host: '/dev/tty.usbserial-DN0096JM'
 let host = '/dev/tty.usbserial-DN00D1S2'
 const serial = new SerialPort(host,{
-  baudRate: 962100
+  baudRate: 921600
 })
 
 let last = 0;
@@ -14,6 +14,10 @@ serial.on('open',() => {
 })
 
 serial.on('data', data => {
+  // console.log(data);
+  // for (var i = 0; i < data.length; i++) {
+  //   console.log(data[i]);
+  // }
   processBytes(data);
 })
 
