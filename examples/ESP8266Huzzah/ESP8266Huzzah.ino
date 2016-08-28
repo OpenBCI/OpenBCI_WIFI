@@ -32,6 +32,10 @@ unsigned long lastSerialRead = 0;
 boolean packing = false;
 boolean clientSet = false;
 
+unsigned long lastSendTime = 0;
+int count = 0;
+int samplesPerUdpPacket = 3;
+
 void setup() {
   // pinMode(0, OUTPUT);
   // digitalWrite(0, LOW);
@@ -76,9 +80,14 @@ void loop() {
 
   }
 
-  if (micros() > (500 + lastSerialRead) && packing) {
-    packing = false;
-    Udp.endPacket();
+  if (micros() > (50 + lastSerialRead) && packing) {
+    if (count < samplesPerUdpPacket) {
+      count++;
+    } else {
+      count = 0;
+      packing = false;
+      Udp.endPacket();
+    }
     // Serial.println(" done!");
   }
 
@@ -88,12 +97,6 @@ void loop() {
     if (!clientSet) {
       client = Udp.remoteIP();
       clientSet = true;
-      // digitalWrite(0, HIGH);
-      // delay(500);
-      // digitalWrite(0, LOW);
-      // delay(500);
-      // digitalWrite(0, HIGH);
-
     }
 
     // Serial.println("client set");
@@ -102,9 +105,9 @@ void loop() {
     Udp.read(packetBuffer,noBytes); // read the packet into the buffer
 
     // display the packet contents in HEX
-    for (int i=1;i<=noBytes;i++){
-      Serial.write(packetBuffer[i-1]);
-    }
+    // for (int i=1;i<=noBytes;i++){
+    //   Serial.write(packetBuffer[i-1]);
+    // }
   }
 
 
