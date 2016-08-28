@@ -33,16 +33,18 @@ boolean packing = false;
 boolean clientSet = false;
 
 void setup() {
+  // pinMode(0, OUTPUT);
+  // digitalWrite(0, LOW);
 
   Udp.begin(localPort);
 
   // put your setup code here, to run once:
-  Serial.begin(230400);
+  Serial.begin(460800);
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
-  // wifiManager.setDebugOutput(false);
+  wifiManager.setDebugOutput(true);
   WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
   wifiManager.addParameter(&custom_text);
 
@@ -53,6 +55,7 @@ void setup() {
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
   wifiManager.autoConnect("OpenBCI");
+  printWifiStatus();
 }
 
 
@@ -81,8 +84,18 @@ void loop() {
 
   int noBytes = Udp.parsePacket();
   if ( noBytes ) {
-    client = Udp.remoteIP();
-    clientSet = true;
+
+    if (!clientSet) {
+      client = Udp.remoteIP();
+      clientSet = true;
+      // digitalWrite(0, HIGH);
+      // delay(500);
+      // digitalWrite(0, LOW);
+      // delay(500);
+      // digitalWrite(0, HIGH);
+
+    }
+
     // Serial.println("client set");
 
     // We've received a packet, read the data from it

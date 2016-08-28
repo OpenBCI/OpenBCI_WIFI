@@ -24,5 +24,8 @@
   "bugs": {
     "url": "https://github.com/PushTheWorld/OpenBCI_Wifi/issues"
   },
-  "homepage": "https://github.com/PushTheWorld/OpenBCI_Wifi#readme"
+  "homepage": "https://github.com/PushTheWorld/OpenBCI_Wifi#readme",
+  "dependencies": {
+    "serialport": "^4.0.1"
+  }
 }

@@ -17,8 +17,8 @@ udpRx.on('error', (err) => {
 });
 
 udpRx.on('message', (msg, rinfo) => {
-  console.log(`${msg}`);
-  // console.log(`udpRx got: ${msg} from ${rinfo.address}:${rinfo.port}`);
+  // console.log(`${msg}`);
+  console.log(`udpRx got: ${msg} from ${rinfo.address}:${rinfo.port}`);
 });
 
 udpRx.on('listening', () => {
