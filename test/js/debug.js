@@ -4,7 +4,7 @@ bufferEqual = require('buffer-equal');
 // host: '/dev/tty.usbserial-DN0096JM'
 let host = '/dev/tty.usbserial-DN00D1S2'
 const serial = new SerialPort(host,{
-  baudRate: 921600
+  baudRate: 230400
 })
 
 let last = 0;
@@ -15,10 +15,10 @@ serial.on('open',() => {
 
 serial.on('data', data => {
   // console.log(data);
-  // for (var i = 0; i < data.length; i++) {
-  //   console.log(data[i]);
-  // }
-  processBytes(data);
+  for (var i = 0; i < data.length; i++) {
+    console.log(data[i]);
+  }
+  // processBytes(data);
 })
 
 serial.on('close', () => {
@@ -132,14 +132,14 @@ var processQualifiedPacket = rawDataPacketBuffer => {
   switch (packetType) {
     case OBCIStreamPacketStandardAccel:
     case OBCIStreamPacketStandardRawAux:
-    sampleNumberTest(rawDataPacketBuffer);
-    break;
+      sampleNumberTest(rawDataPacketBuffer);
+      break;
     case OBCIStreamPacketAccelTimeSyncSet:
     case OBCIStreamPacketRawAuxTimeSyncSet:
     case OBCIStreamPacketAccelTimeSynced:
     case OBCIStreamPacketRawAuxTimeSynced:
-    timeTest(rawDataPacketBuffer);
-    break;
+      timeTest(rawDataPacketBuffer);
+      break;
     default:
     // Don't do anything if the packet is not defined
     break;
@@ -167,8 +167,9 @@ var timeTest = dataBuf => {
 
   let time = dataBuf.readUInt32BE(lastBytePosition - OBCIStreamPacketTimeByteSize);
 
-  if (time - last < 3 || time - last > 5) {
-    console.log(`missed packet: expected ${time - last} to equal ${4}`);
-  }
-  last = time;
+  console.log(time);
+  // if (time - last < 3 || time - last > 5) {
+  //   console.log(`missed packet: expected ${time - last} to equal ${4}`);
+  // }
+  // last = time;
 }
