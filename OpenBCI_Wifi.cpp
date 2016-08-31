@@ -14,7 +14,7 @@
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
-  debugMode = false; // Set true if doing dongle-dongle sim
+  debugMode = true; // Set true if doing dongle-dongle sim
 }
 
 /**
@@ -22,21 +22,39 @@ OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::begin(void) {
-
-  SPI.begin();
-  // SPI.setHwCs(true);
-
-
+  initArrays();
+  initObjects();
+  initVariables();
 }
 
-void OpenBCI_Wifi_Class::configure(void) {
+/**
+* @description Initalize arrays here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initArrays(void) {
+  for (int i = 0; i < OPENBCI_NUMBER_STREAM_BUFFERS; i++) {
+    bufferStreamReset(streamPacketBuffer + i);
+  }
+}
+
+/**
+* @description Initalize class objects here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initObjects(void) {
+  SPI.begin();
+  SPI.setHwCs(true);
+}
+
+/**
+* @description Initalize variables here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initVariables(void) {
   lastTimeSpiRead = 0;
   lastChipSelectLevel = 0;
   streamPacketBufferHead = 0;
   streamPacketBufferTail = 0;
-  for (int i = 0; i < OPENBCI_NUMBER_STREAM_BUFFERS; i++) {
-    bufferStreamReset(streamPacketBuffer + i);
-  }
 }
 
 /**

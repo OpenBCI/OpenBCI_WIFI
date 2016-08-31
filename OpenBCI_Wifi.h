@@ -26,6 +26,7 @@ public:
     STREAM_STATE_READY
   };
   // STRUCTS
+
   typedef struct {
     uint8_t         typeByte;
     char            data[OPENBCI_MAX_PACKET_SIZE_BYTES];
@@ -50,6 +51,9 @@ public:
   // Variables
   StreamPacketBuffer streamPacketBuffer[OPENBCI_NUMBER_STREAM_BUFFERS];
   uint8_t lastChipSelectLevel;
+  uint8_t bufSpi[WIFI_BUFFER_LENGTH];
+  uint8_t bufUdp[WIFI_BUFFER_LENGTH];
+  uint8_t bufferTxPosition;
   uint8_t streamPacketBufferHead;
   uint8_t streamPacketBufferTail;
   unsigned long lastTimeSpiRead;

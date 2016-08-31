@@ -16,7 +16,6 @@
  #include "SPI.h"
  #include "OpenBCI_Wifi.h"
 
-char buf [100];
 volatile byte pos;
 volatile boolean process_it;
 
@@ -25,7 +24,6 @@ const uint8_t minRand = 48;
 
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
-byte packetBuffer[512]; //buffer to hold incoming and outgoing packets
 
 // A UDP instance to let us send and receive packets over UDP
 WiFiUDP Udp;
@@ -64,67 +62,83 @@ void setup() {
   wifiManager.autoConnect("OpenBCI");
   printWifiStatus();
 
-
 }
 
 void loop() {
 
   while (!digitalRead(WIFI_PIN_SLAVE_SELECT)) { // Is there data ready
+    // First byte
+    if (wifi.lastChipSelectLevel == 1) {
+      // This is an op code
+      wifi.lastChipSelectLevel = 0;
+    }
+
+    // Get that byte
     uint8_t inByte = xfer(0x00);
-    // Mark the last SPI read as now;
-    wifi.lastTimeSerialRead = micros();
-    // Store it to serial buffer
-    wifi.bufferSerialAddChar(inByte);
-    // Get one char and process it
-    wifi.bufferStreamAddChar((wifi.streamPacketBuffer + wifi.streamPacketBufferHead), inByte);
-  }
 
-  if ((wifi.streamPacketBuffer + wifi.streamPacketBufferHead)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the PC?
-    if (wifi.bufferStreamTimeout()) {
-      // We are sure this is a streaming packet.
-      wifi.streamPacketBufferHead++;
-      if (wifi.streamPacketBufferHead > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-        wifi.streamPacketBufferHead = 0;
-      }
+    // Mark the last SPI read as now
+    wifi.lastTimeSpiRead = micros();
+
+    // Store it to buffer
+    wifi.bufSpi[wifi.bufferTxPosition] = inByte;
+    wifi.bufferTxPosition++;
+    if (wifi.bufferTxPosition >= WIFI_BUFFER_LENGTH) {
+      wifi.bufferTxPosition = 0;
+      Udp.beginPacket(client,2391);
+      Udp.write(wifi.bufSpi, WIFI_BUFFER_LENGTH);
+      Udp.endPacket();
     }
   }
 
-  if ((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the Host?
-    if (wifi.streamPacketBufferHead != wifi.streamPacketBufferTail) {
-      // Try to add the tail to the TX buffer
-      if (clientSet) {
-        Udp.beginPacket(client,2391);
-        Udp.write((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->data, (wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->bytesIn);
-        Udp.endPacket();
-        wifi.bufferStreamReset(wifi.streamPacketBuffer + wifi.streamPacketBufferTail);
-      }
-      wifi.streamPacketBufferTail++;
-      if (wifi.streamPacketBufferTail > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-        wifi.streamPacketBufferTail = 0;
-      }
-    }
+  if (wifi.lastTimeSpiRead > 100) {
+    Udp.beginPacket(client,2391);
+    Udp.write(wifi.bufSpi, wifi.bufferTxPosition);
+    Udp.endPacket();
+    wifi.bufferTxPosition = 0;
   }
+
+  // if ((wifi.streamPacketBuffer + wifi.streamPacketBufferHead)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the PC?
+  //   if (wifi.bufferStreamTimeout()) {
+  //     // We are sure this is a streaming packet.
+  //     wifi.streamPacketBufferHead++;
+  //     if (wifi.streamPacketBufferHead > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
+  //       wifi.streamPacketBufferHead = 0;
+  //     }
+  //   }
+  // }
+  //
+  // if ((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the Host?
+  //   if (wifi.streamPacketBufferHead != wifi.streamPacketBufferTail) {
+  //     // Try to add the tail to the TX buffer
+  //     if (clientSet) {
+  //       Udp.beginPacket(client,2391);
+  //       Udp.write((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->data, (wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->bytesIn);
+  //       Udp.endPacket();
+  //       wifi.bufferStreamReset(wifi.streamPacketBuffer + wifi.streamPacketBufferTail);
+  //     }
+  //     wifi.streamPacketBufferTail++;
+  //     if (wifi.streamPacketBufferTail > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
+  //       wifi.streamPacketBufferTail = 0;
+  //     }
+  //   }
+  // }
 
   int noBytes = Udp.parsePacket();
-  if ( noBytes ) {
+  if (noBytes) {
 
     if (!clientSet) {
       client = Udp.remoteIP();
       clientSet = true;
     }
 
-    // Serial.println("client set");
-
     // We've received a packet, read the data from it
-    Udp.read(packetBuffer,noBytes); // read the packet into the buffer
+    Udp.read(wifi.bufUdp, noBytes); // read the packet into the buffer
 
-    // display the packet contents in HEX
-    for (int i=1;i<=noBytes;i++){
-      Serial.write(packetBuffer[i-1]);
+    // Display the packet contents in HEX
+    for (int i = 1;i <= noBytes; i++) {
+      Serial.write(wifi.bufUdp[i - 1]);
     }
   }
-
-
 }
 
 
@@ -133,7 +147,7 @@ void loop() {
 byte xfer(byte _data)
 {
     byte inByte;
-    inByte = spi.transfer(_data);
+    inByte = SPI.transfer(_data);
     return inByte;
 }
 

@@ -14,9 +14,6 @@
 #define OPENBCI_MAX_PACKET_SIZE_BYTES 32
 #define OPENBCI_MAX_PACKET_SIZE_STREAM_BYTES 33
 
-// Max buffer lengths
-#define OPENBCI_BUFFER_LENGTH_MULTI 528 // 16 * 33
-
 // Number of buffers
 #define OPENBCI_NUMBER_RADIO_BUFFERS 1
 #define OPENBCI_NUMBER_SERIAL_BUFFERS 16
@@ -28,5 +25,8 @@
 
 // Pins
 #define WIFI_PIN_SLAVE_SELECT 15
+
+// Max buffer lengths
+#define WIFI_BUFFER_LENGTH 330
 
 #endif
