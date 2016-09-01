@@ -11,10 +11,14 @@
 
 #include "OpenBCI_Wifi.h"
 
+OpenBCI_Wifi_Class OpenBCI_Wifi;
+
+/***************************************************/
+/** PUBLIC METHODS *********************************/
+/***************************************************/
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
-  debugMode = true; // Set true if doing dongle-dongle sim
 }
 
 /**
@@ -25,36 +29,6 @@ void OpenBCI_Wifi_Class::begin(void) {
   initArrays();
   initObjects();
   initVariables();
-}
-
-/**
-* @description Initalize arrays here
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::initArrays(void) {
-  for (int i = 0; i < OPENBCI_NUMBER_STREAM_BUFFERS; i++) {
-    bufferStreamReset(streamPacketBuffer + i);
-  }
-}
-
-/**
-* @description Initalize class objects here
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::initObjects(void) {
-  SPI.begin();
-  SPI.setHwCs(true);
-}
-
-/**
-* @description Initalize variables here
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::initVariables(void) {
-  lastTimeSpiRead = 0;
-  lastChipSelectLevel = 0;
-  streamPacketBufferHead = 0;
-  streamPacketBufferTail = 0;
 }
 
 /**
@@ -128,28 +102,6 @@ void OpenBCI_Wifi_Class::bufferStreamAddChar(StreamPacketBuffer *buf, char newCh
 }
 
 /**
-* @description Used to add a packet to the of steaming data to the current
-*  `streamPacketBufferHead` and then increment the head. Will wrap around if
-*  need be to avoid moving the head past `OPENBCI_NUMBER_STREAM_BUFFERS`.
-* @param `data` {char *} - The data packet you want to add of length
-*  `OPENBCI_MAX_PACKET_SIZE_BYTES` (32)
-* @returns {boolean} - `true` if able to add it. Currently this func will always
-*  return `true`, however this allows for greater flexiblity in the future.
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::bufferStreamAddData(char *data) {
-
-  bufferStreamStoreData(streamPacketBuffer + streamPacketBufferHead, data);
-
-  streamPacketBufferHead++;
-  if (streamPacketBufferHead > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-    streamPacketBufferHead = 0;
-  }
-
-  return true;
-}
-
-/**
 * @description Utility function to return `true` if the the streamPacketBuffer
 *   is in the STREAM_STATE_READY. Normally used for determining if a stream
 *   packet is ready to be sent.
@@ -185,6 +137,46 @@ void OpenBCI_Wifi_Class::bufferStreamReset(StreamPacketBuffer *buf) {
 }
 
 /**
+* @description Strips and gets the packet number from a byteId
+* @param byteId [char] a byteId (see ::byteIdMake for description of bits)
+* @returns [byte] the packet type
+* @author AJ Keller (@pushtheworldllc)
+*/
+byte OpenBCI_Wifi_Class::byteIdGetStreamPacketType(uint8_t byteId) {
+  return (byte)((byteId & 0x78) >> 3);
+}
+
+/**
+* @description Initalize arrays here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initArrays(void) {
+  for (int i = 0; i < OPENBCI_NUMBER_STREAM_BUFFERS; i++) {
+    bufferStreamReset(streamPacketBuffer + i);
+  }
+}
+
+/**
+* @description Initalize class objects here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initObjects(void) {
+  SPI.begin();
+  SPI.setHwCs(true);
+}
+
+/**
+* @description Initalize variables here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initVariables(void) {
+  lastTimeSpiRead = 0;
+  lastChipSelectLevel = 0;
+  streamPacketBufferHead = 0;
+  streamPacketBufferTail = 0;
+}
+
+/**
 * @description Test to see if a char follows the stream tail byte format
 * @author AJ Keller (@pushtheworldllc)
 */
@@ -204,4 +196,10 @@ byte OpenBCI_Wifi_Class::outputGetStopByteFromByteId(char byteId) {
   return byteIdGetStreamPacketType(byteId) | 0xC0;
 }
 
-OpenBCI_Wifi_Class wifi;
+
+//SPI communication method
+byte OpenBCI_Wifi_Class::xfer(byte _data) {
+    byte inByte;
+    inByte = SPI.transfer(_data);
+    return inByte;
+}

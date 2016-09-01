@@ -43,6 +43,9 @@ void setup() {
 
   Udp.begin(localPort);
 
+  // Boot up the library
+  OpenBCI_Wifi.begin();
+
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.setDebugOutput(true);
@@ -68,57 +71,57 @@ void loop() {
 
   while (!digitalRead(WIFI_PIN_SLAVE_SELECT)) { // Is there data ready
     // First byte
-    if (wifi.lastChipSelectLevel == 1) {
+    if (OpenBCI_Wifi.lastChipSelectLevel == 1) {
       // This is an op code
-      wifi.lastChipSelectLevel = 0;
+      OpenBCI_Wifi.lastChipSelectLevel = 0;
     }
 
     // Get that byte
-    uint8_t inByte = xfer(0x00);
+    uint8_t inByte = OpenBCI_Wifi.xfer(0x00);
 
     // Mark the last SPI read as now
-    wifi.lastTimeSpiRead = micros();
+    OpenBCI_Wifi.lastTimeSpiRead = micros();
 
     // Store it to buffer
-    wifi.bufSpi[wifi.bufferTxPosition] = inByte;
-    wifi.bufferTxPosition++;
-    if (wifi.bufferTxPosition >= WIFI_BUFFER_LENGTH) {
-      wifi.bufferTxPosition = 0;
+    OpenBCI_Wifi.bufSpi[OpenBCI_Wifi.bufferTxPosition] = inByte;
+    OpenBCI_Wifi.bufferTxPosition++;
+    if (OpenBCI_Wifi.bufferTxPosition >= WIFI_BUFFER_LENGTH) {
+      OpenBCI_Wifi.bufferTxPosition = 0;
       Udp.beginPacket(client,2391);
-      Udp.write(wifi.bufSpi, WIFI_BUFFER_LENGTH);
+      Udp.write(OpenBCI_Wifi.bufSpi, WIFI_BUFFER_LENGTH);
       Udp.endPacket();
     }
   }
 
-  if (wifi.lastTimeSpiRead > 100) {
+  if (OpenBCI_Wifi.lastTimeSpiRead > 100) {
     Udp.beginPacket(client,2391);
-    Udp.write(wifi.bufSpi, wifi.bufferTxPosition);
+    Udp.write(OpenBCI_Wifi.bufSpi, OpenBCI_Wifi.bufferTxPosition);
     Udp.endPacket();
-    wifi.bufferTxPosition = 0;
+    OpenBCI_Wifi.bufferTxPosition = 0;
   }
 
-  // if ((wifi.streamPacketBuffer + wifi.streamPacketBufferHead)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the PC?
-  //   if (wifi.bufferStreamTimeout()) {
+  // if ((OpenBCI_Wifi.streamPacketBuffer + OpenBCI_Wifi.streamPacketBufferHead)->state == OpenBCI_Wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the PC?
+  //   if (OpenBCI_Wifi.bufferStreamTimeout()) {
   //     // We are sure this is a streaming packet.
-  //     wifi.streamPacketBufferHead++;
-  //     if (wifi.streamPacketBufferHead > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-  //       wifi.streamPacketBufferHead = 0;
+  //     OpenBCI_Wifi.streamPacketBufferHead++;
+  //     if (OpenBCI_Wifi.streamPacketBufferHead > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
+  //       OpenBCI_Wifi.streamPacketBufferHead = 0;
   //     }
   //   }
   // }
   //
-  // if ((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the Host?
-  //   if (wifi.streamPacketBufferHead != wifi.streamPacketBufferTail) {
+  // if ((OpenBCI_Wifi.streamPacketBuffer + OpenBCI_Wifi.streamPacketBufferTail)->state == OpenBCI_Wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the Host?
+  //   if (OpenBCI_Wifi.streamPacketBufferHead != OpenBCI_Wifi.streamPacketBufferTail) {
   //     // Try to add the tail to the TX buffer
   //     if (clientSet) {
   //       Udp.beginPacket(client,2391);
-  //       Udp.write((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->data, (wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->bytesIn);
+  //       Udp.write((OpenBCI_Wifi.streamPacketBuffer + OpenBCI_Wifi.streamPacketBufferTail)->data, (OpenBCI_Wifi.streamPacketBuffer + OpenBCI_Wifi.streamPacketBufferTail)->bytesIn);
   //       Udp.endPacket();
-  //       wifi.bufferStreamReset(wifi.streamPacketBuffer + wifi.streamPacketBufferTail);
+  //       OpenBCI_Wifi.bufferStreamReset(OpenBCI_Wifi.streamPacketBuffer + OpenBCI_Wifi.streamPacketBufferTail);
   //     }
-  //     wifi.streamPacketBufferTail++;
-  //     if (wifi.streamPacketBufferTail > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-  //       wifi.streamPacketBufferTail = 0;
+  //     OpenBCI_Wifi.streamPacketBufferTail++;
+  //     if (OpenBCI_Wifi.streamPacketBufferTail > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
+  //       OpenBCI_Wifi.streamPacketBufferTail = 0;
   //     }
   //   }
   // }
@@ -132,23 +135,13 @@ void loop() {
     }
 
     // We've received a packet, read the data from it
-    Udp.read(wifi.bufUdp, noBytes); // read the packet into the buffer
+    Udp.read(OpenBCI_Wifi.bufUdp, noBytes); // read the packet into the buffer
 
     // Display the packet contents in HEX
     for (int i = 1;i <= noBytes; i++) {
-      Serial.write(wifi.bufUdp[i - 1]);
+      Serial.write(OpenBCI_Wifi.bufUdp[i - 1]);
     }
   }
-}
-
-
-
-//SPI communication method
-byte xfer(byte _data)
-{
-    byte inByte;
-    inByte = SPI.transfer(_data);
-    return inByte;
 }
 
 void configModeCallback (WiFiManager *myWiFiManager) {

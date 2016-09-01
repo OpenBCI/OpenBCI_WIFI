@@ -13,6 +13,8 @@
 #ifndef __OpenBCI_Wifi__
 #define __OpenBCI_Wifi__
 
+#include <Arduino.h>
+#include "SPI.h"
 #include "OpenBCI_Wifi_Definitions.h"
 
 class OpenBCI_Wifi_Class {
@@ -35,18 +37,24 @@ public:
   } StreamPacketBuffer;
 
   // Functions and Methods
+  OpenBCI_Wifi_Class();
   void begin(void);
   void bufferStreamAddChar(StreamPacketBuffer *, char);
   boolean bufferStreamAddData(char *);
   void bufferStreamFlush(StreamPacketBuffer *);
   void bufferStreamFlushBuffers(void);
-  boolean bufferStreamReadyToSend(StreamPacketBuffer *buf);
+  boolean bufferStreamReadyToSend(StreamPacketBuffer *);
   void bufferStreamReset(void);
   void bufferStreamReset(StreamPacketBuffer *);
   boolean bufferStreamTimeout(void);
+  byte byteIdGetStreamPacketType(uint8_t);
   void configure(void);
-  boolean isATailByte(uint8_t newChar);
-  byte outputGetStopByteFromByteId(char byteId);
+  void initArrays(void);
+  void initObjects(void);
+  void initVariables(void);
+  boolean isATailByte(uint8_t);
+  byte outputGetStopByteFromByteId(char);
+  byte xfer(byte);
 
   // Variables
   StreamPacketBuffer streamPacketBuffer[OPENBCI_NUMBER_STREAM_BUFFERS];
@@ -61,7 +69,6 @@ public:
 
 };
 
-// Very important, major key to success #christmas
-extern OpenBCI_Wifi_Class wifi;
+extern OpenBCI_Wifi_Class OpenBCI_Wifi;
 
 #endif // OPENBCI_WIFI_H
