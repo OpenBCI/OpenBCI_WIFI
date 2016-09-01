@@ -50,6 +50,8 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
 
+  Serial.println("\nHey");
+
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
@@ -65,11 +67,14 @@ void setup() {
   wifiManager.autoConnect("OpenBCI");
   printWifiStatus();
 
+  Serial.println("Connected");
+
 }
 
 void loop() {
 
-  while (!digitalRead(WIFI_PIN_SLAVE_SELECT)) { // Is there data ready
+  if (!digitalRead(WIFI_PIN_SLAVE_SELECT)) { // Is there data ready
+    // Serial.print("SS");
     // First byte
     if (OpenBCI_Wifi.lastChipSelectLevel == 1) {
       // This is an op code
