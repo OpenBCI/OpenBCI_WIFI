@@ -26,6 +26,7 @@ OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::begin(void) {
+  initArduino();
   initArrays();
   initObjects();
   initVariables();
@@ -144,6 +145,15 @@ void OpenBCI_Wifi_Class::bufferStreamReset(StreamPacketBuffer *buf) {
 */
 byte OpenBCI_Wifi_Class::byteIdGetStreamPacketType(uint8_t byteId) {
   return (byte)((byteId & 0x78) >> 3);
+}
+
+boolean OpenBCI_Wifi_Class::dataReady(void) {
+  return !digitalRead(WIFI_PIN_SLAVE_SELECT);
+}
+
+void OpenBCI_Wifi_Class::initArduino(void) {
+  pinMode(WIFI_PIN_SLAVE_SELECT,INPUT);
+
 }
 
 /**

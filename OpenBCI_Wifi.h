@@ -48,10 +48,7 @@ public:
   void bufferStreamReset(StreamPacketBuffer *);
   boolean bufferStreamTimeout(void);
   byte byteIdGetStreamPacketType(uint8_t);
-  void configure(void);
-  void initArrays(void);
-  void initObjects(void);
-  void initVariables(void);
+  boolean dataReady(void);
   boolean isATailByte(uint8_t);
   byte outputGetStopByteFromByteId(char);
   byte xfer(byte);
@@ -66,6 +63,11 @@ public:
   uint8_t streamPacketBufferTail;
   unsigned long lastTimeSpiRead;
 
+private:
+  void initArduino(void);
+  void initArrays(void);
+  void initObjects(void);
+  void initVariables(void);
 
 };
 

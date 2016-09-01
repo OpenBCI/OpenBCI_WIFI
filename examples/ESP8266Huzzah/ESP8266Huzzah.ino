@@ -30,12 +30,14 @@ WiFiUDP Udp;
 
 IPAddress client;
 
-WiFiServer server(80);
+// WiFiServer server(80);
 
 boolean packing = false;
 boolean clientSet = false;
 
 uint8_t lastSS = 0;
+uint8_t lastVal = 0xFF;
+uint8_t curOp = 0xFF;
 
 void setup() {
   // pinMode(0, OUTPUT);
@@ -49,8 +51,6 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.setDebugOutput(true);
-
-  Serial.println("\nHey");
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
@@ -83,25 +83,36 @@ void loop() {
 
     // Get that byte
     uint8_t inByte = OpenBCI_Wifi.xfer(0x00);
+    if (curOp = 0xFF) {
+      if (inByte != 0xFF) {
+        Serial.println("Got a different byte!");
+        curOp = inByte;
+      }
+    } else {
+      Serial.print("inByte: "); Serial.println(inByte);
 
-    // Mark the last SPI read as now
-    OpenBCI_Wifi.lastTimeSpiRead = micros();
+      // Mark the last SPI read as now
+      OpenBCI_Wifi.lastTimeSpiRead = micros();
 
-    // Store it to buffer
-    OpenBCI_Wifi.bufSpi[OpenBCI_Wifi.bufferTxPosition] = inByte;
-    OpenBCI_Wifi.bufferTxPosition++;
-    if (OpenBCI_Wifi.bufferTxPosition >= WIFI_BUFFER_LENGTH) {
-      OpenBCI_Wifi.bufferTxPosition = 0;
-      Udp.beginPacket(client,2391);
-      Udp.write(OpenBCI_Wifi.bufSpi, WIFI_BUFFER_LENGTH);
-      Udp.endPacket();
+      // Store it to buffer
+      OpenBCI_Wifi.bufSpi[OpenBCI_Wifi.bufferTxPosition] = inByte;
+      OpenBCI_Wifi.bufferTxPosition++;
+      if (OpenBCI_Wifi.bufferTxPosition >= WIFI_BUFFER_LENGTH) {
+        Serial.println("Wrote buffer after it filled up");
+        OpenBCI_Wifi.bufferTxPosition = 0;
+        // Udp.beginPacket(client,2391);
+        // Udp.write(OpenBCI_Wifi.bufSpi, WIFI_BUFFER_LENGTH);
+        // Udp.endPacket();
+      }
     }
+
   }
 
-  if (OpenBCI_Wifi.lastTimeSpiRead > 100) {
-    Udp.beginPacket(client,2391);
-    Udp.write(OpenBCI_Wifi.bufSpi, OpenBCI_Wifi.bufferTxPosition);
-    Udp.endPacket();
+  if (micros() > 100 + OpenBCI_Wifi.lastTimeSpiRead && OpenBCI_Wifi.bufferTxPosition > 0) {
+    // Udp.beginPacket(client,2391);
+    // Udp.write(OpenBCI_Wifi.bufSpi, OpenBCI_Wifi.bufferTxPosition);
+    // Udp.endPacket();
+    Serial.println("Wrote buffer after time out");
     OpenBCI_Wifi.bufferTxPosition = 0;
   }
 
@@ -130,6 +141,9 @@ void loop() {
   //     }
   //   }
   // }
+
+  // Serial.println(".");
+  // delay(500);
 
   int noBytes = Udp.parsePacket();
   if (noBytes) {
