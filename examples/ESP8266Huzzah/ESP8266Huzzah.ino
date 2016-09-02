@@ -13,8 +13,8 @@
  #include <DNSServer.h>
  #include <ESP8266WebServer.h>
  #include <WiFiManager.h>
- #include "SPI.h"
- #include "OpenBCI_Wifi.h"
+ #include "SPISlave.h"
+ // #include "OpenBCI_Wifi.h"
 
 volatile byte pos;
 volatile boolean process_it;
@@ -46,7 +46,7 @@ void setup() {
   Udp.begin(localPort);
 
   // Boot up the library
-  OpenBCI_Wifi.begin();
+  // OpenBCI_Wifi.begin();
 
   // put your setup code here, to run once:
   Serial.begin(115200);
@@ -69,52 +69,100 @@ void setup() {
 
   Serial.println("Connected");
 
+  // data has been received from the master. Beware that len is always 32
+  // and the buffer is autofilled with zeroes if data is less than 32 bytes long
+  // It's up to the user to implement protocol for handling data length
+  SPISlave.onData([](uint8_t * data, size_t len) {
+    String message = String((char *)data);
+    if(message.equals("Hello Slave!")) {
+      SPISlave.setData("Hello Master!");
+    } else if(message.equals("Are you alive?")) {
+      char answer[33];
+      sprintf(answer,"Alive for %u seconds!", millis() / 1000);
+      SPISlave.setData(answer);
+    } else {
+      SPISlave.setData("Say what?");
+    }
+    Serial.printf("Question: %s\n", (char *)data);
+  });
+
+  // The master has read out outgoing data buffer
+  // that buffer can be set with SPISlave.setData
+  SPISlave.onDataSent([]() {
+    Serial.println("Answer Sent");
+  });
+
+  // status has been received from the master.
+  // The status register is a special register that bot the slave and the master can write to and read from.
+  // Can be used to exchange small data or status information
+  SPISlave.onStatus([](uint32_t data) {
+    Serial.printf("Status: %u\n", data);
+    SPISlave.setStatus(millis()); //set next status
+  });
+
+  // The master has read the status register
+  SPISlave.onStatusSent([]() {
+    Serial.println("Status Sent");
+  });
+
+  // Setup SPI Slave registers and pins
+  SPISlave.begin();
+
+  // Set the status register (if the master reads it, it will read this value)
+  SPISlave.setStatus(millis());
+
+  // Sets the data registers. Limited to 32 bytes at a time.
+  // SPISlave.setData(uint8_t * data, size_t len); is also available with the same limitation
+  SPISlave.setData("Ask me a question!");
+
+  Serial.println("SPI Slave ready");
+
 }
 
 void loop() {
 
-  if (!digitalRead(WIFI_PIN_SLAVE_SELECT)) { // Is there data ready
-    // Serial.print("SS");
-    // First byte
-    if (OpenBCI_Wifi.lastChipSelectLevel == 1) {
-      // This is an op code
-      OpenBCI_Wifi.lastChipSelectLevel = 0;
-    }
-
-    // Get that byte
-    uint8_t inByte = OpenBCI_Wifi.xfer(0x00);
-    if (curOp = 0xFF) {
-      if (inByte != 0xFF) {
-        Serial.println("Got a different byte!");
-        curOp = inByte;
-      }
-    } else {
-      Serial.print("inByte: "); Serial.println(inByte);
-
-      // Mark the last SPI read as now
-      OpenBCI_Wifi.lastTimeSpiRead = micros();
-
-      // Store it to buffer
-      OpenBCI_Wifi.bufSpi[OpenBCI_Wifi.bufferTxPosition] = inByte;
-      OpenBCI_Wifi.bufferTxPosition++;
-      if (OpenBCI_Wifi.bufferTxPosition >= WIFI_BUFFER_LENGTH) {
-        Serial.println("Wrote buffer after it filled up");
-        OpenBCI_Wifi.bufferTxPosition = 0;
-        // Udp.beginPacket(client,2391);
-        // Udp.write(OpenBCI_Wifi.bufSpi, WIFI_BUFFER_LENGTH);
-        // Udp.endPacket();
-      }
-    }
-
-  }
-
-  if (micros() > 100 + OpenBCI_Wifi.lastTimeSpiRead && OpenBCI_Wifi.bufferTxPosition > 0) {
-    // Udp.beginPacket(client,2391);
-    // Udp.write(OpenBCI_Wifi.bufSpi, OpenBCI_Wifi.bufferTxPosition);
-    // Udp.endPacket();
-    Serial.println("Wrote buffer after time out");
-    OpenBCI_Wifi.bufferTxPosition = 0;
-  }
+  // if (!digitalRead(WIFI_PIN_SLAVE_SELECT)) { // Is there data ready
+  //   // Serial.print("SS");
+  //   // First byte
+  //   if (OpenBCI_Wifi.lastChipSelectLevel == 1) {
+  //     // This is an op code
+  //     OpenBCI_Wifi.lastChipSelectLevel = 0;
+  //   }
+  //
+  //   // Get that byte
+  //   uint8_t inByte = OpenBCI_Wifi.xfer(0x00);
+  //   if (curOp = 0xFF) {
+  //     if (inByte != 0xFF) {
+  //       Serial.println("Got a different byte!");
+  //       curOp = inByte;
+  //     }
+  //   } else {
+  //     Serial.print("inByte: "); Serial.println(inByte);
+  //
+  //     // Mark the last SPI read as now
+  //     OpenBCI_Wifi.lastTimeSpiRead = micros();
+  //
+  //     // Store it to buffer
+  //     OpenBCI_Wifi.bufSpi[OpenBCI_Wifi.bufferTxPosition] = inByte;
+  //     OpenBCI_Wifi.bufferTxPosition++;
+  //     if (OpenBCI_Wifi.bufferTxPosition >= WIFI_BUFFER_LENGTH) {
+  //       Serial.println("Wrote buffer after it filled up");
+  //       OpenBCI_Wifi.bufferTxPosition = 0;
+  //       // Udp.beginPacket(client,2391);
+  //       // Udp.write(OpenBCI_Wifi.bufSpi, WIFI_BUFFER_LENGTH);
+  //       // Udp.endPacket();
+  //     }
+  //   }
+  //
+  // }
+  //
+  // if (micros() > 100 + OpenBCI_Wifi.lastTimeSpiRead && OpenBCI_Wifi.bufferTxPosition > 0) {
+  //   // Udp.beginPacket(client,2391);
+  //   // Udp.write(OpenBCI_Wifi.bufSpi, OpenBCI_Wifi.bufferTxPosition);
+  //   // Udp.endPacket();
+  //   Serial.println("Wrote buffer after time out");
+  //   OpenBCI_Wifi.bufferTxPosition = 0;
+  // }
 
   // if ((OpenBCI_Wifi.streamPacketBuffer + OpenBCI_Wifi.streamPacketBufferHead)->state == OpenBCI_Wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the PC?
   //   if (OpenBCI_Wifi.bufferStreamTimeout()) {

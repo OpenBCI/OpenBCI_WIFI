@@ -14,7 +14,6 @@
 #define __OpenBCI_Wifi__
 
 #include <Arduino.h>
-#include "SPI.h"
 #include "OpenBCI_Wifi_Definitions.h"
 
 class OpenBCI_Wifi_Class {
