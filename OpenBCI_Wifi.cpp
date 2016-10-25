@@ -22,168 +22,88 @@ OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::begin(void) {
-
-  SPI.begin();
-  // SPI.setHwCs(true);
-
-
+  begin(false);
 }
 
-void OpenBCI_Wifi_Class::configure(void) {
+/**
+ * Called to begin a new session but in Serial debug mode.
+ * @param debug {boolean} True and will get serial debug print outs.
+ */
+void OpenBCI_Wifi_Class::begin(boolean debug) {
+  initialize(debug);
+  configure(debug)
+}
+
+void OpenBCI_Wifi_Class::configure(boolean debug) {
+  debugMode = debug;
   lastTimeSpiRead = 0;
   lastChipSelectLevel = 0;
   streamPacketBufferHead = 0;
   streamPacketBufferTail = 0;
-  for (int i = 0; i < OPENBCI_NUMBER_STREAM_BUFFERS; i++) {
-    bufferStreamReset(streamPacketBuffer + i);
-  }
 }
 
-/**
-* @description Process a char from the serial port on the Device. Enters the char
-*  into the stream state machine.
-* @param `buf` {StreamPacketBuffer *} - The stream packet buffer to add the char to.
-* @param `newChar` {char} - A new char to process
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::bufferStreamAddChar(StreamPacketBuffer *buf, char newChar) {
-  // Process the new char
-  switch (buf->state) {
-    case STREAM_STATE_TAIL:
-      // Is the current char equal to 0xCX where X is 0-F?
-      if (isATailByte(newChar)) {
-        // Set the type byte
-        buf->typeByte = newChar;
-        // Change the state to ready
-        buf->state = STREAM_STATE_READY;
-        // Serial.print(33); Serial.print(" state: "); Serial.print("READY-");
-        // Serial.println((streamPacketBuffer + streamPacketBufferHead)->state);
-      } else {
-        // Reset the state machine
-        buf->state = STREAM_STATE_INIT;
-        // Set bytes in to 0
-        buf->bytesIn = 0;
-        // Test to see if this byte is a head byte, maybe if it's not a
-        //  tail byte then that's because a byte was dropped on the way
-        //  over from the Pic.
-        if (newChar == OPENBCI_STREAM_PACKET_HEAD) {
-          // Move the state
-          buf->state = STREAM_STATE_STORING;
-        }
-      }
-      break;
-    case STREAM_STATE_STORING:
-      // Store to the stream packet buffer
-      buf->data[buf->bytesIn] = newChar;
-      // Increment the number of bytes read in
-      buf->bytesIn++;
-
-      if (buf->bytesIn == OPENBCI_MAX_PACKET_SIZE_BYTES - 1) {
-        buf->state = STREAM_STATE_TAIL;
-      }
-
-      break;
-    // We have called the function before we were able to send the stream
-    //  packet which means this is not a stream packet, it's part of a
-    //  bigger message
-    case STREAM_STATE_READY:
-      // Got a 34th byte, go back to start
-      buf->state = STREAM_STATE_INIT;
-      // Set bytes in to 0
-      buf->bytesIn = 0;
-
-      break;
-    case STREAM_STATE_INIT:
-      if (newChar == OPENBCI_STREAM_PACKET_HEAD) {
-        // Move the state
-        buf->state = STREAM_STATE_STORING;
-        // Do not store to the op code streamPacketBuffer
-        buf->bytesIn = 0;
-      }
-      break;
-    default:
-      // // Reset the state
-      buf->state = STREAM_STATE_INIT;
-      break;
-
-  }
+void OpenBCI_Wifi_Class::initialize() {
+  initialize(false);
 }
 
-/**
-* @description Used to add a packet to the of steaming data to the current
-*  `streamPacketBufferHead` and then increment the head. Will wrap around if
-*  need be to avoid moving the head past `OPENBCI_NUMBER_STREAM_BUFFERS`.
-* @param `data` {char *} - The data packet you want to add of length
-*  `OPENBCI_MAX_PACKET_SIZE_BYTES` (32)
-* @returns {boolean} - `true` if able to add it. Currently this func will always
-*  return `true`, however this allows for greater flexiblity in the future.
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::bufferStreamAddData(char *data) {
-
-  bufferStreamStoreData(streamPacketBuffer + streamPacketBufferHead, data);
-
-  streamPacketBufferHead++;
-  if (streamPacketBufferHead > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-    streamPacketBufferHead = 0;
-  }
-
-  return true;
+void OpenBCI_Wifi_Class::initialize(boolean debug) {
+  initializeSerial(debug);
+  initializeSPISlave(debug);
 }
 
-/**
-* @description Utility function to return `true` if the the streamPacketBuffer
-*   is in the STREAM_STATE_READY. Normally used for determining if a stream
-*   packet is ready to be sent.
-* @param `buf` {StreamPacketBuffer *} - The stream packet buffer to send to the Host.
-* @returns {boolean} - `true` is the `buf` is in the ready state, `false` otherwise.
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::bufferStreamReadyToSend(StreamPacketBuffer *buf) {
-  return streamPacketBuffer->state == STREAM_STATE_READY;
+void OpenBCI_Wifi_Class::initializeSerial(boolean debug) {
+  Serial.begin(115200);
+  Serial.setDebugOutput(debug);
 }
 
-/**
-* @description Resets the stream packet buffer to default settings
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::bufferStreamReset(void) {
-  for (int i = 0; i < OPENBCI_NUMBER_STREAM_BUFFERS; i++) {
-    bufferStreamReset(streamPacketBuffer + i);
-  }
-  streamPacketBufferHead = 0;
-  streamPacketBufferTail = 0;
+void OpenBCI_Wifi_Class::initializeSPISlave(boolean debug) {
+  // data has been received from the master. Beware that len is always 32
+  // and the buffer is autofilled with zeroes if data is less than 32 bytes long
+  // It's up to the user to implement protocol for handling data length
+  SPISlave.onData([](uint8_t * data, size_t len) {
+
+    // Copy incoming data
+    memcpy(packetBuffer[packetBufferHead], data, 5 );
+    // Increment the head
+    packetBufferHead++;
+    if (packetBufferHead >= OPENBCI_NUMBER_STREAM_BUFFERS) packetBufferHead = 0;
+
+    // If we are in debug mode then pring out the data to Serial
+    if (debugMode) {
+      Serial.printf("SPI Input: %s\n", (char *)data);
+    }
+  });
+
+  // The master has read out outgoing data buffer
+  // that buffer can be set with SPISlave.setData
+  SPISlave.onDataSent([]() {
+      Serial.println("Answer Sent");
+  });
+
+  // status has been received from the master.
+  // The status register is a special register that both the slave and the
+  // master can write to and read from. Can be used to exchange small data
+  // or status information
+  SPISlave.onStatus([](uint32_t data) {
+      Serial.printf("Status: %u\n", data);
+      SPISlave.setStatus(millis()); //set next status
+  });
+
+  // The master has read the status register
+  SPISlave.onStatusSent([]() {
+      Serial.println("Status Sent");
+  });
+
+  // Setup SPI Slave registers and pins
+  SPISlave.begin();
+
+  // Set the status register (if the master reads it, it will read this value)
+  SPISlave.setStatus(millis());
+
+  // Sets the data registers. Limited to 32 bytes at a time.
+  // SPISlave.setData(uint8_t * data, size_t len); is also available with the same limitation
+  SPISlave.setData("Ask me a question!");
 }
 
-/**
-* @description Resets the stream packet buffer to default settings
-* @param `buf` {StreamPacketBuffer *} - Pointer to a stream packet buffer to reset
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::bufferStreamReset(StreamPacketBuffer *buf) {
-  buf->bytesIn = 0;
-  buf->typeByte = 0;
-  buf->state = STREAM_STATE_INIT;
-}
-
-/**
-* @description Test to see if a char follows the stream tail byte format
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::isATailByte(uint8_t newChar) {
-  return (newChar >> 4) == 0xC;
-}
-
-/**
-* @description Takes a byteId and converts to a Stop Byte for a streaming packet
-* @param `byteId` - [byte] - A byteId with packet type in bits 6-3
-* @return - [byte] - A stop byte with 1100 as the MSBs with packet type in the
-*          four LSBs
-* @example byteId == 0b10111000 returns 0b11000111
-* @author AJ Keller (@pushtheworldllc)
-*/
-byte OpenBCI_Wifi_Class::outputGetStopByteFromByteId(char byteId) {
-  return byteIdGetStreamPacketType(byteId) | 0xC0;
-}
 
 OpenBCI_Wifi_Class wifi;

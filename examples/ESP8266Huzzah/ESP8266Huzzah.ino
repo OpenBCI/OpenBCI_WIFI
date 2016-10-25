@@ -13,7 +13,7 @@
  #include <DNSServer.h>
  #include <ESP8266WebServer.h>
  #include <WiFiManager.h>
- #include "SPI.h"
+ #include "SPISlave.h"
  #include "OpenBCI_Wifi.h"
 
 char buf [100];
@@ -25,7 +25,7 @@ const uint8_t minRand = 48;
 
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
-byte packetBuffer[512]; //buffer to hold incoming and outgoing packets
+byte updPacketBuffer[512]; //buffer to hold incoming and outgoing packets
 
 // A UDP instance to let us send and receive packets over UDP
 WiFiUDP Udp;
@@ -34,20 +34,19 @@ IPAddress client;
 
 WiFiServer server(80);
 
+uint8_t packetCount = 0
+uint8_t maxPacketsPerUDPPacket = 8
+
 boolean packing = false;
 boolean clientSet = false;
 
 uint8_t lastSS = 0;
 
 void setup() {
-  // pinMode(0, OUTPUT);
-  // digitalWrite(0, LOW);
+  // Start up wifi for OpenBCI
+  wifi.begin(true);
 
   Udp.begin(localPort);
-
-  // put your setup code here, to run once:
-  Serial.begin(115200);
-  Serial.setDebugOutput(true);
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
@@ -69,38 +68,22 @@ void setup() {
 
 void loop() {
 
-  while (!digitalRead(WIFI_PIN_SLAVE_SELECT)) { // Is there data ready
-    uint8_t inByte = xfer(0x00);
-    // Mark the last SPI read as now;
-    wifi.lastTimeSerialRead = micros();
-    // Store it to serial buffer
-    wifi.bufferSerialAddChar(inByte);
-    // Get one char and process it
-    wifi.bufferStreamAddChar((wifi.streamPacketBuffer + wifi.streamPacketBufferHead), inByte);
-  }
-
-  if ((wifi.streamPacketBuffer + wifi.streamPacketBufferHead)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the PC?
-    if (wifi.bufferStreamTimeout()) {
-      // We are sure this is a streaming packet.
-      wifi.streamPacketBufferHead++;
-      if (wifi.streamPacketBufferHead > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-        wifi.streamPacketBufferHead = 0;
-      }
-    }
-  }
-
-  if ((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->state == wifi.STREAM_STATE_READY) { // Is there a stream packet waiting to get sent to the Host?
-    if (wifi.streamPacketBufferHead != wifi.streamPacketBufferTail) {
-      // Try to add the tail to the TX buffer
-      if (clientSet) {
+  if (wifi.packetBufferTail != wifi.packetBufferHead) {
+    // Try to add the tail to the TX buffer
+    if (clientSet) {
+      if  (packetCount == 0) {
         Udp.beginPacket(client,2391);
-        Udp.write((wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->data, (wifi.streamPacketBuffer + wifi.streamPacketBufferTail)->bytesIn);
-        Udp.endPacket();
-        wifi.bufferStreamReset(wifi.streamPacketBuffer + wifi.streamPacketBufferTail);
       }
-      wifi.streamPacketBufferTail++;
-      if (wifi.streamPacketBufferTail > (OPENBCI_NUMBER_STREAM_BUFFERS - 1)) {
-        wifi.streamPacketBufferTail = 0;
+      Udp.write(wifi.packetBuffer[packetBufferTail], OPENBCI_MAX_PACKET_SIZE_BYTES);
+      packetCount++;
+
+      wifi.packetBufferTail++;
+      if (wifi.packetBufferTail >= OPENBCI_NUMBER_STREAM_BUFFERS) {
+        wifi.packetBufferTail = 0;
+      }
+
+      if (packetCount > maxPacketsPerUDPPacket) {
+        Udp.endPacket();
       }
     }
   }
@@ -116,7 +99,7 @@ void loop() {
     // Serial.println("client set");
 
     // We've received a packet, read the data from it
-    Udp.read(packetBuffer,noBytes); // read the packet into the buffer
+    Udp.read(udpPacketBuffer,noBytes); // read the packet into the buffer
 
     // display the packet contents in HEX
     for (int i=1;i<=noBytes;i++){
@@ -125,16 +108,6 @@ void loop() {
   }
 
 
-}
-
-
-
-//SPI communication method
-byte xfer(byte _data)
-{
-    byte inByte;
-    inByte = spi.transfer(_data);
-    return inByte;
 }
 
 void configModeCallback (WiFiManager *myWiFiManager) {

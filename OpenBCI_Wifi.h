@@ -18,40 +18,22 @@
 class OpenBCI_Wifi_Class {
 
 public:
-  // ENUMS
-  typedef enum STREAM_STATE {
-    STREAM_STATE_INIT,
-    STREAM_STATE_STORING,
-    STREAM_STATE_TAIL,
-    STREAM_STATE_READY
-  };
-  // STRUCTS
-  typedef struct {
-    uint8_t         typeByte;
-    char            data[OPENBCI_MAX_PACKET_SIZE_BYTES];
-    uint8_t         bytesIn;
-    STREAM_STATE    state;
-  } StreamPacketBuffer;
 
   // Functions and Methods
   void begin(void);
-  void bufferStreamAddChar(StreamPacketBuffer *, char);
-  boolean bufferStreamAddData(char *);
-  void bufferStreamFlush(StreamPacketBuffer *);
-  void bufferStreamFlushBuffers(void);
-  boolean bufferStreamReadyToSend(StreamPacketBuffer *buf);
-  void bufferStreamReset(void);
-  void bufferStreamReset(StreamPacketBuffer *);
-  boolean bufferStreamTimeout(void);
-  void configure(void);
-  boolean isATailByte(uint8_t newChar);
-  byte outputGetStopByteFromByteId(char byteId);
+  void begin(boolean);
+  void configure(boolean);
+  void initialize(void);
+  void initialize(boolean);
+  void initializeSerial(boolean);
+  void initializeSPISlave(boolean);
+
 
   // Variables
-  StreamPacketBuffer streamPacketBuffer[OPENBCI_NUMBER_STREAM_BUFFERS];
+  uint8_t packetBuffer[OPENBCI_NUMBER_STREAM_BUFFERS][OPENBCI_MAX_PACKET_SIZE_BYTES];
   uint8_t lastChipSelectLevel;
-  uint8_t streamPacketBufferHead;
-  uint8_t streamPacketBufferTail;
+  volatile uint8_t packetBufferHead;
+  volatile uint8_t packetBufferTail;
   unsigned long lastTimeSpiRead;
 
 
