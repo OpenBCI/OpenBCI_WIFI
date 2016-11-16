@@ -16,7 +16,8 @@ The library we are interested in using is the [`SPISlave`](https://github.com/es
 
 
 The pin mappings for the ESP8266 are:
-Pin Name | GPIO # | HSPI Function
+
+Pin Name | GPIO# | HSPI Function
 --- | --- | ---
 MTDI | GPIO12 | MISO (DIN)
 MTCK | GPIO13 | MOSI (DOUT)
