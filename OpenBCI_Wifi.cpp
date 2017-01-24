@@ -11,10 +11,14 @@
 
 #include "OpenBCI_Wifi.h"
 
+OpenBCI_Wifi_Class OpenBCI_Wifi;
+
+/***************************************************/
+/** PUBLIC METHODS *********************************/
+/***************************************************/
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
-  debugMode = false; // Set true if doing dongle-dongle sim
 }
 
 /**
@@ -22,38 +26,26 @@ OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::begin(void) {
-  begin(false);
-}
-
-/**
- * Called to begin a new session but in Serial debug mode.
- * @param debug {boolean} True and will get serial debug print outs.
- */
-void OpenBCI_Wifi_Class::begin(boolean debug) {
-  initialize(debug);
-  configure(debug)
-}
-
-void OpenBCI_Wifi_Class::configure(boolean debug) {
-  debugMode = debug;
-  lastTimeSpiRead = 0;
-  lastChipSelectLevel = 0;
-  streamPacketBufferHead = 0;
-  streamPacketBufferTail = 0;
+  initArduino();
+  initArrays();
+  initObjects();
+  initVariables();
 }
 
 void OpenBCI_Wifi_Class::initialize() {
   initialize(false);
 }
 
-void OpenBCI_Wifi_Class::initialize(boolean debug) {
-  initializeSerial(debug);
-  initializeSPISlave(debug);
-}
-
-void OpenBCI_Wifi_Class::initializeSerial(boolean debug) {
-  Serial.begin(115200);
-  Serial.setDebugOutput(debug);
+/**
+* @description Utility function to return `true` if the the streamPacketBuffer
+*   is in the STREAM_STATE_READY. Normally used for determining if a stream
+*   packet is ready to be sent.
+* @param `buf` {StreamPacketBuffer *} - The stream packet buffer to send to the Host.
+* @returns {boolean} - `true` is the `buf` is in the ready state, `false` otherwise.
+* @author AJ Keller (@pushtheworldllc)
+*/
+boolean OpenBCI_Wifi_Class::bufferStreamReadyToSend(StreamPacketBuffer *buf) {
+  return streamPacketBuffer->state == STREAM_STATE_READY;
 }
 
 void OpenBCI_Wifi_Class::initializeSPISlave(boolean debug) {
@@ -105,5 +97,90 @@ void OpenBCI_Wifi_Class::initializeSPISlave(boolean debug) {
   SPISlave.setData("Ask me a question!");
 }
 
+/**
+* @description Resets the stream packet buffer to default settings
+* @param `buf` {StreamPacketBuffer *} - Pointer to a stream packet buffer to reset
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::bufferStreamReset(StreamPacketBuffer *buf) {
+  buf->bytesIn = 0;
+  buf->typeByte = 0;
+  buf->state = STREAM_STATE_INIT;
+}
 
-OpenBCI_Wifi_Class wifi;
+/**
+* @description Strips and gets the packet number from a byteId
+* @param byteId [char] a byteId (see ::byteIdMake for description of bits)
+* @returns [byte] the packet type
+* @author AJ Keller (@pushtheworldllc)
+*/
+byte OpenBCI_Wifi_Class::byteIdGetStreamPacketType(uint8_t byteId) {
+  return (byte)((byteId & 0x78) >> 3);
+}
+
+boolean OpenBCI_Wifi_Class::dataReady(void) {
+  return !digitalRead(WIFI_PIN_SLAVE_SELECT);
+}
+
+void OpenBCI_Wifi_Class::initArduino(void) {
+  pinMode(WIFI_PIN_SLAVE_SELECT,INPUT);
+
+}
+
+/**
+* @description Initalize arrays here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initArrays(void) {
+  for (int i = 0; i < OPENBCI_NUMBER_STREAM_BUFFERS; i++) {
+    bufferStreamReset(streamPacketBuffer + i);
+  }
+}
+
+/**
+* @description Initalize class objects here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initObjects(void) {
+  SPI.begin();
+  SPI.setHwCs(true);
+}
+
+/**
+* @description Initalize variables here
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::initVariables(void) {
+  lastTimeSpiRead = 0;
+  lastChipSelectLevel = 0;
+  streamPacketBufferHead = 0;
+  streamPacketBufferTail = 0;
+}
+
+/**
+* @description Test to see if a char follows the stream tail byte format
+* @author AJ Keller (@pushtheworldllc)
+*/
+boolean OpenBCI_Wifi_Class::isATailByte(uint8_t newChar) {
+  return (newChar >> 4) == 0xC;
+}
+
+/**
+* @description Takes a byteId and converts to a Stop Byte for a streaming packet
+* @param `byteId` - [byte] - A byteId with packet type in bits 6-3
+* @return - [byte] - A stop byte with 1100 as the MSBs with packet type in the
+*          four LSBs
+* @example byteId == 0b10111000 returns 0b11000111
+* @author AJ Keller (@pushtheworldllc)
+*/
+byte OpenBCI_Wifi_Class::outputGetStopByteFromByteId(char byteId) {
+  return byteIdGetStreamPacketType(byteId) | 0xC0;
+}
+
+
+//SPI communication method
+byte OpenBCI_Wifi_Class::xfer(byte _data) {
+    byte inByte;
+    inByte = SPI.transfer(_data);
+    return inByte;
+}

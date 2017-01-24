@@ -14,39 +14,55 @@
  #include <ESP8266WebServer.h>
  #include <WiFiManager.h>
  #include "SPISlave.h"
- #include "OpenBCI_Wifi.h"
+ // #include "OpenBCI_Wifi.h"
 
-char buf [100];
 volatile byte pos;
 volatile boolean process_it;
 
 const uint8_t maxRand = 91;
 const uint8_t minRand = 48;
-
-unsigned int localPort = 2390;      // local port to listen for UDP packets
-
-byte updPacketBuffer[512]; //buffer to hold incoming and outgoing packets
+const int WIFI_BUFFER_LENGTH = 512;
 
 // A UDP instance to let us send and receive packets over UDP
-WiFiUDP Udp;
+// WiFiUDP Udp;
 
-IPAddress client;
-
+// Create an instance of the server
+// specify the port to listen on as an argument
 WiFiServer server(80);
 
-uint8_t packetCount = 0
-uint8_t maxPacketsPerUDPPacket = 8
+WiFiClient client;
+
+// WiFiServer server(80);
+
+volatile uint8_t packetCount = 0;
+volatile uint8_t maxPacketsPerWrite = 10;
+const int maxPackets = 20;
+volatile int position = 0;
+volatile int head = 0;
+volatile int tail = 0;
+const int bytesPerPacket = 32;
+
+uint8_t ringBuf[maxPackets][bytesPerPacket];
 
 boolean packing = false;
 boolean clientSet = false;
 
 uint8_t lastSS = 0;
+uint8_t lastVal = 0xFF;
+uint8_t curOp = 0xFF;
 
 void setup() {
   // Start up wifi for OpenBCI
-  wifi.begin(true);
+  // wifi.begin(true);
+  //
+  // Udp.begin(localPort);
 
-  Udp.begin(localPort);
+  // Boot up the library
+  // OpenBCI_Wifi.begin();
+
+  // put your setup code here, to run once:
+  Serial.begin(115200);
+  Serial.setDebugOutput(true);
 
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
@@ -63,51 +79,95 @@ void setup() {
   wifiManager.autoConnect("OpenBCI");
   printWifiStatus();
 
+  Serial.println("Connected");
+
+  // Start the server
+  server.begin();
+  Serial.println("Server started");
+
+  // Print the IP address
+  Serial.println(WiFi.localIP());
+
+  // data has been received from the master. Beware that len is always 32
+  // and the buffer is autofilled with zeroes if data is less than 32 bytes long
+  // It's up to the user to implement protocol for handling data length
+  SPISlave.onData([](uint8_t * data, size_t len) {
+    if (head >= maxPackets) {
+      head = 0;
+    }
+
+    packetCount++;
+
+    for (int i = 0; i < len; i++) {
+      ringBuf[head][i] = data[i];              
+      head++;
+    }
+  });
+
+  // The master has read out outgoing data buffer
+  // that buffer can be set with SPISlave.setData
+  SPISlave.onDataSent([]() {
+    // Serial.println("Answer Sent");
+  });
+
+  // status has been received from the master.
+  // The status register is a special register that bot the slave and the master can write to and read from.
+  // Can be used to exchange small data or status information
+  SPISlave.onStatus([](uint32_t data) {
+    // Serial.printf("Status: %u\n", data);
+    // SPISlave.setStatus(millis()); //set next status
+  });
+
+  // The master has read the status register
+  SPISlave.onStatusSent([]() {
+    // Serial.println("Status Sent");
+  });
+
+  // Setup SPI Slave registers and pins
+  SPISlave.begin();
+
+  // Set the status register (if the master reads it, it will read this value)
+  // SPISlave.setStatus(millis());
+
+  // Sets the data registers. Limited to 32 bytes at a time.
+  // SPISlave.setData(uint8_t * data, size_t len); is also available with the same limitation
+  // SPISlave.setData("Ask me a question!");
+
+  Serial.println("SPI Slave ready");
 
 }
 
 void loop() {
-
-  if (wifi.packetBufferTail != wifi.packetBufferHead) {
-    // Try to add the tail to the TX buffer
-    if (clientSet) {
-      if  (packetCount == 0) {
-        Udp.beginPacket(client,2391);
-      }
-      Udp.write(wifi.packetBuffer[packetBufferTail], OPENBCI_MAX_PACKET_SIZE_BYTES);
-      packetCount++;
-
-      wifi.packetBufferTail++;
-      if (wifi.packetBufferTail >= OPENBCI_NUMBER_STREAM_BUFFERS) {
-        wifi.packetBufferTail = 0;
-      }
-
-      if (packetCount > maxPacketsPerUDPPacket) {
-        Udp.endPacket();
-      }
-    }
-  }
-
-  int noBytes = Udp.parsePacket();
-  if ( noBytes ) {
-
-    if (!clientSet) {
-      client = Udp.remoteIP();
-      clientSet = true;
-    }
-
-    // Serial.println("client set");
-
-    // We've received a packet, read the data from it
-    Udp.read(udpPacketBuffer,noBytes); // read the packet into the buffer
-
-    // display the packet contents in HEX
-    for (int i=1;i<=noBytes;i++){
-      Serial.write(packetBuffer[i-1]);
-    }
+  flushBuffer();
+  // Check if a client has connected
+  WiFiClient client_temp = server.available();
+  if (!client_temp) {
+    return;
   }
 
 
+  client = client_temp;
+
+  Serial.println('client connected!');
+
+}
+
+void flushBuffer() {
+  if (tail == 0 && head == 10) {
+    if (client.connected()) {
+      for (int j = tail; j < head; j++) {
+        client.write(ringBuf[j], bytesPerPacket);
+      }
+      tail = head;
+    }
+  } else if (tail == 10 && head == 20) {
+    if (client.connected()) {
+      for (int j = tail; j < head; j++) {
+        client.write(ringBuf[j], bytesPerPacket);
+      }
+      tail = head;
+    }
+  }
 }
 
 void configModeCallback (WiFiManager *myWiFiManager) {
