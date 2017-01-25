@@ -127,7 +127,7 @@ void flushBufferToUDP() {
     Udp.write(ringBuf[j], bytesPerPacket);
   }
   Udp.endPacket();
-  if (head == 20) {
+  if (head == maxPackets) {
     tail = 0;
   } else {
     tail = head;

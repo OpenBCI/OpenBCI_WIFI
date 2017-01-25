@@ -89,8 +89,6 @@ void setup() {
       head = 0;
     }
 
-    // Serial.print("h: "); Serial.println(head);
-
     for (int i = 0; i < len; i++) {
       ringBuf[head][i] = data[i];
     }
@@ -158,7 +156,7 @@ void flushBufferToUDP(int start, int stop) {
   }
   Udp.endPacket();
   // Serial.println("Flushed");
-  if (stop == 20) {
+  if (stop == maxPackets) {
     tail = 0;
   } else {
     tail = stop;
