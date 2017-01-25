@@ -89,10 +89,13 @@ void setup() {
       head = 0;
     }
 
+    Serial.print("h: "); Serial.println(head);
+
     for (int i = 0; i < len; i++) {
       ringBuf[head][i] = data[i];
-      head++;
     }
+    head++;
+
   });
 
   // The master has read out outgoing data buffer
@@ -148,24 +151,25 @@ void loop() {
 
 }
 
-void flushBufferToUDP() {
+void flushBufferToUDP(int start, int stop) {
   Udp.beginPacket(client, 2391);
-  for (int j = tail; j < head; j++) {
+  for (int j = start; j < stop; j++) {
     Udp.write(ringBuf[j], bytesPerPacket);
   }
   Udp.endPacket();
-  if (head == 20) {
+  Serial.println("Flushed");
+  if (stop == 20) {
     tail = 0;
   } else {
-    tail = head;
+    tail = stop;
   }
 }
 
 void tryFlushBuffer() {
   if (tail == 0 && head == 10) {
-    flushBufferToUDP();
+    flushBufferToUDP(tail, head);
   } else if (tail == 10 && head == 20) {
-    flushBufferToUDP();
+    flushBufferToUDP(tail, head);
   }
 }
 
