@@ -22,18 +22,18 @@ volatile boolean process_it;
 const uint8_t maxRand = 91;
 const uint8_t minRand = 48;
 const int WIFI_BUFFER_LENGTH = 512;
+//how many clients should be able to connect to this ESP8266
+#define MAX_SRV_CLIENTS 2
 
 // A UDP instance to let us send and receive packets over UDP
-WiFiUDP Udp;
-IPAddress client;
+// WiFiUDP Udp;
+// IPAddress client;
 
 // Create an instance of the server
 // specify the port to listen on as an argument
-// WiFiServer server(80);
-//
-// WiFiClient client;
+WiFiServer server(80);
+WiFiClient serverClients[MAX_SRV_CLIENTS];
 
-// WiFiServer server(80);
 unsigned int localUdpPort = 2390;
 
 volatile uint8_t packetCount = 0;
@@ -57,7 +57,7 @@ void setup() {
   // Start up wifi for OpenBCI
   // wifi.begin(true);
   //
-  Udp.begin(localUdpPort);
+  // Udp.begin(localUdpPort);
 
   // Boot up the library
   // OpenBCI_Wifi.begin();
@@ -80,6 +80,9 @@ void setup() {
   //and goes into a blocking loop awaiting configuration
   wifiManager.autoConnect("OpenBCI");
   printWifiStatus();
+  // Start server
+  server.begin();
+  server.setNoDelay(true);
 
   // data has been received from the master. Beware that len is always 32
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
@@ -130,6 +133,61 @@ void setup() {
 }
 
 void loop() {
+  uint8_t i;
+  //check if there are any new clients
+  if (server.hasClient()){
+    for(i = 0; i < MAX_SRV_CLIENTS; i++){
+      //find free/disconnected spot
+      if (!serverClients[i] || !serverClients[i].connected()){
+        if(serverClients[i]) serverClients[i].stop();
+        serverClients[i] = server.available();
+        Serial.print("New client: "); Serial.print(i);
+        continue;
+      }
+    }
+    //no free/disconnected spot so reject
+    WiFiClient serverClient = server.available();
+    serverClient.stop();
+  }
+  //check clients for data
+  for(i = 0; i < MAX_SRV_CLIENTS; i++){
+    if (serverClients[i] && serverClients[i].connected()){
+      if(serverClients[i].available()){
+        //get data from the telnet client and push it to the UART
+        while(serverClients[i].available()) Serial.write(serverClients[i].read());
+      }
+    }
+  }
+  //check SPI buffers for data
+  if (tail == 0 && head == 10) {
+    flushSPIToAllClients(tail, head);
+  } else if (tail == 10 && head == 20) {
+    flushSPIToAllClients(tail, head);
+  }
+}
+
+void flushSPIToAllClients(int start, int stop) {
+  size_t len = Serial.available();
+  uint8_t sbuf[len];
+  Serial.readBytes(sbuf, len);
+  for(i = 0; i < MAX_SRV_CLIENTS; i++){
+    if (serverClients[i] && serverClients[i].connected()){
+      for (int j = start; j < stop; j++) {
+        serverClients[i].write(ringBuf[j], bytesPerPacket);
+        Udp.write(ringBuf[j], bytesPerPacket);
+      }
+      delay(1);
+    }
+  }
+  // Serial.println("Flushed");
+  if (stop == maxPackets) {
+    tail = 0;
+  } else {
+    tail = stop;
+  }
+}
+
+void udpLoop() {
   int packetSize = Udp.parsePacket();
   if (packetSize) {
     if (!clientSet) {
@@ -145,8 +203,6 @@ void loop() {
   if (clientSet) {
     tryFlushBuffer();
   }
-
-
 }
 
 void flushBufferToUDP(int start, int stop) {
