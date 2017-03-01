@@ -30,4 +30,13 @@
 // Max buffer lengths
 #define WIFI_BUFFER_LENGTH 330
 
+// Sample Rate
+#define OPENBCI_SPS_250 250
+#define OPENBCI_SPS_500 500
+#define OPENBCI_SPS_1000 1000
+#define OPENBCI_SPS_2000 2000
+#define OPENBCI_SPS_4000 4000
+#define OPENBCI_SPS_8000 8000
+#define OPENBCI_SPS_16000 16000
+
 #endif

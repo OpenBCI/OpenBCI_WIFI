@@ -159,22 +159,19 @@ void loop() {
     }
   }
   //check SPI buffers for data
-  if (tail == 0 && head == 10) {
-    flushSPIToAllClients(tail, head);
-  } else if (tail == 10 && head == 20) {
-    flushSPIToAllClients(tail, head);
+  if ((head - tail) > maxPacketsPerWrite) {
+    flushSPIToAllClients(tail, tail + maxPacketsPerWrite);
   }
 }
 
 void flushSPIToAllClients(int start, int stop) {
-  size_t len = Serial.available();
-  uint8_t sbuf[len];
-  Serial.readBytes(sbuf, len);
-  for(i = 0; i < MAX_SRV_CLIENTS; i++){
+  // size_t len = Serial.available();
+  // uint8_t sbuf[len];
+  // Serial.readBytes(sbuf, len);
+  for(uint8_t i = 0; i < MAX_SRV_CLIENTS; i++){
     if (serverClients[i] && serverClients[i].connected()){
       for (int j = start; j < stop; j++) {
         serverClients[i].write(ringBuf[j], bytesPerPacket);
-        Udp.write(ringBuf[j], bytesPerPacket);
       }
       delay(1);
     }
@@ -187,45 +184,45 @@ void flushSPIToAllClients(int start, int stop) {
   }
 }
 
-void udpLoop() {
-  int packetSize = Udp.parsePacket();
-  if (packetSize) {
-    if (!clientSet) {
-      client = Udp.remoteIP();
-      clientSet = true;
-      Serial.println("client connected");
-      Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
-      Udp.write("ready fredy");
-      Udp.endPacket();
-    }
-  }
-  // If the client is set then try to flush the buffer.
-  if (clientSet) {
-    tryFlushBuffer();
-  }
-}
+// void udpLoop() {
+//   int packetSize = Udp.parsePacket();
+//   if (packetSize) {
+//     if (!clientSet) {
+//       client = Udp.remoteIP();
+//       clientSet = true;
+//       Serial.println("client connected");
+//       Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+//       Udp.write("ready fredy");
+//       Udp.endPacket();
+//     }
+//   }
+//   // If the client is set then try to flush the buffer.
+//   if (clientSet) {
+//     tryFlushBuffer();
+//   }
+// }
+//
+// void flushBufferToUDP(int start, int stop) {
+//   Udp.beginPacket(client, 2391);
+//   for (int j = start; j < stop; j++) {
+//     Udp.write(ringBuf[j], bytesPerPacket);
+//   }
+//   Udp.endPacket();
+//   // Serial.println("Flushed");
+//   if (stop == maxPackets) {
+//     tail = 0;
+//   } else {
+//     tail = stop;
+//   }
+// }
 
-void flushBufferToUDP(int start, int stop) {
-  Udp.beginPacket(client, 2391);
-  for (int j = start; j < stop; j++) {
-    Udp.write(ringBuf[j], bytesPerPacket);
-  }
-  Udp.endPacket();
-  // Serial.println("Flushed");
-  if (stop == maxPackets) {
-    tail = 0;
-  } else {
-    tail = stop;
-  }
-}
-
-void tryFlushBuffer() {
-  if (tail == 0 && head == 10) {
-    flushBufferToUDP(tail, head);
-  } else if (tail == 10 && head == 20) {
-    flushBufferToUDP(tail, head);
-  }
-}
+// void tryFlushBuffer() {
+//   if (tail == 0 && head == 10) {
+//     flushBufferToUDP(tail, head);
+//   } else if (tail == 10 && head == 20) {
+//     flushBufferToUDP(tail, head);
+//   }
+// }
 
 void configModeCallback (WiFiManager *myWiFiManager) {
   // Serial.println("Entered config mode");
