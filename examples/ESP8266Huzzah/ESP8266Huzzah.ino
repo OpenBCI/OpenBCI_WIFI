@@ -21,7 +21,6 @@ volatile boolean process_it;
 
 const uint8_t maxRand = 91;
 const uint8_t minRand = 48;
-const int WIFI_BUFFER_LENGTH = 512;
 //how many clients should be able to connect to this ESP8266
 #define MAX_SRV_CLIENTS 2
 
@@ -38,11 +37,15 @@ unsigned int localUdpPort = 2390;
 
 volatile uint8_t packetCount = 0;
 volatile uint8_t maxPacketsPerWrite = 10;
-const int maxPackets = 20;
+const int maxPackets = 100;
 volatile int position = 0;
-volatile int head = 0;
-volatile int tail = 0;
+volatile uint8_t head = 0;
+volatile uint8_t tail = 0;
 const int bytesPerPacket = 32;
+
+int sendToClientRateHz = 50;
+unsigned long packetIntervalUs = (int)(1.0 / (float)sendToClientRateHz * 1000000.0);
+unsigned long lastSendToClient = 0;
 
 uint8_t ringBuf[maxPackets][bytesPerPacket];
 
@@ -91,12 +94,11 @@ void setup() {
     if (head >= maxPackets) {
       head = 0;
     }
-
     for (int i = 0; i < len; i++) {
       ringBuf[head][i] = data[i];
+      // Serial.print(data[i]);
     }
     head++;
-
   });
 
   // The master has read out outgoing data buffer
@@ -158,30 +160,44 @@ void loop() {
       }
     }
   }
-  //check SPI buffers for data
-  if ((head - tail) > maxPacketsPerWrite) {
-    flushSPIToAllClients(tail, tail + maxPacketsPerWrite);
+  unsigned long now = micros();
+  if (now - lastSendToClient > packetIntervalUs) {
+    //check SPI buffers for data
+    if (head != tail) {
+      uint8_t _head = head;
+      lastSendToClient = now;
+      // Serial.print("flushing buffer at "); Serial.print(now); Serial.print(" head: "); Serial.print(_head); Serial.print(" tail: "); Serial.println(tail);
+      tail = flushSPIToAllClients(tail, _head);
+      // tail = _head >= maxPackets ? 0 : ;
+    }
   }
 }
 
-void flushSPIToAllClients(int start, int stop) {
+int flushSPIToAllClients(int _tail, int _head) {
   // size_t len = Serial.available();
   // uint8_t sbuf[len];
   // Serial.readBytes(sbuf, len);
   for(uint8_t i = 0; i < MAX_SRV_CLIENTS; i++){
+    int __tail = _tail;
     if (serverClients[i] && serverClients[i].connected()){
-      for (int j = start; j < stop; j++) {
-        serverClients[i].write(ringBuf[j], bytesPerPacket);
+      // Serial.print("flushing buffer at "); Serial.print(now); Serial.print(" head: "); Serial.print(_head); Serial.print(" tail: "); Serial.println(tail);
+      while (__tail != _head) {
+        if (__tail >= maxPackets) {
+          __tail = 0;
+        }
+        // Serial.print("h "); Serial.print(_head); Serial.print("t: "); Serial.println(__tail);
+        serverClients[i].write(ringBuf[__tail], bytesPerPacket);
+        __tail++;
       }
+      // for (int j = _tail; j < _head; j++) {
+      //   Serial.write(ringBuf[j][1]);
+      //   // serverClients[i].write(ringBuf[j], bytesPerPacket);
+      // }
       delay(1);
     }
   }
+  return _head;
   // Serial.println("Flushed");
-  if (stop == maxPackets) {
-    tail = 0;
-  } else {
-    tail = stop;
-  }
 }
 
 // void udpLoop() {
