@@ -43,8 +43,8 @@ volatile uint8_t head = 0;
 volatile uint8_t tail = 0;
 const int bytesPerPacket = 32;
 
-int sendToClientRateHz = 50;
-unsigned long packetIntervalUs = (int)(1.0 / (float)sendToClientRateHz * 1000000.0);
+int sendToClientRateHz = 25;
+unsigned long packetIntervalUs = 40000; //(int)(1.0 / (float)sendToClientRateHz * 1000000.0);
 unsigned long lastSendToClient = 0;
 
 uint8_t ringBuf[maxPackets][bytesPerPacket];
