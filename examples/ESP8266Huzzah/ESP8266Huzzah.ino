@@ -44,7 +44,7 @@ volatile uint8_t tail = 0;
 const int bytesPerPacket = 32;
 
 int sendToClientRateHz = 25;
-unsigned long packetIntervalUs = 40000; //(int)(1.0 / (float)sendToClientRateHz * 1000000.0);
+unsigned long packetIntervalUs = 2000; //(int)(1.0 / (float)sendToClientRateHz * 1000000.0);
 unsigned long lastSendToClient = 0;
 
 uint8_t ringBuf[maxPackets][bytesPerPacket];
@@ -57,6 +57,7 @@ uint8_t lastVal = 0xFF;
 uint8_t curOp = 0xFF;
 
 void setup() {
+  wifi_station_set_hostname( "test11" );
   // Start up wifi for OpenBCI
   // wifi.begin(true);
   //
