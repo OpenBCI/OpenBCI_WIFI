@@ -18,7 +18,7 @@
  // Check out https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
  // #include "OpenBCI_Wifi.h"
 
-const char* mqtt_server = "broker.mqtt-dashboard.com";
+const char* mqtt_server = "127.0.0.1";
 
 // Create an instance of the server
 // specify the port to listen on as an argument
@@ -73,6 +73,47 @@ void callback(char* topic, byte* payload, unsigned int length) {
   client.publish("openbci/node","helloWorld1");
 }
 
+void configModeCallback (WiFiManager *myWiFiManager) {
+  // Serial.println("Entered config mode");
+  Serial.println(WiFi.softAPIP());
+
+  Serial.println(myWiFiManager->getConfigPortalSSID());
+}
+
+String getName() {
+  // WiFi.mode(WIFI_AP);
+
+  // Do a little work to get a unique-ish name. Append the
+  // last two bytes of the MAC (HEX'd) to "Thing-":
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  macID.toUpperCase();
+  String AP_NameString = "OpenBCI-" + macID;
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  // WiFi.softAP(AP_NameChar, WiFiAPPSK);
+
+  return AP_NameString;
+}
+
+void printWifiStatus() {
+  // print the SSID of the network you're attached to:
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // print your WiFi shield's IP address:
+  IPAddress ip = WiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
+}
+
 void setup() {
   // Start up wifi for OpenBCI
   // wifi.begin(true);
@@ -98,7 +139,7 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
-  wifiManager.autoConnect("OpenBCI");
+  wifiManager.autoConnect(getName());
   printWifiStatus();
   // Start server
   client.setServer(mqtt_server, 1883);
@@ -247,44 +288,3 @@ void loop() {
 //     flushBufferToUDP(tail, head);
 //   }
 // }
-
-void configModeCallback (WiFiManager *myWiFiManager) {
-  // Serial.println("Entered config mode");
-  Serial.println(WiFi.softAPIP());
-
-  Serial.println(myWiFiManager->getConfigPortalSSID());
-}
-
-String getName() {
-  // WiFi.mode(WIFI_AP);
-
-  // Do a little work to get a unique-ish name. Append the
-  // last two bytes of the MAC (HEX'd) to "Thing-":
-  uint8_t mac[WL_MAC_ADDR_LENGTH];
-  WiFi.softAPmacAddress(mac);
-  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
-                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
-  macID.toUpperCase();
-  String AP_NameString = "OpenBCI-" + macID;
-
-  char AP_NameChar[AP_NameString.length() + 1];
-  memset(AP_NameChar, 0, AP_NameString.length() + 1);
-
-  for (int i=0; i<AP_NameString.length(); i++)
-    AP_NameChar[i] = AP_NameString.charAt(i);
-
-  // WiFi.softAP(AP_NameChar, WiFiAPPSK);
-
-  return AP_NameString;
-}
-
-void printWifiStatus() {
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  // print your WiFi shield's IP address:
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-}
