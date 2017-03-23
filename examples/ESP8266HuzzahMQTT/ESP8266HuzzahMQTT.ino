@@ -18,7 +18,7 @@
  // Check out https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
  // #include "OpenBCI_Wifi.h"
 
-const char* mqtt_server = "127.0.0.1";
+const char* mqtt_server = "localhost";
 
 // Create an instance of the server
 // specify the port to listen on as an argument
@@ -139,7 +139,7 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
-  wifiManager.autoConnect(getName());
+  wifiManager.autoConnect("OpenBCI");
   printWifiStatus();
   // Start server
   client.setServer(mqtt_server, 1883);
