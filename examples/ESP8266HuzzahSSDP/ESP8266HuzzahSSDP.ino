@@ -25,11 +25,17 @@ void setup() {
     });
     HTTP.begin();
 
+    uint8_t mac[WL_MAC_ADDR_LENGTH];
+    WiFi.softAPmacAddress(mac);
+    String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+                   String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+    macID.toUpperCase();
+
     Serial.printf("Starting SSDP...\n");
     SSDP.setSchemaURL("description.xml");
     SSDP.setHTTPPort(80);
     SSDP.setName("PTW - OpenBCI Wifi Shield");
-    SSDP.setSerialNumber(ESP.getChipID());
+    SSDP.setSerialNumber(macID);
     SSDP.setURL("index.html");
     SSDP.setModelName("PTW - OpenBCI Wifi Shield Bridge 2017");
     SSDP.setModelNumber("929000226503");

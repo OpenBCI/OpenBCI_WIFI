@@ -4,6 +4,7 @@
 //needed for library
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266mDNS.h>
 #include <WiFiManager.h>
 #include "SPISlave.h"
 // #include "OpenBCI_Wifi.h"
@@ -11,12 +12,14 @@
 volatile byte pos;
 volatile boolean process_it;
 
+MDNSResponder mdns;
+
 //how many clients should be able to connect to this ESP8266
 #define MAX_SRV_CLIENTS 2
 
 // Create an instance of the server
 // specify the port to listen on as an argument
-WiFiServer server(80);
+ESP8266WebServer server(80);
 WiFiClient serverClients[MAX_SRV_CLIENTS];
 
 volatile uint8_t packetCount = 0;
@@ -102,7 +105,6 @@ int flushSPIToAllClients(int _tail, int _head) {
 }
 
 void setup() {
-  // wifi_station_set_hostname( "test11" );
   // Start up wifi for OpenBCI
   // wifi.begin(true);
   //
@@ -127,9 +129,17 @@ void setup() {
   //and goes into a blocking loop awaiting configuration
   wifiManager.autoConnect("OpenBCI");
   printWifiStatus();
+
+  if (mdns.begin("esp8266", WiFi.localIP())) {
+    Serial.println("MDNS responder started");
+  }
+
   // Start server
   server.begin();
-  server.setNoDelay(true);
+  // server.setNoDelay(true);
+
+  // Add service to MDNS-SD
+  MDNS.addService("http", "tcp", 80);
 
   // data has been received from the master. Beware that len is always 32
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
@@ -165,33 +175,34 @@ void setup() {
 }
 
 void loop() {
+  server.handleClient();
   uint8_t i;
   //check if there are any new clients
-  if (server.hasClient()){
-    for(i = 0; i < MAX_SRV_CLIENTS; i++){
-      //find free/disconnected spot
-      if (!serverClients[i] || !serverClients[i].connected()){
-        if(serverClients[i]) serverClients[i].stop();
-        serverClients[i] = server.available();
-#ifdef DEBUG
-        Serial.print("New client: "); Serial.print(i);
-#endif
-        continue;
-      }
-    }
-    //no free/disconnected spot so reject
-    WiFiClient serverClient = server.available();
-    serverClient.stop();
-  }
-  //check clients for data
-  for(i = 0; i < MAX_SRV_CLIENTS; i++){
-    if (serverClients[i] && serverClients[i].connected()){
-      if(serverClients[i].available()){
-        //get data from the telnet client and push it to the UART
-        while(serverClients[i].available()) Serial.write(serverClients[i].read());
-      }
-    }
-  }
+//   if (server.hasClient()){
+//     for(i = 0; i < MAX_SRV_CLIENTS; i++){
+//       //find free/disconnected spot
+//       if (!serverClients[i] || !serverClients[i].connected()){
+//         if(serverClients[i]) serverClients[i].stop();
+//         serverClients[i] = server.available();
+// #ifdef DEBUG
+//         Serial.print("New client: "); Serial.print(i);
+// #endif
+//         continue;
+//       }
+//     }
+//     //no free/disconnected spot so reject
+//     WiFiClient serverClient = server.available();
+//     serverClient.stop();
+//   }
+//   //check clients for data
+//   for(i = 0; i < MAX_SRV_CLIENTS; i++){
+//     if (serverClients[i] && serverClients[i].connected()){
+//       if(serverClients[i].available()){
+//         //get data from the telnet client and push it to the UART
+//         while(serverClients[i].available()) Serial.write(serverClients[i].read());
+//       }
+//     }
+//   }
   unsigned long now = micros();
   if (now - lastSendToClient > packetIntervalUs) {
     //check SPI buffers for data
