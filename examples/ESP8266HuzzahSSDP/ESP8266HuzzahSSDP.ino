@@ -10,6 +10,7 @@
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include "SPISlave.h"
+#include "WiFiClientPrint.h"
 
 ESP8266WebServer server(80);
 
@@ -106,15 +107,6 @@ void printWifiStatus() {
   Serial.println(ip);
 }
 
-void writeResponse(WiFiClient& client, JsonObject& json) {
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: application/json");
-  client.println("Connection: close");
-  client.println();
-
-  json.prettyTo(client);
-}
-
 void getData() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
 #ifdef DEBUG
@@ -122,7 +114,12 @@ void getData() {
 #endif
   StaticJsonBuffer<8636> jsonBuffer;
   JsonObject& json = prepareResponse(jsonBuffer);
-  writeResponse(server.client(), json);
+  server.setContentLength(json.measureLength());
+  server.send(200, "application/json", "");
+
+  WiFiClientPrint<> p(server.client());
+  json.printTo(p);
+  p.stop();
 #ifdef DEBUG
   Serial.print("Json sent");
 #endif
