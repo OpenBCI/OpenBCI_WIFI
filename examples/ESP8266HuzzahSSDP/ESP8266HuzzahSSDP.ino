@@ -22,6 +22,7 @@ volatile uint8_t tail = 0;
 // int sendToClientRateHz = 25;
 unsigned long packetIntervalUs = 25000; //(int)(1.0 / (float)sendToClientRateHz * 1000000.0);
 unsigned long lastSendToClient = 0;
+int counter = 0;
 
 uint8_t ringBuf[MAX_PACKETS][BYTES_PER_PACKET];
 
@@ -52,17 +53,20 @@ bool readRequest(WiFiClient& client) {
 
 JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   JsonObject& root = jsonBuffer.createObject();
+  root["counter"] = counter++;
+  root["sensor"] = "cyton";
+  root["timestamp"] = millis();
+  JsonArray& data = root.createNestedArray("data");
+  while (tail != head) {
+    if (tail >= MAX_PACKETS) {
+      tail = 0;
+    }
+    JsonArray& nestedArray = data.createNestedArray();
 
-  JsonArray& analogValues = root.createNestedArray("analog");
-  for (int pin = 0; pin < 6; pin++) {
-    int value = analogRead(pin);
-    analogValues.add(value);
-  }
-
-  JsonArray& digitalValues = root.createNestedArray("digital");
-  for (int pin = 0; pin < 14; pin++) {
-    int value = digitalRead(pin);
-    digitalValues.add(value);
+    for (uint8_t i = 0; i < BYTES_PER_PACKET; i++) {
+      nestedArray.add(ringBuf[tail][i]);
+    }
+    tail++;
   }
 
   return root;
@@ -102,28 +106,26 @@ void printWifiStatus() {
   Serial.println(ip);
 }
 
+void writeResponse(WiFiClient& client, JsonObject& json) {
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/json");
+  client.println("Connection: close");
+  client.println();
+
+  json.prettyTo(client);
+}
+
 void getData() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server.send(200, "buffer", "");
-  WiFiClient client = server.client();
-
-
-  // server.sendContent("[");
-  while (tail != head) {
-    if (tail >= MAX_PACKETS) {
-      tail = 0;
-    }
-    // String output;
-    // output += "{\"data\":";
-    client.write((char*)ringBuf[tail]);
-    // output += (char*)ringBuf[tail];
-    // output += "}";
-    // server.sendContent(output);
-    tail++;
-  }
-  // TODO: REMOVE
-  tail = 0;
-  // server.sendContent("]");
+#ifdef DEBUG
+  Serial.print("Trying to write some json");
+#endif
+  StaticJsonBuffer<8636> jsonBuffer;
+  JsonObject& json = prepareResponse(jsonBuffer);
+  writeResponse(server.client(), json);
+#ifdef DEBUG
+  Serial.print("Json sent");
+#endif
 }
 
 void setup() {
