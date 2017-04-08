@@ -1,7 +1,7 @@
 #define BYTES_PER_PACKET 32
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
-#define MAX_PACKETS 400
+#define MAX_PACKETS 100
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -24,6 +24,8 @@ volatile uint8_t tail = 0;
 unsigned long packetIntervalUs = 25000; //(int)(1.0 / (float)sendToClientRateHz * 1000000.0);
 unsigned long lastSendToClient = 0;
 int counter = 0;
+
+StaticJsonBuffer<8368> jsonBuffer;
 
 uint8_t ringBuf[MAX_PACKETS][BYTES_PER_PACKET];
 
@@ -73,6 +75,21 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   return root;
 }
 
+// void handleNotFound(){
+//   String message = "File Not Found\n\n";
+//   message += "URI: ";
+//   message += server.uri();
+//   message += "\nMethod: ";
+//   message += (server.method() == HTTP_GET)?"GET":"POST";
+//   message += "\nArguments: ";
+//   message += server.args();
+//   message += "\n";
+//   for (uint8_t i=0; i<server.args(); i++){
+//     message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+//   }
+//   server.send(404, "text/plain", message);
+// }
+
 String getName() {
   // WiFi.mode(WIFI_AP);
 
@@ -110,18 +127,26 @@ void printWifiStatus() {
 void getData() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
 #ifdef DEBUG
-  Serial.print("Trying to write some json");
+  Serial.println("Trying to write some json");
 #endif
-  StaticJsonBuffer<8636> jsonBuffer;
-  JsonObject& json = prepareResponse(jsonBuffer);
-  server.setContentLength(json.measureLength());
-  server.send(200, "application/json", "");
 
+  JsonObject& object = prepareResponse(jsonBuffer);
+  object.printTo(Serial); Serial.println();
+#ifdef DEBUG
+  Serial.print("\nLength of json: "); Serial.println(object.measureLength());
+#endif
+  server.setContentLength(object.measureLength());
+  server.send(200, "application/json", "");
+#ifdef DEBUG
+  Serial.println("Will send to client now");
+#endif
+
+  Serial.println(server.client().available() ? "client legit" : "client not available");
   WiFiClientPrint<> p(server.client());
-  json.printTo(p);
+  object.printTo(p);
   p.stop();
 #ifdef DEBUG
-  Serial.print("Json sent");
+  Serial.println("Json sent");
 #endif
 }
 
@@ -158,9 +183,10 @@ void setup() {
     SSDP.schema(server.client());
   });
   server.on("/you-there", HTTP_GET, [](){
-    server.send(200, "text/plain", "Go fuck your self");
+    server.send(200, "text/plain", "Keep going AJ! Push The World!");
   });
   server.on("/data", HTTP_GET, getData);
+  // server.onNotFound(handleNotFound);
   server.begin();
 
   Serial.printf("Starting SSDP...\n");

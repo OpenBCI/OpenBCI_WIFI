@@ -48,6 +48,8 @@ public:
   boolean bufferStreamTimeout(void);
   byte byteIdGetStreamPacketType(uint8_t);
   boolean dataReady(void);
+  void initialize(void);
+  void initializeSPISlave(boolean debug);
   boolean isATailByte(uint8_t);
   byte outputGetStopByteFromByteId(char);
   byte xfer(byte);
