@@ -36,6 +36,14 @@ void configModeCallback (WiFiManager *myWiFiManager) {
   Serial.println(myWiFiManager->getConfigPortalSSID());
 }
 
+void returnOK() {
+  server.send(200, "text/plain", "");
+}
+
+void returnFail(String msg) {
+  server.send(500, "text/plain", msg + "\r\n");
+}
+
 bool readRequest(WiFiClient& client) {
   bool currentLineIsBlank = true;
   while (client.connected()) {
@@ -124,30 +132,40 @@ void printWifiStatus() {
   Serial.println(ip);
 }
 
+/**
+ * Used to when the /data route is hit
+ * @type {[type]}
+ */
 void getData() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-#ifdef DEBUG
-  Serial.println("Trying to write some json");
-#endif
 
   JsonObject& object = prepareResponse(jsonBuffer);
   object.printTo(Serial); Serial.println();
-#ifdef DEBUG
-  Serial.print("\nLength of json: "); Serial.println(object.measureLength());
-#endif
+
   server.setContentLength(object.measureLength());
   server.send(200, "application/json", "");
-#ifdef DEBUG
-  Serial.println("Will send to client now");
-#endif
 
-  Serial.println(server.client().available() ? "client legit" : "client not available");
   WiFiClientPrint<> p(server.client());
   object.printTo(p);
   p.stop();
-#ifdef DEBUG
-  Serial.println("Json sent");
-#endif
+}
+
+/**
+ * Called when a sensor needs to be sent a command through SPI
+ * @type {[type]}
+ */
+void handleSensorCommand() {
+  if(server.args() == 0) return returnFail("BAD ARGS");
+  String path = server.arg(0);
+
+  Serial.println(path);
+
+  if(path == "/") {
+    returnFail("BAD PATH");
+    return;
+  }
+
+  // SPISlave.setData(ip.toString().c_str());
 }
 
 void setup() {
@@ -169,7 +187,7 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
-  wifiManager.autoConnect("OpenBCI");
+  wifiManager.autoConnect(getName().c_str());
 
 #ifdef DEBUG
   printWifiStatus();
@@ -186,6 +204,8 @@ void setup() {
     server.send(200, "text/plain", "Keep going AJ! Push The World!");
   });
   server.on("/data", HTTP_GET, getData);
+  server.on("/sensor/command", HTTP_POST, [](){ returnOK(); }, handleSensorCommand);
+  //
   // server.onNotFound(handleNotFound);
   server.begin();
 
@@ -230,10 +250,10 @@ void setup() {
   // Setup SPI Slave registers and pins
   SPISlave.begin();
 
-  IPAddress ip = WiFi.localIP();
+  // IPAddress ip = WiFi.localIP();
   // Serial.print("IP Address: ");
   // Serial.println(ip);
-  SPISlave.setData(ip.toString().c_str());
+
 
 #ifdef DEBUG
   Serial.println("SPI Slave ready");
