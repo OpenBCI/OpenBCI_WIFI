@@ -1,7 +1,8 @@
 #define BYTES_PER_PACKET 32
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
-#define MAX_PACKETS 100
+#define MAX_PACKETS 90
+#define MAX_PACKETS_PER_SEND 60
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -14,6 +15,8 @@
 
 ESP8266WebServer server(80);
 
+const size_t bufferSize = JSON_ARRAY_SIZE(26) + MAX_PACKETS_PER_SEND*JSON_ARRAY_SIZE(32) + JSON_OBJECT_SIZE(4) + 1706;
+
 volatile uint8_t packetCount = 0;
 volatile uint8_t maxPacketsPerWrite = 10;
 volatile int position = 0;
@@ -23,9 +26,8 @@ volatile uint8_t tail = 0;
 // int sendToClientRateHz = 25;
 unsigned long packetIntervalUs = 25000; //(int)(1.0 / (float)sendToClientRateHz * 1000000.0);
 unsigned long lastSendToClient = 0;
+unsigned long lastFakeSPIRead = 0;
 int counter = 0;
-
-StaticJsonBuffer<2190> jsonBuffer;
 
 uint8_t ringBuf[MAX_PACKETS][BYTES_PER_PACKET];
 
@@ -69,21 +71,21 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   root["timestamp"] = millis();
   JsonArray& data = root.createNestedArray("data");
   uint8_t counter = 0;
-  Serial.print("pr: head:"); Serial.print(head); Serial.print(' and tail: '); Serial.println(tail);
+  // Serial.print("head:"); Serial.print(head); Serial.print(" and tail: "); Serial.println(tail);
 
   while (tail != head) {
     if (tail >= MAX_PACKETS) {
-      Serial.println("pr: tail hit max num");
       tail = 0;
     }
 
-    if (counter >= 4) {
-      Serial.print("pr: Buffer filled head:"); Serial.print(head); Serial.print(' and tail: '); Serial.println(tail);
+    if (counter >= MAX_PACKETS_PER_SEND) {
+  #ifdef DEBUG
+      Serial.print("b h: "); Serial.print(head); Serial.print(" t: "); Serial.println(tail);
+  #endif
       return root;
     }
     JsonArray& nestedArray = data.createNestedArray();
     nestedArray.copyFrom(ringBuf[tail]);
-
     tail++;
     counter++;
   }
@@ -145,8 +147,8 @@ void printWifiStatus() {
  * @type {[type]}
  */
 void getData() {
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
 
+  DynamicJsonBuffer jsonBuffer(bufferSize);
   JsonObject& object = prepareResponse(jsonBuffer);
   // object.printTo(Serial); Serial.println();
 
@@ -181,6 +183,7 @@ void setup() {
 #ifdef DEBUG
   Serial.begin(115200);
   Serial.setDebugOutput(true);
+  Serial.println("Serial started");
 #endif
 
   //WiFiManager
@@ -191,10 +194,10 @@ void setup() {
 
   wifiManager.setAPCallback(configModeCallback);
 
-  //fetches ssid and pass from eeprom and tries to connect
-  //if it does not connect it starts an access point with the specified name
-  //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
+#ifdef DEBUG
+  Serial.println("Wifi manager started...");
+#endif
   wifiManager.autoConnect(getName().c_str());
 
 #ifdef DEBUG
