@@ -17,7 +17,7 @@ ESP8266WebServer server(80);
 volatile uint8_t packetCount = 0;
 volatile uint8_t maxPacketsPerWrite = 10;
 volatile int position = 0;
-volatile uint8_t head = 8;
+volatile uint8_t head = 0;
 volatile uint8_t tail = 0;
 
 // int sendToClientRateHz = 25;
@@ -25,7 +25,7 @@ unsigned long packetIntervalUs = 25000; //(int)(1.0 / (float)sendToClientRateHz 
 unsigned long lastSendToClient = 0;
 int counter = 0;
 
-StaticJsonBuffer<8368> jsonBuffer;
+StaticJsonBuffer<2190> jsonBuffer;
 
 uint8_t ringBuf[MAX_PACKETS][BYTES_PER_PACKET];
 
@@ -68,16 +68,24 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   root["sensor"] = "cyton";
   root["timestamp"] = millis();
   JsonArray& data = root.createNestedArray("data");
+  uint8_t counter = 0;
+  Serial.print("pr: head:"); Serial.print(head); Serial.print(' and tail: '); Serial.println(tail);
+
   while (tail != head) {
     if (tail >= MAX_PACKETS) {
+      Serial.println("pr: tail hit max num");
       tail = 0;
     }
-    JsonArray& nestedArray = data.createNestedArray();
 
-    for (uint8_t i = 0; i < BYTES_PER_PACKET; i++) {
-      nestedArray.add(ringBuf[tail][i]);
+    if (counter >= 4) {
+      Serial.print("pr: Buffer filled head:"); Serial.print(head); Serial.print(' and tail: '); Serial.println(tail);
+      return root;
     }
+    JsonArray& nestedArray = data.createNestedArray();
+    nestedArray.copyFrom(ringBuf[tail]);
+
     tail++;
+    counter++;
   }
 
   return root;
@@ -140,7 +148,7 @@ void getData() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
 
   JsonObject& object = prepareResponse(jsonBuffer);
-  object.printTo(Serial); Serial.println();
+  // object.printTo(Serial); Serial.println();
 
   server.setContentLength(object.measureLength());
   server.send(200, "application/json", "");
