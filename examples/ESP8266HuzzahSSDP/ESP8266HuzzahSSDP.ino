@@ -1,8 +1,8 @@
 #define BYTES_PER_PACKET 32
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
-#define MAX_PACKETS 90
-#define MAX_PACKETS_PER_SEND 60
+#define MAX_PACKETS 80
+#define MAX_PACKETS_PER_SEND 70
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -14,6 +14,7 @@
 #include "WiFiClientPrint.h"
 
 ESP8266WebServer server(80);
+WiFiClient client;
 
 const size_t bufferSize = JSON_ARRAY_SIZE(26) + MAX_PACKETS_PER_SEND*JSON_ARRAY_SIZE(32) + JSON_OBJECT_SIZE(4) + 1706;
 
@@ -63,6 +64,23 @@ bool readRequest(WiFiClient& client) {
   return false;
 }
 
+boolean setupSocketWithClient() {
+  WiFiClient _client = server.client();
+#ifdef DEBUG
+  Serial.print("Starting socket io to host: "); Serial.print(_client.localIP()); Serial.print(" on port: "); Serial.println(8080);
+#endif
+  if (_client.connect(client.localIP(), 8080)) {
+#ifdef DEBUG
+    Serial.println("Connected to client");
+#endif
+    return true;
+  } else {
+#ifdef DEBUG
+    Serial.println("Failed to connect to client");
+#endif
+    return false;
+  }
+}
 
 JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   JsonObject& root = jsonBuffer.createObject();
@@ -215,6 +233,13 @@ void setup() {
     server.send(200, "text/plain", "Keep going AJ! Push The World!");
   });
   server.on("/data", HTTP_GET, getData);
+  server.on("/websocket", HTTP_GET, [](){
+    client = server.client();
+    setupSocketWithClient() ? returnOK() : returnFail("Failed to connect to client");
+    // setupWebSocketWithClient();
+    ;
+  });
+  // TODO: Add route for changing latency
   server.on("/sensor/command", HTTP_POST, [](){ returnOK(); }, handleSensorCommand);
   //
   // server.onNotFound(handleNotFound);
@@ -273,5 +298,16 @@ void setup() {
 }
 
 void loop() {
+  // webSocket.loop();
   server.handleClient();
+
+  if(client.connected()) {
+    if (tail != head) {
+      DynamicJsonBuffer jsonBuffer(bufferSize);
+      JsonObject& object = prepareResponse(jsonBuffer);
+      WiFiClientPrint<> p(client);
+      object.printTo(p);
+      p.stop();
+    }
+  }
 }

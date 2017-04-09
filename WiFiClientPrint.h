@@ -4,7 +4,7 @@
 #include <Print.h>
 
 // BUFFER_SIZE is the number of bytes per client write! flushes every 512 bytes lets say
-template<size_t BUFFER_SIZE = 800>
+template<size_t BUFFER_SIZE = 1000>
 class WiFiClientPrint : public Print
 {
   public:
