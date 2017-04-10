@@ -70,8 +70,12 @@ boolean setupSocketWithClient() {
   Serial.print("Server has arg 0: "); Serial.println(server.arg(0));
 #endif
 
-  if (!server.hasArg("port")) return false;
-  int port = server.arg(0).toInt();
+  const size_t bufferSize = JSON_OBJECT_SIZE(1) + 20;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  // const char* json = "{\"port\":13514}";
+  JsonObject& root = jsonBuffer.parseObject(server.arg(0));
+  int port = root["port"];
+
 #ifdef DEBUG
   Serial.print("Got port: "); Serial.println(port);
 #endif
@@ -85,7 +89,7 @@ boolean setupSocketWithClient() {
   if (_client.connect(_client.remoteIP(), port)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
-    _client.write("hey");
+    client = _client;
 #endif
     return true;
   } else {
@@ -281,14 +285,17 @@ void setup() {
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
   // It's up to the user to implement protocol for handling data length
   SPISlave.onData([](uint8_t * data, size_t len) {
-    if (head >= MAX_PACKETS) {
-      head = 0;
+    if (client.connected()) {
+      client.write(data, len);
     }
-    for (int i = 0; i < len; i++) {
-      ringBuf[head][i] = data[i];
-      // Serial.print(data[i]);
-    }
-    head++;
+    // if (head >= MAX_PACKETS) {
+    //   head = 0;
+    // }
+    // for (int i = 0; i < len; i++) {
+    //   ringBuf[head][i] = data[i];
+    //   // Serial.print(data[i]);
+    // }
+    // head++;
   });
 
   SPISlave.onDataSent([]() {
