@@ -21,7 +21,7 @@ const size_t bufferSize = JSON_ARRAY_SIZE(26) + MAX_PACKETS_PER_SEND*JSON_ARRAY_
 volatile uint8_t packetCount = 0;
 volatile uint8_t maxPacketsPerWrite = 10;
 volatile int position = 0;
-volatile uint8_t head = 0;
+volatile uint8_t head = 8;
 volatile uint8_t tail = 0;
 
 // int sendToClientRateHz = 25;
@@ -65,18 +65,32 @@ bool readRequest(WiFiClient& client) {
 }
 
 boolean setupSocketWithClient() {
+  if(server.args() == 0) return false;
+#ifdef DEBUG
+  Serial.print("Server has arg 0: "); Serial.println(server.arg(0));
+#endif
+
+  if (!server.hasArg("port")) return false;
+  int port = server.arg(0).toInt();
+#ifdef DEBUG
+  Serial.print("Got port: "); Serial.println(port);
+#endif
+
   WiFiClient _client = server.client();
 #ifdef DEBUG
-  Serial.print("Starting socket io to host: "); Serial.print(_client.localIP()); Serial.print(" on port: "); Serial.println(8080);
+  Serial.print("Current uri: "); Serial.println(server.uri());
+  Serial.print("Starting socket to host: "); Serial.print(_client.remoteIP().toString()); Serial.print(" on port: "); Serial.println(port);
 #endif
-  if (_client.connect(client.localIP(), 8080)) {
+
+  if (_client.connect(_client.remoteIP(), port)) {
 #ifdef DEBUG
-    Serial.println("Connected to client");
+    Serial.println("Connected to server");
+    _client.write("hey");
 #endif
     return true;
   } else {
 #ifdef DEBUG
-    Serial.println("Failed to connect to client");
+    Serial.println("Failed to connect to server");
 #endif
     return false;
   }
@@ -227,15 +241,17 @@ void setup() {
     server.send(200, "text/plain", "OpenBCI is in Wifi discovery mode");
   });
   server.on("/description.xml", HTTP_GET, [](){
+#ifdef DEBUG
+    Serial.println("SSDP HIT");
+#endif
     SSDP.schema(server.client());
   });
   server.on("/you-there", HTTP_GET, [](){
     server.send(200, "text/plain", "Keep going AJ! Push The World!");
   });
   server.on("/data", HTTP_GET, getData);
-  server.on("/websocket", HTTP_GET, [](){
-    client = server.client();
-    setupSocketWithClient() ? returnOK() : returnFail("Failed to connect to client");
+  server.on("/websocket", HTTP_POST, [](){
+    setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
     // setupWebSocketWithClient();
     ;
   });
