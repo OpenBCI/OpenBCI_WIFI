@@ -80,16 +80,15 @@ boolean setupSocketWithClient() {
   Serial.print("Got port: "); Serial.println(port);
 #endif
 
-  WiFiClient _client = server.client();
 #ifdef DEBUG
   Serial.print("Current uri: "); Serial.println(server.uri());
-  Serial.print("Starting socket to host: "); Serial.print(_client.remoteIP().toString()); Serial.print(" on port: "); Serial.println(port);
+  Serial.print("Starting socket to host: "); Serial.print(server.client().remoteIP().toString()); Serial.print(" on port: "); Serial.println(port);
 #endif
 
-  if (_client.connect(_client.remoteIP(), port)) {
+  if (client.connect(server.client().remoteIP(), port)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
-    client = _client;
+    client.setNoDelay(1);
 #endif
     return true;
   } else {
@@ -285,17 +284,14 @@ void setup() {
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
   // It's up to the user to implement protocol for handling data length
   SPISlave.onData([](uint8_t * data, size_t len) {
-    if (client.connected()) {
-      client.write(data, len);
+    if (head >= MAX_PACKETS) {
+      head = 0;
     }
-    // if (head >= MAX_PACKETS) {
-    //   head = 0;
-    // }
-    // for (int i = 0; i < len; i++) {
-    //   ringBuf[head][i] = data[i];
-    //   // Serial.print(data[i]);
-    // }
-    // head++;
+    for (int i = 0; i < len; i++) {
+      ringBuf[head][i] = data[i];
+      // Serial.print(data[i]);
+    }
+    head++;
   });
 
   SPISlave.onDataSent([]() {
@@ -324,6 +320,12 @@ void loop() {
   // webSocket.loop();
   server.handleClient();
 
+  // if (client.connected()) {
+  //   client.write(data, len);
+  // }
+
+
+  // if(client.connected() && (micros() > (lastSendToClient + 2000))) {
   if(client.connected()) {
     if (tail != head) {
       DynamicJsonBuffer jsonBuffer(bufferSize);
@@ -331,6 +333,7 @@ void loop() {
       WiFiClientPrint<> p(client);
       object.printTo(p);
       p.stop();
+      lastSendToClient = micros();
     }
   }
 }
