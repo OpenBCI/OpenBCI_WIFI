@@ -2,7 +2,7 @@
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define MAX_PACKETS 80
-#define MAX_PACKETS_PER_SEND 70
+#define MAX_PACKETS_PER_SEND 20
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -11,40 +11,45 @@
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include "SPISlave.h"
-#include "WiFiClientPrint.h"
+// #include "WiFiClientPrint.h"
+
+const size_t bufferSize = JSON_ARRAY_SIZE(MAX_PACKETS_PER_SEND) + MAX_PACKETS_PER_SEND*JSON_ARRAY_SIZE(BYTES_PER_PACKET) + JSON_OBJECT_SIZE(4) + 302;
 
 ESP8266WebServer server(80);
-WiFiClient client;
 
-const size_t bufferSize = JSON_ARRAY_SIZE(26) + MAX_PACKETS_PER_SEND*JSON_ARRAY_SIZE(32) + JSON_OBJECT_SIZE(4) + 1706;
-
-volatile uint8_t packetCount = 0;
-volatile uint8_t maxPacketsPerWrite = 10;
-volatile int position = 0;
-volatile uint8_t head = 8;
-volatile uint8_t tail = 0;
-
-// int sendToClientRateHz = 25;
-unsigned long packetIntervalUs = 25000; //(int)(1.0 / (float)sendToClientRateHz * 1000000.0);
-unsigned long lastSendToClient = 0;
-unsigned long lastFakeSPIRead = 0;
 int counter = 0;
+int latency = 0;
 
 uint8_t ringBuf[MAX_PACKETS][BYTES_PER_PACKET];
+uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_PACKET];
 
+unsigned long lastSendToClient = 0;
+
+volatile uint8_t head = 40;
+volatile uint8_t tail = 0;
+
+WiFiClient client;
+
+/**
+ * Used when
+ */
 void configModeCallback (WiFiManager *myWiFiManager) {
-  // Serial.println("Entered config mode");
+#ifdef DEBUG
   Serial.println(WiFi.softAPIP());
-
   Serial.println(myWiFiManager->getConfigPortalSSID());
+#endif
 }
 
 void returnOK() {
+  digitalWrite(5, HIGH);
   server.send(200, "text/plain", "");
+  digitalWrite(5, LOW);
 }
 
 void returnFail(String msg) {
+  digitalWrite(5, HIGH);
   server.send(500, "text/plain", msg + "\r\n");
+  digitalWrite(5, LOW);
 }
 
 bool readRequest(WiFiClient& client) {
@@ -64,16 +69,34 @@ bool readRequest(WiFiClient& client) {
   return false;
 }
 
-boolean setupSocketWithClient() {
-  if(server.args() == 0) return false;
-#ifdef DEBUG
-  Serial.print("Server has arg 0: "); Serial.println(server.arg(0));
-#endif
-
-  const size_t bufferSize = JSON_OBJECT_SIZE(1) + 20;
-  DynamicJsonBuffer jsonBuffer(bufferSize);
+JsonObject& getArgFromArgs() {
+  const size_t argBufferSize = JSON_OBJECT_SIZE(1) + 20;
+  DynamicJsonBuffer jsonBuffer(argBufferSize);
   // const char* json = "{\"port\":13514}";
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
+  return root;
+}
+
+/**
+ * Used to set the latency of the system.
+ */
+boolean setLatency() {
+  if(server.args() == 0) return false;
+
+  JsonObject& root = getArgFromArgs();
+
+  if (root.containsKey("latency")) {
+    latency = root["latency"];
+    return true;
+  }
+  return false;
+}
+
+boolean setupSocketWithClient() {
+  // Parse args
+  if(server.args() == 0) return false;
+  JsonObject& root = getArgFromArgs();
+  if (!root.containsKey("port")) return false;
   int port = root["port"];
 
 #ifdef DEBUG
@@ -105,7 +128,7 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   root["sensor"] = "cyton";
   root["timestamp"] = millis();
   JsonArray& data = root.createNestedArray("data");
-  uint8_t counter = 0;
+  uint8_t sampleCounter = 0;
   // Serial.print("head:"); Serial.print(head); Serial.print(" and tail: "); Serial.println(tail);
 
   while (tail != head) {
@@ -113,7 +136,7 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
       tail = 0;
     }
 
-    if (counter >= MAX_PACKETS_PER_SEND) {
+    if (sampleCounter >= (MAX_PACKETS_PER_SEND - 1)) {
   #ifdef DEBUG
       Serial.print("b h: "); Serial.print(head); Serial.print(" t: "); Serial.println(tail);
   #endif
@@ -122,7 +145,7 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
     JsonArray& nestedArray = data.createNestedArray();
     nestedArray.copyFrom(ringBuf[tail]);
     tail++;
-    counter++;
+    sampleCounter++;
   }
 
   return root;
@@ -180,20 +203,20 @@ void printWifiStatus() {
 /**
  * Used to when the /data route is hit
  * @type {[type]}
- */
-void getData() {
-
-  DynamicJsonBuffer jsonBuffer(bufferSize);
-  JsonObject& object = prepareResponse(jsonBuffer);
-  // object.printTo(Serial); Serial.println();
-
-  server.setContentLength(object.measureLength());
-  server.send(200, "application/json", "");
-
-  WiFiClientPrint<> p(server.client());
-  object.printTo(p);
-  p.stop();
-}
+//  */
+// void getData() {
+//
+//   DynamicJsonBuffer jsonBuffer(bufferSize);
+//   JsonObject& object = prepareResponse(jsonBuffer);
+//   // object.printTo(Serial); Serial.println();
+//
+//   server.setContentLength(object.measureLength());
+//   server.send(200, "application/json", "");
+//
+//   WiFiClientPrint<> p(server.client());
+//   object.printTo(p);
+//   p.stop();
+// }
 
 /**
  * Called when a sensor needs to be sent a command through SPI
@@ -214,6 +237,8 @@ void handleSensorCommand() {
 }
 
 void setup() {
+
+  pinMode(5, OUTPUT);
 
 #ifdef DEBUG
   Serial.begin(115200);
@@ -241,24 +266,31 @@ void setup() {
 
   Serial.printf("Starting HTTP...\n");
   server.on("/index.html", HTTP_GET, [](){
-    server.send(200, "text/plain", "OpenBCI is in Wifi discovery mode");
+    digitalWrite(5, HIGH);
+    server.send(200, "text/plain", "Push The World - OpenBCI - Wifi bridge - is up and running woo");
+    digitalWrite(5, LOW);
+
   });
   server.on("/description.xml", HTTP_GET, [](){
 #ifdef DEBUG
     Serial.println("SSDP HIT");
 #endif
+    digitalWrite(5, HIGH);
     SSDP.schema(server.client());
+    digitalWrite(5, LOW);
   });
   server.on("/you-there", HTTP_GET, [](){
+    digitalWrite(5, HIGH);
     server.send(200, "text/plain", "Keep going AJ! Push The World!");
+    digitalWrite(5, LOW);
   });
-  server.on("/data", HTTP_GET, getData);
+  // server.on("/data", HTTP_GET, getData);
   server.on("/websocket", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
-    // setupWebSocketWithClient();
-    ;
   });
-  // TODO: Add route for changing latency
+  server.on("/latency", HTTP_GET, [](){
+    setLatency() ? returnOK() : returnFail("Error: no \'latency\' in json arg");
+  });
   server.on("/sensor/command", HTTP_POST, [](){ returnOK(); }, handleSensorCommand);
   //
   // server.onNotFound(handleNotFound);
@@ -305,11 +337,6 @@ void setup() {
   // Setup SPI Slave registers and pins
   SPISlave.begin();
 
-  // IPAddress ip = WiFi.localIP();
-  // Serial.print("IP Address: ");
-  // Serial.println(ip);
-
-
 #ifdef DEBUG
   Serial.println("SPI Slave ready");
 #endif
@@ -317,23 +344,63 @@ void setup() {
 }
 
 void loop() {
-  // webSocket.loop();
   server.handleClient();
 
-  // if (client.connected()) {
-  //   client.write(data, len);
-  // }
-
-
-  // if(client.connected() && (micros() > (lastSendToClient + 2000))) {
-  if(client.connected()) {
-    if (tail != head) {
-      DynamicJsonBuffer jsonBuffer(bufferSize);
-      JsonObject& object = prepareResponse(jsonBuffer);
-      WiFiClientPrint<> p(client);
-      object.printTo(p);
-      p.stop();
-      lastSendToClient = micros();
+  if(client.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
+    int packetsToSend = head - tail;
+    if (packetsToSend < 0) {
+      packetsToSend = MAX_PACKETS - packetsToSend; // for wrap around
     }
+
+    if (packetsToSend > MAX_PACKETS) {
+      packetsToSend = MAX_PACKETS;
+    }
+
+    int index = 0;
+    for (uint8_t i = 0; i < packetsToSend; i++) {
+      if (tail >= MAX_PACKETS) {
+        tail = 0;
+      }
+      for (uint8_t j = 0; j < BYTES_PER_PACKET; j++) {
+        outputBuf[index] = ringBuf[tail][j];
+        index++;
+      }
+
+      tail++;
+    }
+    digitalWrite(5, HIGH);
+    client.write(outputBuf, BYTES_PER_PACKET * packetsToSend);
+    // Serial.println("YOYOYO");
+    digitalWrite(5, LOW);
+
+    // client.write(outputBuf, BYTES_PER_PACKET * packetsToSend);
+    lastSendToClient = micros();
+
+
+
+
+    // int sampleCounter = 0;
+    // while (tail != head) {
+    //   if (tail >= MAX_PACKETS) {
+    //     tail = 0;
+    //   }
+    //   if (sampleCounter >= MAX_PACKETS_PER_SEND) {
+    //     break;
+    //   }
+    //   // Serial.println((const char*)ringBuf[tail]);
+    //   client.write(ringBuf[tail]);
+    //   tail++;
+    //   sampleCounter++;
+    // }
+    // lastSendToClient = micros();
+
+    // if (tail != head) {
+    //   DynamicJsonBuffer jsonBuffer(bufferSize);
+    //   JsonObject& object = prepareResponse(jsonBuffer);
+    //   WiFiClientPrint<> p(client);
+    //   object.printTo(p);
+    //   p.stop();
+    //   lastSendToClient = micros();
+    // }
   }
 }

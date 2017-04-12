@@ -2,9 +2,10 @@
 
 #include <WiFiClient.h>
 #include <Print.h>
+#include <ArduinoJson.h>
 
 // BUFFER_SIZE is the number of bytes per client write! flushes every 512 bytes lets say
-template<size_t BUFFER_SIZE = 1000>
+template<size_t BUFFER_SIZE = 1968>
 class WiFiClientPrint : public Print
 {
   public:
