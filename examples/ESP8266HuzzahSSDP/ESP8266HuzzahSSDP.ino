@@ -1,7 +1,7 @@
 #define BYTES_PER_PACKET 32
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
-#define MAX_PACKETS 80
+#define NUM_PACKETS_IN_RING_BUFFER 80
 #define MAX_PACKETS_PER_SEND 20
 
 #include <ESP8266WiFi.h>
@@ -13,17 +13,20 @@
 #include "SPISlave.h"
 // #include "WiFiClientPrint.h"
 
+boolean underSelfTest = false;
 const size_t bufferSize = JSON_ARRAY_SIZE(MAX_PACKETS_PER_SEND) + MAX_PACKETS_PER_SEND*JSON_ARRAY_SIZE(BYTES_PER_PACKET) + JSON_OBJECT_SIZE(4) + 302;
 
 ESP8266WebServer server(80);
 
 int counter = 0;
-int latency = 0;
+int latency = 100;
 
-uint8_t ringBuf[MAX_PACKETS][BYTES_PER_PACKET];
+uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_PACKET];
 uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_PACKET];
+uint8_t sampleNumber = 0;
 
 unsigned long lastSendToClient = 0;
+unsigned long lastHeadMove = 0;
 
 volatile uint8_t head = 40;
 volatile uint8_t tail = 0;
@@ -132,11 +135,11 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   // Serial.print("head:"); Serial.print(head); Serial.print(" and tail: "); Serial.println(tail);
 
   while (tail != head) {
-    if (tail >= MAX_PACKETS) {
+    if (tail >= NUM_PACKETS_IN_RING_BUFFER) {
       tail = 0;
     }
 
-    if (sampleCounter >= (MAX_PACKETS_PER_SEND - 1)) {
+    if (sampleCounter >= MAX_PACKETS_PER_SEND) {
   #ifdef DEBUG
       Serial.print("b h: "); Serial.print(head); Serial.print(" t: "); Serial.println(tail);
   #endif
@@ -284,6 +287,20 @@ void setup() {
     server.send(200, "text/plain", "Keep going AJ! Push The World!");
     digitalWrite(5, LOW);
   });
+
+#ifdef DEBUG
+  server.on("/test/start", HTTP_GET, [](){
+    underSelfTest = true;
+    Serial.println("Under self test start");
+    returnOK();
+  });
+  server.on("/test/stop", HTTP_GET, [](){
+    underSelfTest = false;
+    Serial.println("Under self test start");
+    returnOK();
+  });
+#endif
+
   // server.on("/data", HTTP_GET, getData);
   server.on("/websocket", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
@@ -316,7 +333,7 @@ void setup() {
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
   // It's up to the user to implement protocol for handling data length
   SPISlave.onData([](uint8_t * data, size_t len) {
-    if (head >= MAX_PACKETS) {
+    if (head >= NUM_PACKETS_IN_RING_BUFFER) {
       head = 0;
     }
     for (int i = 0; i < len; i++) {
@@ -346,26 +363,47 @@ void setup() {
 void loop() {
   server.handleClient();
 
+#ifdef DEBUG
+  int sampleIntervaluS = 63; // micro seconds
+  boolean daisy = true;
+  if (underSelfTest) {
+    if (micros() > (lastHeadMove + sampleIntervaluS)) {
+      head += daisy ? 2 : 1;
+      if (head >= NUM_PACKETS_IN_RING_BUFFER) {
+        head -= NUM_PACKETS_IN_RING_BUFFER;
+      }
+      lastHeadMove = micros();
+    }
+  }
+  // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
+#endif
+
   if(client.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
+    // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
+
     int packetsToSend = head - tail;
     if (packetsToSend < 0) {
-      packetsToSend = MAX_PACKETS - packetsToSend; // for wrap around
+      packetsToSend = NUM_PACKETS_IN_RING_BUFFER + packetsToSend; // for wrap around
     }
-
-    if (packetsToSend > MAX_PACKETS) {
-      packetsToSend = MAX_PACKETS;
+    if (packetsToSend > MAX_PACKETS_PER_SEND) {
+      packetsToSend = MAX_PACKETS_PER_SEND;
     }
+    // Serial.print("Packets to send: "); Serial.println(packetsToSend);
 
     int index = 0;
     for (uint8_t i = 0; i < packetsToSend; i++) {
-      if (tail >= MAX_PACKETS) {
+      if (tail >= NUM_PACKETS_IN_RING_BUFFER) {
         tail = 0;
       }
       for (uint8_t j = 0; j < BYTES_PER_PACKET; j++) {
-        outputBuf[index] = ringBuf[tail][j];
+        if (j == 1) {
+          outputBuf[index] = sampleNumber;
+          sampleNumber++;
+        } else {
+          outputBuf[index] = ringBuf[tail][j];
+        }
         index++;
       }
-
       tail++;
     }
     digitalWrite(5, HIGH);
@@ -375,9 +413,6 @@ void loop() {
 
     // client.write(outputBuf, BYTES_PER_PACKET * packetsToSend);
     lastSendToClient = micros();
-
-
-
 
     // int sampleCounter = 0;
     // while (tail != head) {
