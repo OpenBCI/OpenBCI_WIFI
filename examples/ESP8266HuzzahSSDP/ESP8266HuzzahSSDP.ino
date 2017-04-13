@@ -1,8 +1,8 @@
 #define BYTES_PER_PACKET 32
-#define DEBUG 1
+#define DEBUG 0
 #define MAX_SRV_CLIENTS 2
-#define NUM_PACKETS_IN_RING_BUFFER 80
-#define MAX_PACKETS_PER_SEND 20
+#define NUM_PACKETS_IN_RING_BUFFER 200
+#define MAX_PACKETS_PER_SEND 150
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -305,7 +305,7 @@ void setup() {
   server.on("/websocket", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
   });
-  server.on("/latency", HTTP_GET, [](){
+  server.on("/latency", HTTP_POST, [](){
     setLatency() ? returnOK() : returnFail("Error: no \'latency\' in json arg");
   });
   server.on("/sensor/command", HTTP_POST, [](){ returnOK(); }, handleSensorCommand);
