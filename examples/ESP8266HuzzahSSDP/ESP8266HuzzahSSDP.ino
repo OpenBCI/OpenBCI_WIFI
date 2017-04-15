@@ -1,6 +1,6 @@
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-#define DEBUG 0
+#define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
@@ -168,26 +168,25 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
 //   }
 //   server.send(404, "text/plain", message);
 // }
+//
 
-String getName() {
-  // WiFi.mode(WIFI_AP);
-
-  // Do a little work to get a unique-ish name. Append the
-  // last two bytes of the MAC (HEX'd) to "Thing-":
+String getMac() {
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
   String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
                  String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
   macID.toUpperCase();
-  String AP_NameString = "OpenBCI-" + macID;
+  return macID;
+}
+
+String getName() {
+  String AP_NameString = "OpenBCI-" + getMac();
 
   char AP_NameChar[AP_NameString.length() + 1];
   memset(AP_NameChar, 0, AP_NameString.length() + 1);
 
   for (int i=0; i<AP_NameString.length(); i++)
     AP_NameChar[i] = AP_NameString.charAt(i);
-
-  // WiFi.softAP(AP_NameChar, WiFiAPPSK);
 
   return AP_NameString;
 }
@@ -273,9 +272,8 @@ void setup() {
 
 #ifdef DEBUG
   printWifiStatus();
-#endif
-
   Serial.printf("Starting HTTP...\n");
+#endif
   server.on("/index.html", HTTP_GET, [](){
     digitalWrite(5, HIGH);
     server.send(200, "text/plain", "Push The World - OpenBCI - Wifi bridge - is up and running woo");
@@ -315,6 +313,9 @@ void setup() {
   });
   server.on("/latency", HTTP_POST, [](){
     setLatency() ? returnOK() : returnFail("Error: no \'latency\' in json arg");
+  });
+  server.on("/latency", HTTP_GET, [](){
+    server.send(200, "text/plain", String(latency).c_str());
   });
   server.on("/sensor/command", HTTP_POST, [](){ returnOK(); }, handleSensorCommand);
   //
@@ -365,8 +366,19 @@ void setup() {
     SPISlave.setData(ip.toString().c_str());
   });
 
+  // The master has read the status register
+  SPISlave.onStatusSent([]() {
+#ifdef DEBUG
+    Serial.println("Status Sent");
+#endif
+    SPISlave.setStatus(0);
+  });
+
   // Setup SPI Slave registers and pins
   SPISlave.begin();
+
+  // Set the status register (if the master reads it, it will read this value)
+  SPISlave.setStatus(0);
 
 #ifdef DEBUG
   Serial.println("SPI Slave ready");
@@ -391,16 +403,6 @@ void loop() {
   }
   // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
 #endif
-
-  // if (client.connected() && head != tail) {
-  //   if (tail >= NUM_PACKETS_IN_RING_BUFFER) {
-  //     tail = 0;
-  //   }
-  //   digitalWrite(5, HIGH);
-  //   client.write(ringBuf[tail], BYTES_PER_SPI_PACKET);
-  //   digitalWrite(5, LOW);
-  //   tail++;
-  // }
 
   if(client.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
@@ -431,29 +433,5 @@ void loop() {
 
     // client.write(outputBuf, BYTES_PER_SPI_PACKET * packetsToSend);
     lastSendToClient = micros();
-
-    // int sampleCounter = 0;
-    // while (tail != head) {
-    //   if (tail >= MAX_PACKETS) {
-    //     tail = 0;
-    //   }
-    //   if (sampleCounter >= MAX_PACKETS_PER_SEND) {
-    //     break;
-    //   }
-    //   // Serial.println((const char*)ringBuf[tail]);
-    //   client.write(ringBuf[tail]);
-    //   tail++;
-    //   sampleCounter++;
-    // }
-    // lastSendToClient = micros();
-
-    // if (tail != head) {
-    //   DynamicJsonBuffer jsonBuffer(bufferSize);
-    //   JsonObject& object = prepareResponse(jsonBuffer);
-    //   WiFiClientPrint<> p(client);
-    //   object.printTo(p);
-    //   p.stop();
-    //   lastSendToClient = micros();
-    // }
   }
 }
