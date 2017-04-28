@@ -1,0 +1,67 @@
+#######################################
+# Syntax Coloring Map SD
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+bufferSerial    KEYWORD1
+radio           KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+begin                           KEYWORD2
+beginDebug                      KEYWORD2
+bufferRadioClean                KEYWORD2
+bufferRadioFlushBuffers         KEYWORD2
+bufferRadioReset                KEYWORD2
+bufferSerialAddChar             KEYWORD2
+bufferSerialHasData             KEYWORD2
+bufferSerialProcessCommsFailure KEYWORD2
+bufferSerialReset               KEYWORD2
+bufferSerialTimeout             KEYWORD2
+bufferStreamAddChar             KEYWORD2
+bufferStreamReadyToSendToHost   KEYWORD2
+bufferStreamReset               KEYWORD2
+bufferStreamSendToHost          KEYWORD2
+bufferStreamTimeout             KEYWORD2
+commsFailureTimeout             KEYWORD2
+didPCSendDataToHost             KEYWORD2
+flashNonVolatileMemory          KEYWORD2
+getChannelNumber                KEYWORD2
+getPollTime                     KEYWORD2
+hostPacketToSend                KEYWORD2
+ledFeedBackForPassThru          KEYWORD2
+packetToSend                    KEYWORD2
+pollRefresh                     KEYWORD2
+printMessageToDriver            KEYWORD2
+processRadioCharDevice          KEYWORD2
+processRadioCharHost            KEYWORD2
+processDeviceRadioCharData      KEYWORD2
+processHostRadioCharData        KEYWORD2
+resetPic32                      KEYWORD2
+sendPacketToDevice              KEYWORD2
+sendPacketToHost                KEYWORD2
+sendPollMessageToHost           KEYWORD2
+serialWriteTimeOut              KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+OPENBCI_MODE_DEVICE	                LITERAL1
+OPENBCI_MODE_HOST                   LITERAL1
+OPENBCI_MODE_PASS_THRU              LITERAL1
+ORPM_DEVICE_SERIAL_OVERFLOW         LITERAL1
+OPENBCI_HOST_MSG_COMMS_DOWN         LITERAL1
+OPENBCI_HOST_MSG_BAUD_FAST          LITERAL1
+OPENBCI_HOST_MSG_BAUD_DEFAULT       LITERAL1
+OPENBCI_HOST_MSG_SYS_UP             LITERAL1
+OPENBCI_HOST_MSG_SYS_DOWN           LITERAL1
+OPENBCI_HOST_MSG_CHAN               LITERAL1
+OPENBCI_HOST_MSG_CHAN_OVERRIDE      LITERAL1
+OPENBCI_HOST_MSG_CHAN_VERIFY        LITERAL1
+OPENBCI_HOST_MSG_CHAN_GET_FAILURE   LITERAL1
+OPENBCI_HOST_MSG_CHAN_GET_SUCCESS   LITERAL1
+OPENBCI_HOST_MSG_POLL_TIME          LITERAL1
