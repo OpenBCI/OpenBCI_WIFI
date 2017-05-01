@@ -19,10 +19,12 @@ boolean underSelfTest = false;
 ESP8266WebServer server(80);
 
 int counter = 0;
-int latency = 0;
+int latency = 50;
 
 uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
 uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_OBCI_PACKET];
+uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
+uint8_t passthroughPosition = 0;
 uint8_t sampleNumber = 0;
 
 unsigned long lastSendToClient = 0;
@@ -30,6 +32,7 @@ unsigned long lastHeadMove = 0;
 
 volatile uint8_t head = 0;
 volatile uint8_t tail = 0;
+
 
 WiFiClient client;
 
@@ -90,6 +93,27 @@ boolean setLatency() {
 
   if (root.containsKey("latency")) {
     latency = root["latency"];
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Used to set the latency of the system.
+ */
+boolean passthroughCommand() {
+  if(server.args() == 0) return false;
+
+  JsonObject& root = getArgFromArgs();
+
+  if (root.containsKey("command")) {
+    const char* cmds = root["command"];
+#ifdef DEBUG
+    Serial.printf("Got command %c\n", cmds[0]);
+#endif
+    passthroughBuffer[0] = 0x01;
+    passthroughBuffer[1] = cmds[0];
+    passthroughPosition += 2;
     return true;
   }
   return false;
@@ -248,6 +272,52 @@ void handleSensorCommand() {
 
 void setup() {
 
+  // data has been received from the master. Beware that len is always 32
+  // and the buffer is autofilled with zeroes if data is less than 32 bytes long
+  // It's up to the user to implement protocol for handling data length
+  SPISlave.onData([](uint8_t * data, size_t len) {
+    if (head >= NUM_PACKETS_IN_RING_BUFFER) {
+      head = 0;
+    }
+    uint8_t stopByte = data[0];
+    if (isAStreamByte(data[0])) {
+      ringBuf[head][0] = 0xA0;
+    } else {
+      ringBuf[head][0] = data[0];
+    }
+    for (int i = 1; i < len; i++) {
+      ringBuf[head][i] = data[i];
+    }
+    ringBuf[head][len] = stopByte;
+    head++;
+  });
+
+  SPISlave.onDataSent([]() {
+// #ifdef DEBUG
+//     Serial.println("Sent data");
+// #endif
+    // IPAddress ip = WiFi.localIP();
+    // SPISlave.setData(ip.toString().c_str());
+  });
+
+  // The master has read the status register
+  SPISlave.onStatusSent([]() {
+#ifdef DEBUG
+    Serial.println("Status Sent");
+#endif
+    SPISlave.setStatus(0);
+  });
+
+  // Setup SPI Slave registers and pins
+  SPISlave.begin();
+
+  // Set the status register (if the master reads it, it will read this value)
+  SPISlave.setStatus(0);
+
+#ifdef DEBUG
+  Serial.println("SPI Slave ready");
+#endif
+
   pinMode(5, OUTPUT);
 
 #ifdef DEBUG
@@ -311,6 +381,9 @@ void setup() {
   server.on("/websocket", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
   });
+  server.on("/command", HTTP_POST, [](){
+    passthroughCommand() ? returnOK() : returnFail("Error: no \'command\' in json arg");
+  });
   server.on("/latency", HTTP_POST, [](){
     setLatency() ? returnOK() : returnFail("Error: no \'latency\' in json arg");
   });
@@ -338,56 +411,19 @@ void setup() {
 #ifdef DEBUG
     Serial.printf("Ready!\n");
 #endif
-  // data has been received from the master. Beware that len is always 32
-  // and the buffer is autofilled with zeroes if data is less than 32 bytes long
-  // It's up to the user to implement protocol for handling data length
-  SPISlave.onData([](uint8_t * data, size_t len) {
-    if (head >= NUM_PACKETS_IN_RING_BUFFER) {
-      head = 0;
-    }
-    uint8_t stopByte = data[0];
-    if (isAStreamByte(data[0])) {
-      ringBuf[head][0] = 0xA0;
-    } else {
-      ringBuf[head][0] = data[0];
-    }
-    for (int i = 1; i < len; i++) {
-      ringBuf[head][i] = data[i];
-    }
-    ringBuf[head][len] = stopByte;
-    head++;
-  });
-
-  SPISlave.onDataSent([]() {
-#ifdef DEBUG
-    Serial.println("Sent ip");
-#endif
-    IPAddress ip = WiFi.localIP();
-    SPISlave.setData(ip.toString().c_str());
-  });
-
-  // The master has read the status register
-  SPISlave.onStatusSent([]() {
-#ifdef DEBUG
-    Serial.println("Status Sent");
-#endif
-    SPISlave.setStatus(0);
-  });
-
-  // Setup SPI Slave registers and pins
-  SPISlave.begin();
-
-  // Set the status register (if the master reads it, it will read this value)
-  SPISlave.setStatus(0);
-
-#ifdef DEBUG
-  Serial.println("SPI Slave ready");
-#endif
 
 }
 
 void loop() {
   server.handleClient();
+
+  if (passthroughPosition > 0) {
+    SPISlave.setData(passthroughBuffer, 2);
+    #ifdef DEBUG
+        Serial.println("Set data");
+    #endif
+    passthroughPosition = 0;
+  }
 
 #ifdef DEBUG
   int sampleIntervaluS = 1000; // micro seconds
