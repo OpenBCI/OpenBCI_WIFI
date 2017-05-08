@@ -287,6 +287,7 @@ void handleSensorCommand() {
 
 void setup() {
 
+  pinMode(0, INPUT);
   // data has been received from the master. Beware that len is always 32
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
   // It's up to the user to implement protocol for handling data length
@@ -459,6 +460,11 @@ void setup() {
 
 void loop() {
   server.handleClient();
+
+  // Only try to do OTA if 'prog' button is held down
+  if (digitalRead(0) == 0) {
+    ArduinoOTA.handle();
+  }
 
   if (passthroughPosition > 0) {
     SPISlave.setData(passthroughBuffer, 2);
