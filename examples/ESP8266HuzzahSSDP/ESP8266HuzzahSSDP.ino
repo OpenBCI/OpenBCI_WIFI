@@ -12,6 +12,9 @@
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include "SPISlave.h"
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 // #include "WiFiClientPrint.h"
 
 boolean underSelfTest = false;
@@ -101,7 +104,7 @@ boolean setLatency() {
 /**
  * Used to set the latency of the system.
  */
-boolean passthroughCommand() {
+boolean passThroughCommand() {
   if(server.args() == 0) return false;
 
   JsonObject& root = getArgFromArgs();
@@ -201,6 +204,18 @@ String getMac() {
                  String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
   macID.toUpperCase();
   return macID;
+}
+
+String getModelNumber() {
+  String AP_NameString = "PTW-OBCI-0001-" + getMac();
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  return AP_NameString;
 }
 
 String getName() {
@@ -318,6 +333,34 @@ void setup() {
   Serial.println("SPI Slave ready");
 #endif
 
+#ifdef DEBUG
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH)
+      type = "sketch";
+    else // U_SPIFFS
+      type = "filesystem";
+
+    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+    Serial.println("Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+#endif
+  ArduinoOTA.begin();
+
   pinMode(5, OUTPUT);
 
 #ifdef DEBUG
@@ -360,7 +403,7 @@ void setup() {
   });
   server.on("/you-there", HTTP_GET, [](){
     digitalWrite(5, HIGH);
-    server.send(200, "text/plain", "Keep going AJ! Push The World!");
+    server.send(200, "text/plain", "Keep going! Push The World!");
     digitalWrite(5, LOW);
   });
 
@@ -382,7 +425,7 @@ void setup() {
     setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
   });
   server.on("/command", HTTP_POST, [](){
-    passthroughCommand() ? returnOK() : returnFail("Error: no \'command\' in json arg");
+    passThroughCommand() ? returnOK() : returnFail("Error: no \'command\' in json arg");
   });
   server.on("/latency", HTTP_POST, [](){
     setLatency() ? returnOK() : returnFail("Error: no \'latency\' in json arg");
@@ -401,7 +444,7 @@ void setup() {
   SSDP.setName("PTW - OpenBCI Wifi Shield");
   SSDP.setSerialNumber(getName());
   SSDP.setURL("index.html");
-  SSDP.setModelName("PTW - OpenBCI Wifi Shield Bridge 2017");
+  SSDP.setModelName(getModelNumber());
   SSDP.setModelNumber("929000226503");
   SSDP.setModelURL("http://www.openbci.com");
   SSDP.setManufacturer("Push The World LLC");
