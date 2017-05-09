@@ -1,6 +1,6 @@
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-#define DEBUG 1
+#define DEBUG 0
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
@@ -22,7 +22,7 @@ boolean underSelfTest = false;
 ESP8266WebServer server(80);
 
 int counter = 0;
-int latency = 50;
+int latency = 100;
 
 uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
 uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_OBCI_PACKET];
@@ -298,13 +298,13 @@ void setup() {
     uint8_t stopByte = data[0];
     if (isAStreamByte(data[0])) {
       ringBuf[head][0] = 0xA0;
+      ringBuf[head][len] = stopByte;
     } else {
       ringBuf[head][0] = data[0];
     }
     for (int i = 1; i < len; i++) {
       ringBuf[head][i] = data[i];
     }
-    ringBuf[head][len] = stopByte;
     head++;
   });
 
