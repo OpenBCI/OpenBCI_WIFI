@@ -1,6 +1,6 @@
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-#define DEBUG 0
+#define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
@@ -22,7 +22,7 @@ boolean underSelfTest = false;
 ESP8266WebServer server(80);
 
 int counter = 0;
-int latency = 100;
+int latency = 1000;
 
 uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
 uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_OBCI_PACKET];
@@ -287,7 +287,42 @@ void handleSensorCommand() {
 
 void setup() {
 
-  pinMode(0, INPUT);
+  pinMode(5, OUTPUT);
+
+#ifdef DEBUG
+  Serial.begin(115200);
+  Serial.setDebugOutput(true);
+  Serial.println("Serial started");
+#endif
+
+  //WiFiManager
+  //Local intialization. Once its business is done, there is no need to keep it around
+  WiFiManager wifiManager;
+  WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
+  wifiManager.addParameter(&custom_text);
+
+  wifiManager.setAPCallback(configModeCallback);
+
+  //and goes into a blocking loop awaiting configuration
+#ifdef DEBUG
+  Serial.println("Wifi manager started...");
+#endif
+  wifiManager.autoConnect(getName().c_str());
+
+  Serial.printf("Starting SSDP...\n");
+  SSDP.setSchemaURL("description.xml");
+  SSDP.setHTTPPort(80);
+  SSDP.setName("PTW - OpenBCI Wifi Shield");
+  SSDP.setSerialNumber(getName());
+  SSDP.setURL("index.html");
+  SSDP.setModelName(getModelNumber());
+  SSDP.setModelNumber("929000226503");
+  SSDP.setModelURL("http://www.openbci.com");
+  SSDP.setManufacturer("Push The World LLC");
+  SSDP.setManufacturerURL("http://www.pushtheworldllc.com");
+  SSDP.begin();
+
+  // pinMode(0, INPUT);
   // data has been received from the master. Beware that len is always 32
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
   // It's up to the user to implement protocol for handling data length
@@ -298,6 +333,7 @@ void setup() {
     uint8_t stopByte = data[0];
     if (isAStreamByte(data[0])) {
       ringBuf[head][0] = 0xA0;
+      // Serial.printf("-%d\n",ringBuf[head][1]);
       ringBuf[head][len] = stopByte;
     } else {
       ringBuf[head][0] = data[0];
@@ -312,6 +348,11 @@ void setup() {
 // #ifdef DEBUG
 //     Serial.println("Sent data");
 // #endif
+    for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
+      passthroughBuffer[i] = 0;
+    }
+    passthroughPosition = 0;
+    SPISlave.setData(passthroughBuffer, BYTES_PER_OBCI_PACKET);
     // IPAddress ip = WiFi.localIP();
     // SPISlave.setData(ip.toString().c_str());
   });
@@ -361,28 +402,6 @@ void setup() {
   });
 #endif
   ArduinoOTA.begin();
-
-  pinMode(5, OUTPUT);
-
-#ifdef DEBUG
-  Serial.begin(115200);
-  Serial.setDebugOutput(true);
-  Serial.println("Serial started");
-#endif
-
-  //WiFiManager
-  //Local intialization. Once its business is done, there is no need to keep it around
-  WiFiManager wifiManager;
-  WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
-  wifiManager.addParameter(&custom_text);
-
-  wifiManager.setAPCallback(configModeCallback);
-
-  //and goes into a blocking loop awaiting configuration
-#ifdef DEBUG
-  Serial.println("Wifi manager started...");
-#endif
-  wifiManager.autoConnect(getName().c_str());
 
 #ifdef DEBUG
   printWifiStatus();
@@ -438,19 +457,6 @@ void setup() {
   //
   // server.onNotFound(handleNotFound);
   server.begin();
-
-  Serial.printf("Starting SSDP...\n");
-  SSDP.setSchemaURL("description.xml");
-  SSDP.setHTTPPort(80);
-  SSDP.setName("PTW - OpenBCI Wifi Shield");
-  SSDP.setSerialNumber(getName());
-  SSDP.setURL("index.html");
-  SSDP.setModelName(getModelNumber());
-  SSDP.setModelNumber("929000226503");
-  SSDP.setModelURL("http://www.openbci.com");
-  SSDP.setManufacturer("Push The World LLC");
-  SSDP.setManufacturerURL("http://www.pushtheworldllc.com");
-  SSDP.begin();
 
 #ifdef DEBUG
     Serial.printf("Ready!\n");
@@ -513,7 +519,6 @@ void loop() {
     }
     digitalWrite(5, HIGH);
     client.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
-    // Serial.println("YOYOYO");
     digitalWrite(5, LOW);
 
     // client.write(outputBuf, BYTES_PER_SPI_PACKET * packetsToSend);
