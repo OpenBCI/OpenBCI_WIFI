@@ -1,6 +1,6 @@
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-#define DEBUG 1
+// #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
@@ -427,7 +427,6 @@ void setup() {
     digitalWrite(5, LOW);
   });
 
-#ifdef DEBUG
   server.on("/test/start", HTTP_GET, [](){
     underSelfTest = true;
     Serial.println("Under self test start");
@@ -438,7 +437,6 @@ void setup() {
     Serial.println("Under self test start");
     returnOK();
   });
-#endif
 
   // server.on("/data", HTTP_GET, getData);
   server.on("/websocket", HTTP_POST, [](){
@@ -480,10 +478,9 @@ void loop() {
     passthroughPosition = 0;
   }
 
-#ifdef DEBUG
-  int sampleIntervaluS = 1000; // micro seconds
-  boolean daisy = false;
   if (underSelfTest) {
+    int sampleIntervaluS = 1000; // micro seconds
+    boolean daisy = false;
     if (micros() > (lastHeadMove + sampleIntervaluS)) {
       head += daisy ? 2 : 1;
       if (head >= NUM_PACKETS_IN_RING_BUFFER) {
@@ -492,8 +489,6 @@ void loop() {
       lastHeadMove = micros();
     }
   }
-  // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
-#endif
 
   if(client.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
