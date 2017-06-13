@@ -1,6 +1,6 @@
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-// #define DEBUG 1
+#define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
@@ -113,6 +113,11 @@ boolean passThroughCommand() {
     const char* cmds = root["command"];
 #ifdef DEBUG
     Serial.printf("Got command %c\n", cmds[0]);
+    // Serial.print("Got commands: ");
+    // for (int i = 0; i < cmds.length(); i++) {
+    //   Serial.print(cmds.charAt(i));
+    // }
+    // Serial.println();
 #endif
     passthroughBuffer[0] = 0x01;
     passthroughBuffer[1] = cmds[0];
@@ -131,9 +136,6 @@ boolean setupSocketWithClient() {
 
 #ifdef DEBUG
   Serial.print("Got port: "); Serial.println(port);
-#endif
-
-#ifdef DEBUG
   Serial.print("Current uri: "); Serial.println(server.uri());
   Serial.print("Starting socket to host: "); Serial.print(server.client().remoteIP().toString()); Serial.print(" on port: "); Serial.println(port);
 #endif
@@ -141,8 +143,8 @@ boolean setupSocketWithClient() {
   if (client.connect(server.client().remoteIP(), port)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
-    client.setNoDelay(1);
 #endif
+    client.setNoDelay(1);
     return true;
   } else {
 #ifdef DEBUG
@@ -289,6 +291,7 @@ void setup() {
 
   pinMode(5, OUTPUT);
 
+
 #ifdef DEBUG
   Serial.begin(115200);
   Serial.setDebugOutput(true);
@@ -411,7 +414,6 @@ void setup() {
     digitalWrite(5, HIGH);
     server.send(200, "text/plain", "Push The World - OpenBCI - Wifi bridge - is up and running woo");
     digitalWrite(5, LOW);
-
   });
   server.on("/description.xml", HTTP_GET, [](){
 #ifdef DEBUG
@@ -421,7 +423,7 @@ void setup() {
     SSDP.schema(server.client());
     digitalWrite(5, LOW);
   });
-  server.on("/you-there", HTTP_GET, [](){
+  server.on("/you_there", HTTP_GET, [](){
     digitalWrite(5, HIGH);
     server.send(200, "text/plain", "Keep going! Push The World!");
     digitalWrite(5, LOW);
@@ -451,8 +453,6 @@ void setup() {
   server.on("/latency", HTTP_GET, [](){
     server.send(200, "text/plain", String(latency).c_str());
   });
-  server.on("/sensor/command", HTTP_POST, [](){ returnOK(); }, handleSensorCommand);
-  //
   // server.onNotFound(handleNotFound);
   server.begin();
 

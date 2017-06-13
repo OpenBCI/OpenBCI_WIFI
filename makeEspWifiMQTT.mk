@@ -2,7 +2,7 @@
 LIBARAIES_DIR = $(HOME)/Documents/Arduino/libraries
 SKETCH = $(LIBARAIES_DIR)/OpenBCI_Wifi/examples/ESP8266HuzzahMQTT/ESP8266HuzzahMQTT.ino
 
-UPLOAD_PORT = /dev/cu.usbserial-A104JV88
+UPLOAD_PORT = /dev/cu.usbserial-DC008NS9
 ESP_ROOT = $(HOME)/esp8266
 ESP_LIBS = $(ESP_ROOT)/libraries
 
