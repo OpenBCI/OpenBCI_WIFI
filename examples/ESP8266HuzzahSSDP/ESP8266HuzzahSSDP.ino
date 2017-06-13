@@ -110,18 +110,28 @@ boolean passThroughCommand() {
   JsonObject& root = getArgFromArgs();
 
   if (root.containsKey("command")) {
-    const char* cmds = root["command"];
+    String cmds = root["command"];
+    uint8_t numCmds = uint8_t(cmds.length());
+    // const char* cmds = root["command"];
 #ifdef DEBUG
-    Serial.printf("Got command %c\n", cmds[0]);
-    // Serial.print("Got commands: ");
-    // for (int i = 0; i < cmds.length(); i++) {
-    //   Serial.print(cmds.charAt(i));
-    // }
-    // Serial.println();
+    Serial.printf("Got %d chars: ", numCmds);
+    for (int i = 0; i < numCmds; i++) {
+      Serial.print(cmds.charAt(i));
+    }
+    Serial.println();
 #endif
-    passthroughBuffer[0] = 0x01;
-    passthroughBuffer[1] = cmds[0];
-    passthroughPosition += 2;
+    if (numCmds > BYTES_PER_SPI_PACKET - 1) {
+      return false;
+    }
+
+    passthroughBuffer[0] = numCmds;
+    passthroughPosition += 1;
+
+    for (int i = 1; i < numCmds; i++) {
+      passthroughBuffer[i] = cmds.charAt(i-1);
+    }
+    passthroughPosition += numCmds;
+
     return true;
   }
   return false;
@@ -423,7 +433,7 @@ void setup() {
     SSDP.schema(server.client());
     digitalWrite(5, LOW);
   });
-  server.on("/you_there", HTTP_GET, [](){
+  server.on("/yt", HTTP_GET, [](){
     digitalWrite(5, HIGH);
     server.send(200, "text/plain", "Keep going! Push The World!");
     digitalWrite(5, LOW);
@@ -445,7 +455,7 @@ void setup() {
     setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
   });
   server.on("/command", HTTP_POST, [](){
-    passThroughCommand() ? returnOK() : returnFail("Error: no \'command\' in json arg");
+    passThroughCommand() ? returnOK() : returnFail("Error: no \'command\' in json arg or sent more than 31 chars");
   });
   server.on("/latency", HTTP_POST, [](){
     setLatency() ? returnOK() : returnFail("Error: no \'latency\' in json arg");
@@ -471,10 +481,11 @@ void loop() {
   }
 
   if (passthroughPosition > 0) {
-    SPISlave.setData(passthroughBuffer, 2);
-    #ifdef DEBUG
-        Serial.println("Set data");
-    #endif
+    SPISlave.setData(passthroughBuffer, passthroughPosition);
+#ifdef DEBUG
+    Serial.println((const char *)passthroughBuffer);
+    Serial.println("Set data");
+#endif
     passthroughPosition = 0;
   }
 
