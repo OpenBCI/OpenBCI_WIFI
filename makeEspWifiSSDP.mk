@@ -7,6 +7,8 @@ UPLOAD_PORT = /dev/cu.usbserial-DC008NS9
 ESP_ROOT = $(HOME)/esp8266
 ESP_LIBS = $(ESP_ROOT)/libraries
 
+BOARD = huzzah
+
 LIBS = $(ESP_LIBS)/Wire $(ESP_LIBS)/ESP8266WiFi  $(ESP_LIBS)/DNSServer $(ESP_LIBS)/ESP8266SSDP $(ESP_LIBS)/ESP8266WebServer $(LIBARAIES_DIR)/WiFiManager $(ESP_LIBS)/SPISlave $(LIBARAIES_DIR)/ArduinoJson $(LIBARAIES_DIR)/OpenBCI_Wifi/WiFiClientPrint.h $(ESP_LIBS)/ESP8266mDNS $(ESP_LIBS)/ArduinoOTA
 
 EXCLUDE_DIRS = $(LIBARAIES_DIR)/ArduinoJson/test $(LIBARAIES_DIR)/ArduinoJson/fuzzing $(LIBARAIES_DIR)/WebSockets/examples
