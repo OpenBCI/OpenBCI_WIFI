@@ -399,26 +399,26 @@ void setup() {
       // save the client because we will need to send them some ish
       if (clientWaitingForResponse) {
         String newString = (char *)data;
-#ifdef DEBUG
-        Serial.printf("newSting %s", newString.c_str());
-#endif
         newString = newString.substring(1, len);
-#ifdef DEBUG
-        Serial.printf("newerSting %s", newString.c_str());
-#endif
+
         switch (data[0]) {
           case WIFI_SPI_MSG_MULTI:
+            // Serial.println("mulit");
             outputString.concat(newString);
             break;
           case WIFI_SPI_MSG_LAST:
-            Serial.println(newString);
+            // Serial.println("last");
             outputString.concat(newString);
             clientWaitingForResponse = false;
-            returnOK(newString);
+            returnOK(outputString);
             break;
           default:
             break;
         }
+// #ifdef DEBUG
+//         Serial.printf("outputString %s\n", outputString.c_str());
+// #endif
+
       }
     }
 
