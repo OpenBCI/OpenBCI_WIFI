@@ -1,6 +1,6 @@
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-#define DEBUG 1
+// #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
@@ -415,6 +415,7 @@ void setup() {
             Serial.println(outputString);
 #endif
             returnOK(outputString);
+            outputString = "";
             break;
           default:
             break;
@@ -576,10 +577,6 @@ void loop() {
 
   if (passthroughPosition > 0) {
     SPISlave.setData(passthroughBuffer, passthroughPosition);
-#ifdef DEBUG
-    Serial.printf("Trying to send %d", passthroughPosition);
-    // Serial.println(passthroughBuffer, passthroughPosition);
-#endif
     passthroughBufferClear();
   }
 
