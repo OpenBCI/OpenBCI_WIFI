@@ -4,6 +4,9 @@
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
+#define WIFI_SPI_MSG_LAST 0x01
+#define WIFI_SPI_MSG_MULTI 0x02
+
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -17,27 +20,40 @@
 #include <ArduinoOTA.h>
 // #include "WiFiClientPrint.h"
 
-boolean underSelfTest = false;
+boolean spiTXBufferLoaded;
+boolean clientWaitingForResponse;
+boolean underSelfTest;
 
 ESP8266WebServer server(80);
 
-int counter = 0;
-int latency = 1000;
+int counter;
+int latency;
+
+String outputString;
 
 uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
 uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_OBCI_PACKET];
 uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
-uint8_t passthroughPosition = 0;
-uint8_t sampleNumber = 0;
+uint8_t passthroughPosition;
+uint8_t sampleNumber;
 
-unsigned long lastSendToClient = 0;
-unsigned long lastHeadMove = 0;
+unsigned long lastSendToClient;
+unsigned long lastHeadMove;
+unsigned long lastTimeWasPolled;
+unsigned long timeOfWifiTXBufferLoaded;
 
-volatile uint8_t head = 0;
-volatile uint8_t tail = 0;
-
+volatile uint8_t head;
+volatile uint8_t tail;
 
 WiFiClient client;
+
+
+void passthroughBufferClear() {
+  for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
+    passthroughBuffer[i] = 0;
+  }
+  passthroughPosition = 0;
+}
 
 /**
  * Used when
@@ -49,15 +65,19 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 #endif
 }
 
-void returnOK() {
+void returnOK(String s) {
   digitalWrite(5, HIGH);
-  server.send(200, "text/plain", "");
+  server.send(200, "text/plain", s);
   digitalWrite(5, LOW);
 }
 
-void returnFail(String msg) {
+void returnOK(void) {
+  returnOK("");
+}
+
+void returnFail(int code, String msg) {
   digitalWrite(5, HIGH);
-  server.send(500, "text/plain", msg + "\r\n");
+  server.send(code, "text/plain", msg + "\r\n");
   digitalWrite(5, LOW);
 }
 
@@ -104,7 +124,7 @@ boolean setLatency() {
 /**
  * Used to set the latency of the system.
  */
-boolean passThroughCommand() {
+uint8_t passThroughCommand() {
   if(server.args() == 0) return false;
 
   JsonObject& root = getArgFromArgs();
@@ -118,23 +138,23 @@ boolean passThroughCommand() {
     for (int i = 0; i < numCmds; i++) {
       Serial.print(cmds.charAt(i));
     }
-    Serial.println();
+    Serial.println();Serial.print("cmds ");Serial.println(cmds);
 #endif
     if (numCmds > BYTES_PER_SPI_PACKET - 1) {
-      return false;
+      return 2;
     }
 
     passthroughBuffer[0] = numCmds;
-    passthroughPosition += 1;
+    passthroughPosition = 1;
 
-    for (int i = 1; i < numCmds; i++) {
+    for (int i = 1; i < numCmds + 1; i++) {
       passthroughBuffer[i] = cmds.charAt(i-1);
     }
     passthroughPosition += numCmds;
 
-    return true;
+    return 0;
   }
-  return false;
+  return 1;
 }
 
 boolean setupSocketWithClient() {
@@ -284,20 +304,42 @@ boolean isAStreamByte(uint8_t b) {
  * @type {[type]}
  */
 void handleSensorCommand() {
-  if(server.args() == 0) return returnFail("BAD ARGS");
+  if(server.args() == 0) return returnFail(500, "BAD ARGS");
   String path = server.arg(0);
 
   Serial.println(path);
 
   if(path == "/") {
-    returnFail("BAD PATH");
+    returnFail(501, "BAD PATH");
     return;
   }
 
   // SPISlave.setData(ip.toString().c_str());
 }
 
+void initializeVariables() {
+  clientWaitingForResponse = false;
+  spiTXBufferLoaded = false;
+  underSelfTest = false;
+
+  counter = 0;
+  head = 0;
+  lastHeadMove = 0;
+  lastSendToClient = 0;
+  lastTimeWasPolled = 0;
+  latency = 1000;
+  passthroughPosition = 0;
+  sampleNumber = 0;
+  tail = 0;
+  timeOfWifiTXBufferLoaded = 0;
+
+  outputString = "";
+
+  passthroughBufferClear();
+}
+
 void setup() {
+  initializeVariables();
 
   pinMode(5, OUTPUT);
 
@@ -340,21 +382,46 @@ void setup() {
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
   // It's up to the user to implement protocol for handling data length
   SPISlave.onData([](uint8_t * data, size_t len) {
-    if (head >= NUM_PACKETS_IN_RING_BUFFER) {
-      head = 0;
-    }
-    uint8_t stopByte = data[0];
+
     if (isAStreamByte(data[0])) {
+      if (head >= NUM_PACKETS_IN_RING_BUFFER) {
+        head = 0;
+      }
+      uint8_t stopByte = data[0];
       ringBuf[head][0] = 0xA0;
       // Serial.printf("-%d\n",ringBuf[head][1]);
       ringBuf[head][len] = stopByte;
+      for (int i = 1; i < len; i++) {
+        ringBuf[head][i] = data[i];
+      }
+      head++;
     } else {
-      ringBuf[head][0] = data[0];
+      // save the client because we will need to send them some ish
+      if (clientWaitingForResponse) {
+        String newString = (char *)data;
+#ifdef DEBUG
+        Serial.printf("newSting %s", newString.c_str());
+#endif
+        newString = newString.substring(1, len);
+#ifdef DEBUG
+        Serial.printf("newerSting %s", newString.c_str());
+#endif
+        switch (data[0]) {
+          case WIFI_SPI_MSG_MULTI:
+            outputString.concat(newString);
+            break;
+          case WIFI_SPI_MSG_LAST:
+            Serial.println(newString);
+            outputString.concat(newString);
+            clientWaitingForResponse = false;
+            returnOK(newString);
+            break;
+          default:
+            break;
+        }
+      }
     }
-    for (int i = 1; i < len; i++) {
-      ringBuf[head][i] = data[i];
-    }
-    head++;
+
   });
 
   SPISlave.onDataSent([]() {
@@ -452,13 +519,26 @@ void setup() {
 
   // server.on("/data", HTTP_GET, getData);
   server.on("/websocket", HTTP_POST, [](){
-    setupSocketWithClient() ? returnOK() : returnFail("Error: Failed to connect to server");
+    setupSocketWithClient() ? returnOK() : returnFail(500, "Error: Failed to connect to server");
   });
   server.on("/command", HTTP_POST, [](){
-    passThroughCommand() ? returnOK() : returnFail("Error: no \'command\' in json arg or sent more than 31 chars");
+    switch(passThroughCommand()) {
+      case 0: // Command sent to board
+        spiTXBufferLoaded = true;
+        timeOfWifiTXBufferLoaded = millis();
+        clientWaitingForResponse = true;
+        break;
+      case 1: // command not found
+        returnFail(500, "Error: no \'command\' in json arg");
+        break;
+      case 2: // length to long
+      default:
+        returnFail(501, "Error: Sent more than 31 chars");
+        break;
+    }
   });
   server.on("/latency", HTTP_POST, [](){
-    setLatency() ? returnOK() : returnFail("Error: no \'latency\' in json arg");
+    setLatency() ? returnOK() : returnFail(500, "Error: no \'latency\' in json arg");
   });
   server.on("/latency", HTTP_GET, [](){
     server.send(200, "text/plain", String(latency).c_str());
@@ -483,10 +563,10 @@ void loop() {
   if (passthroughPosition > 0) {
     SPISlave.setData(passthroughBuffer, passthroughPosition);
 #ifdef DEBUG
-    Serial.println((const char *)passthroughBuffer);
-    Serial.println("Set data");
+    Serial.printf("Trying to send %d", passthroughPosition);
+    // Serial.println(passthroughBuffer, passthroughPosition);
 #endif
-    passthroughPosition = 0;
+    passthroughBufferClear();
   }
 
   if (underSelfTest) {
@@ -499,6 +579,14 @@ void loop() {
       }
       lastHeadMove = micros();
     }
+  }
+
+  if (clientWaitingForResponse && (millis() > (timeOfWifiTXBufferLoaded + 1000))) {
+    clientWaitingForResponse = false;
+    returnFail(502, "Error: timeout getting command response, be sure board is fully connected");
+#ifdef DEBUG
+    Serial.println("Failed to get response in 1000ms");
+#endif
   }
 
   if(client.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
