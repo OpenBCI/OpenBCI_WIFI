@@ -133,13 +133,13 @@ uint8_t passThroughCommand() {
     String cmds = root["command"];
     uint8_t numCmds = uint8_t(cmds.length());
     // const char* cmds = root["command"];
-#ifdef DEBUG
-    Serial.printf("Got %d chars: ", numCmds);
-    for (int i = 0; i < numCmds; i++) {
-      Serial.print(cmds.charAt(i));
-    }
-    Serial.println();Serial.print("cmds ");Serial.println(cmds);
-#endif
+// #ifdef DEBUG
+//     Serial.printf("Got %d chars: ", numCmds);
+//     for (int i = 0; i < numCmds; i++) {
+//       Serial.print(cmds.charAt(i));
+//     }
+//     Serial.println();Serial.print("cmds ");Serial.println(cmds);
+// #endif
     if (numCmds > BYTES_PER_SPI_PACKET - 1) {
       return 2;
     }
@@ -403,13 +403,17 @@ void setup() {
 
         switch (data[0]) {
           case WIFI_SPI_MSG_MULTI:
-            // Serial.println("mulit");
+            // Serial.print("mulit:\n\toutputString:\n\t"); Serial.print(outputString); Serial.print("\n\tnewString\n\t"); Serial.println(newString);
             outputString.concat(newString);
             break;
           case WIFI_SPI_MSG_LAST:
             // Serial.println("last");
+            // Serial.print("last:\n\toutputString:\n\t"); Serial.print(outputString); Serial.print("\n\tnewString\n\t"); Serial.println(newString);
             outputString.concat(newString);
             clientWaitingForResponse = false;
+#ifdef DEBUG
+            Serial.println(outputString);
+#endif
             returnOK(outputString);
             break;
           default:
@@ -442,14 +446,17 @@ void setup() {
 #ifdef DEBUG
     Serial.println("Status Sent");
 #endif
-    SPISlave.setStatus(0);
+    SPISlave.setStatus(209);
   });
+
+  passthroughBufferClear();
 
   // Setup SPI Slave registers and pins
   SPISlave.begin();
 
   // Set the status register (if the master reads it, it will read this value)
-  SPISlave.setStatus(0);
+  SPISlave.setStatus(209);
+  SPISlave.setData(passthroughBuffer, BYTES_PER_SPI_PACKET);
 
 #ifdef DEBUG
   Serial.println("SPI Slave ready");
@@ -551,10 +558,17 @@ void setup() {
 #endif
 
 }
-
+// unsigned long lastPrint = 0;
 void loop() {
   server.handleClient();
 
+  // if (millis() > lastPrint + 20) {
+  //   lastPrint = millis();
+  //   for (int i = 0; i < 32; i++) {
+  //     Serial.print(passthroughBuffer[i], HEX);
+  //   }
+  //   Serial.println();
+  // }
   // Only try to do OTA if 'prog' button is held down
   if (digitalRead(0) == 0) {
     ArduinoOTA.handle();
