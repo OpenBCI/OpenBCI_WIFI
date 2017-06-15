@@ -1,13 +1,14 @@
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-// #define DEBUG 1
+#define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
 #define MAX_PACKETS_PER_SEND 150
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
+#define ARDUINOJSON_USE_DOUBLE 1 // we need to store 64-bit doubles
 
-
+#include <time.h>
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
@@ -20,6 +21,14 @@
 #include <ArduinoOTA.h>
 // #include "WiFiClientPrint.h"
 
+
+// ENUMS
+typedef enum OUTPUT_MODE {
+  OUTPUT_MODE_RAW,
+  OUTPUT_MODE_JSON
+};
+
+
 boolean spiTXBufferLoaded;
 boolean clientWaitingForResponse;
 boolean underSelfTest;
@@ -28,6 +37,10 @@ ESP8266WebServer server(80);
 
 int counter;
 int latency;
+
+OUTPUT_MODE curOutputMode;
+
+StaticJsonBuffer<295> jsonBuffer;
 
 String outputString;
 
@@ -46,6 +59,37 @@ volatile uint8_t head;
 volatile uint8_t tail;
 
 WiFiClient client;
+
+/**
+ * Check to see if SNTP is active
+ * @type {Number}
+ */
+boolean ntpActive() {
+  return time(nullptr) > 1000;
+}
+
+/**
+ * Get ntp time in microseconds
+ * @type {[type]}
+ */
+double ntpGetTime() {
+  double tim = time(nullptr);
+  tim *= 1000000;
+  unsigned long microTime = micros();
+  tim += microTime%1000000;
+  return tim;
+}
+
+/**
+ * Use this to start the sntp time sync
+ * @type {Number}
+ */
+void ntpStart() {
+#ifdef DEBUG
+  Serial.print("Setting time using SNTP");
+#endif
+  configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+}
 
 
 void passthroughBufferClear() {
@@ -188,7 +232,7 @@ JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
   JsonObject& root = jsonBuffer.createObject();
   root["counter"] = counter++;
   root["sensor"] = "cyton";
-  root["timestamp"] = millis();
+  root["timestamp"] = ntpGetTime();
   JsonArray& data = root.createNestedArray("data");
   uint8_t sampleCounter = 0;
   // Serial.print("head:"); Serial.print(head); Serial.print(" and tail: "); Serial.println(tail);
@@ -335,6 +379,8 @@ void initializeVariables() {
 
   outputString = "";
 
+  curOutputMode = OUTPUT_MODE_RAW;
+
   passthroughBufferClear();
 }
 
@@ -384,17 +430,23 @@ void setup() {
   SPISlave.onData([](uint8_t * data, size_t len) {
 
     if (isAStreamByte(data[0])) {
-      if (head >= NUM_PACKETS_IN_RING_BUFFER) {
-        head = 0;
+      if (curOutputMode == OUTPUT_MODE_JSON) {
+          JsonObject& root = jsonBuffer.createObject();
+          root.set<double>("timestamp", ntpGetTime());
+
+      } else {
+        if (head >= NUM_PACKETS_IN_RING_BUFFER) {
+          head = 0;
+        }
+        uint8_t stopByte = data[0];
+        ringBuf[head][0] = 0xA0;
+        // Serial.printf("-%d\n",ringBuf[head][1]);
+        ringBuf[head][len] = stopByte;
+        for (int i = 1; i < len; i++) {
+          ringBuf[head][i] = data[i];
+        }
+        head++;
       }
-      uint8_t stopByte = data[0];
-      ringBuf[head][0] = 0xA0;
-      // Serial.printf("-%d\n",ringBuf[head][1]);
-      ringBuf[head][len] = stopByte;
-      for (int i = 1; i < len; i++) {
-        ringBuf[head][i] = data[i];
-      }
-      head++;
     } else {
       // save the client because we will need to send them some ish
       if (clientWaitingForResponse) {
@@ -522,6 +574,15 @@ void setup() {
   server.on("/test/stop", HTTP_GET, [](){
     underSelfTest = false;
     Serial.println("Under self test start");
+    returnOK();
+  });
+
+  server.on("/output/mode/json", HTTP_GET, [](){
+    curOutputMode = OUTPUT_MODE_JSON;
+    returnOK();
+  });
+  server.on("/output/mode/raw", HTTP_GET, [](){
+    curOutputMode = OUTPUT_MODE_RAW;
     returnOK();
   });
 
