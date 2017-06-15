@@ -50,18 +50,20 @@ boolean underSelfTest;
 ESP8266WebServer server(80);
 
 float channelData[MAX_CHANNELS];
+float scaleFactors[MAX_CHANNELS];
 
 int counter;
 int latency;
 
 OUTPUT_MODE curOutputMode;
 
-StaticJsonBuffer<295> jsonBuffer;
+StaticJsonBuffer<295> jsonSampleBuffer;
 
 String outputString;
 
 uint8_t gains[MAX_CHANNELS];
 uint8_t numChannels;
+uint8_t channelsLoaded;
 uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_OBCI_PACKET];
 uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 uint8_t passthroughPosition;
@@ -121,13 +123,42 @@ void channelDataReset() {
   for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
     channelData[i] = 0.0;
   }
+  channelsLoaded = 0;
 }
 
 // TODO: finish 24 byte conversion
 
+/**
+ * Return true if the channel data array is full
+ */
+boolean channelDataCompute(uint8_t *arr) {
+  const uint8_t byteOffset = 2;
+  if (numChannels == NUM_CHANNELS_CYTON_DAISY) {
+    // do something awesome
+    return true;
+  } else {
+    for (uint8_t i = 0; i < numChannels; i++) {
+      // Zero out the new value
+      uint32_t raw = 0;
+      // Pull out 24bit number
+      raw = arr[i*3 + byteOffset] << 16 | arr[i*3 + 1 + byteOffset] << 8 | arr[i*3 + 2 + byteOffset];
+      // carry through the sign
+      if(bitRead(raw,23) == 1){
+        raw |= 0xFF000000;
+      } else{
+        raw &= 0x00FFFFFF;
+      }
+
+      channelData[i] = scaleFactors[i] * ((float)raw);
+    }
+    return true;
+  }
+}
+
 void gainReset() {
   for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
-    gains[i] = 0;
+    gains[i] = 0.0;
+    scaleFactors[i] = 0.0;
   }
 }
 
@@ -141,7 +172,13 @@ void gainSet(uint8_t *raw) {
   }
 
   for (uint8_t i = 0; i < numChannels; i++) {
-    gains[i] = numChannels == NUM_CHANNELS_GANGLION ? gainGanglion() : gainCyton(raw[byteCounter++]);
+    if (numChannels == NUM_CHANNELS_GANGLION) {
+      // do gang related stuffs
+      gains[i] = gainGanglion();
+    } else {
+      gains[i] = gainCyton(raw[byteCounter++]);
+      scaleFactors[i] = ADS1299_VREF / gains[i] / ADC_24BIT_RES;
+    }
   }
 }
 
@@ -306,32 +343,16 @@ boolean setupSocketWithClient() {
   }
 }
 
-JsonObject& prepareResponse(JsonBuffer& jsonBuffer) {
+/**
+ * Used to prepare a response in JSON
+ */
+JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer) {
   JsonObject& root = jsonBuffer.createObject();
-  root["counter"] = counter++;
-  root["sensor"] = "cyton";
-  root["timestamp"] = ntpGetTime();
+  root.set<double>("timestamp", ntpGetTime());
   JsonArray& data = root.createNestedArray("data");
-  uint8_t sampleCounter = 0;
-  // Serial.print("head:"); Serial.print(head); Serial.print(" and tail: "); Serial.println(tail);
-
-  while (tail != head) {
-    if (tail >= NUM_PACKETS_IN_RING_BUFFER) {
-      tail = 0;
-    }
-
-    if (sampleCounter >= MAX_PACKETS_PER_SEND) {
-  #ifdef DEBUG
-      Serial.print("b h: "); Serial.print(head); Serial.print(" t: "); Serial.println(tail);
-  #endif
-      return root;
-    }
-    JsonArray& nestedArray = data.createNestedArray();
-    nestedArray.copyFrom(ringBuf[tail]);
-    tail++;
-    sampleCounter++;
+  for (uint8_t i = 0; i < numChannels; i++) {
+    data.add(channelData[i]);
   }
-
   return root;
 }
 
@@ -509,23 +530,17 @@ void setup() {
   SPISlave.onData([](uint8_t * data, size_t len) {
 
     if (isAStreamByte(data[0])) {
-      if (curOutputMode == OUTPUT_MODE_JSON) {
-          JsonObject& root = jsonBuffer.createObject();
-          root.set<double>("timestamp", ntpGetTime());
-
-      } else {
-        if (head >= NUM_PACKETS_IN_RING_BUFFER) {
-          head = 0;
-        }
-        uint8_t stopByte = data[0];
-        ringBuf[head][0] = 0xA0;
-        // Serial.printf("-%d\n",ringBuf[head][1]);
-        ringBuf[head][len] = stopByte;
-        for (int i = 1; i < len; i++) {
-          ringBuf[head][i] = data[i];
-        }
-        head++;
+      if (head >= NUM_PACKETS_IN_RING_BUFFER) {
+        head = 0;
       }
+      uint8_t stopByte = data[0];
+      ringBuf[head][0] = 0xA0;
+      // Serial.printf("-%d\n",ringBuf[head][1]);
+      ringBuf[head][len] = stopByte;
+      for (int i = 1; i < len; i++) {
+        ringBuf[head][i] = data[i];
+      }
+      head++;
     } else {
       // save the client because we will need to send them some ish
       if (clientWaitingForResponse) {
@@ -761,13 +776,24 @@ void loop() {
         tail = 0;
       }
       for (uint8_t j = 0; j < BYTES_PER_OBCI_PACKET; j++) {
-        outputBuf[index++] = ringBuf[tail][j];
+        if (curOutputMode == OUTPUT_MODE_JSON) {
+          channelDataCompute(ringBuf[tail]);
+          JsonObject& root = prepareSampleJSON(jsonSampleBuffer);
+          digitalWrite(5, HIGH);
+          root.printTo(client);
+          digitalWrite(5, LOW);
+        } else {
+          outputBuf[index++] = ringBuf[tail][j];
+        }
       }
       tail++;
     }
-    digitalWrite(5, HIGH);
-    client.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
-    digitalWrite(5, LOW);
+
+    if (curOutputMode == OUTPUT_MODE_RAW) {
+      digitalWrite(5, HIGH);
+      client.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
+      digitalWrite(5, LOW);
+    }
 
     // client.write(outputBuf, BYTES_PER_SPI_PACKET * packetsToSend);
     lastSendToClient = micros();
