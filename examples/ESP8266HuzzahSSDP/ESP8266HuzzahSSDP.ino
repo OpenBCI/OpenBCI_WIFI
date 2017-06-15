@@ -26,11 +26,18 @@
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <PubSubClient.h>
 
 // ENUMS
 typedef enum OUTPUT_MODE {
   OUTPUT_MODE_RAW,
   OUTPUT_MODE_JSON
+};
+
+typedef enum OUTPUT_PROTOCOL {
+  OUTPUT_PROTOCOL_NONE,
+  OUTPUT_PROTOCOL_TCP,
+  OUTPUT_PROTOCOL_MQTT
 };
 
 typedef enum CYTON_GAIN {
@@ -47,6 +54,8 @@ boolean spiTXBufferLoaded;
 boolean clientWaitingForResponse;
 boolean underSelfTest;
 
+const char serverCloudbrain[] = "mock.getcloudbrain.com";
+
 ESP8266WebServer server(80);
 
 float channelData[MAX_CHANNELS];
@@ -56,6 +65,7 @@ int counter;
 int latency;
 
 OUTPUT_MODE curOutputMode;
+OUTPUT_PROTOCOL curOutputProtocol;
 
 StaticJsonBuffer<295> jsonSampleBuffer;
 
@@ -72,13 +82,16 @@ uint8_t sampleNumber;
 
 unsigned long lastSendToClient;
 unsigned long lastHeadMove;
+unsigned long lastMQTTConnectAttempt;
 unsigned long lastTimeWasPolled;
 unsigned long timeOfWifiTXBufferLoaded;
 
 volatile uint8_t head;
 volatile uint8_t tail;
 
-WiFiClient client;
+WiFiClient clientTCP;
+WiFiClient espClient;
+PubSubClient clientMQTT(espClient);
 
 ///////////////////////////////////////////
 // NTP BEGIN
@@ -162,26 +175,6 @@ void gainReset() {
   }
 }
 
-void gainSet(uint8_t *raw) {
-  uint8_t byteCounter = 1;
-  numChannels = raw[byteCounter++];
-
-  if (numChannels < NUM_CHANNELS_GANGLION || numChannels > MAX_CHANNELS) {
-    numChannels
-    return;
-  }
-
-  for (uint8_t i = 0; i < numChannels; i++) {
-    if (numChannels == NUM_CHANNELS_GANGLION) {
-      // do gang related stuffs
-      gains[i] = gainGanglion();
-    } else {
-      gains[i] = gainCyton(raw[byteCounter++]);
-      scaleFactors[i] = ADS1299_VREF / gains[i] / ADC_24BIT_RES;
-    }
-  }
-}
-
 float gainCyton(uint8_t b) {
   switch (b) {
     case CYTON_GAIN_1:
@@ -206,6 +199,75 @@ float gainGanglion() {
   return 51.0;
 }
 
+void gainSet(uint8_t *raw) {
+  uint8_t byteCounter = 1;
+  numChannels = raw[byteCounter++];
+
+  if (numChannels < NUM_CHANNELS_GANGLION || numChannels > MAX_CHANNELS) {
+    return;
+  }
+
+  for (uint8_t i = 0; i < numChannels; i++) {
+    if (numChannels == NUM_CHANNELS_GANGLION) {
+      // do gang related stuffs
+      gains[i] = gainGanglion();
+    } else {
+      gains[i] = gainCyton(raw[byteCounter++]);
+      scaleFactors[i] = ADS1299_VREF / gains[i] / ADC_24BIT_RES;
+#ifdef DEBUG
+      Serial.printf("Channel: %d\n\tgain: %d\n\tscale factor: %.10f\n", i+1, gains[i], scaleFactors[i]);
+#endif
+    }
+  }
+}
+///////////////////////////////////////////////////
+// MQTT
+///////////////////////////////////////////////////
+
+void mqttSetup() {
+  client.setServer(serverCloudbrain, 1883);
+  client.setCallback(callback);
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
+  // Switch on the LED if an 1 was received as first character
+  if ((char)payload[0] == '1') {
+    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is acive low on the ESP-01)
+  } else {
+    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+  }
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!clientMQTT.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (clientMQTT.connect(getName(), "cloudbrain", "cloudbrain")) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      clientMQTT.publish("amq.topic", "hello world");
+      // ... and resubscribe
+      clientMQTT.subscribe("inTopic");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(clientMQTT.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      lastMQTTConnectAttempt = millis();
+    }
+  }
+}
 
 void passthroughBufferClear() {
   for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
@@ -329,11 +391,11 @@ boolean setupSocketWithClient() {
   Serial.print("Starting socket to host: "); Serial.print(server.client().remoteIP().toString()); Serial.print(" on port: "); Serial.println(port);
 #endif
 
-  if (client.connect(server.client().remoteIP(), port)) {
+  if (clientTCP.connect(server.client().remoteIP(), port)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
-    client.setNoDelay(1);
+    clientTCP.setNoDelay(1);
     return true;
   } else {
 #ifdef DEBUG
@@ -348,7 +410,7 @@ boolean setupSocketWithClient() {
  */
 JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer) {
   JsonObject& root = jsonBuffer.createObject();
-  root.set<double>("timestamp", ntpGetTime());
+  root.set<double>("timestamp", ntpActive() ? ntpGetTime() : micros());
   JsonArray& data = root.createNestedArray("data");
   for (uint8_t i = 0; i < numChannels; i++) {
     data.add(channelData[i]);
@@ -468,6 +530,7 @@ void initializeVariables() {
   counter = 0;
   head = 0;
   lastHeadMove = 0;
+  lastMQTTConnectAttempt = 0;
   lastSendToClient = 0;
   lastTimeWasPolled = 0;
   latency = 1000;
@@ -479,6 +542,7 @@ void initializeVariables() {
   outputString = "";
 
   curOutputMode = OUTPUT_MODE_RAW;
+  curOutputProtocol = OUTPUT_PROTOCOL_TCP;
 
   passthroughBufferClear();
   gainReset();
@@ -528,7 +592,6 @@ void setup() {
   // and the buffer is autofilled with zeroes if data is less than 32 bytes long
   // It's up to the user to implement protocol for handling data length
   SPISlave.onData([](uint8_t * data, size_t len) {
-
     if (isAStreamByte(data[0])) {
       if (head >= NUM_PACKETS_IN_RING_BUFFER) {
         head = 0;
@@ -563,19 +626,21 @@ void setup() {
             returnOK(outputString);
             outputString = "";
             break;
-          case WIFI_SPI_MSG_GAINS:
-
-            break;
           default:
             break;
         }
-// #ifdef DEBUG
-//         Serial.printf("outputString %s\n", outputString.c_str());
-// #endif
-
+      }
+      switch (data[0]) {
+        case WIFI_SPI_MSG_GAINS:
+#ifdef DEBUG
+          Serial.println("gainSet");
+#endif
+          gainSet(data);
+          break;
+        default:
+          break;
       }
     }
-
   });
 
   SPISlave.onDataSent([]() {
@@ -683,6 +748,15 @@ void setup() {
     returnOK();
   });
 
+  server.on("/output/protocol/tcp", HTTP_GET, [](){
+    curOutputProtocol = OUTPUT_PROTOCOL_TCP;
+    returnOK();
+  });
+  server.on("/output/protocol/mqtt", HTTP_GET, [](){
+    curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
+    returnOK();
+  });
+
   // server.on("/data", HTTP_GET, getData);
   server.on("/websocket", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail(500, "Error: Failed to connect to server");
@@ -721,6 +795,14 @@ void setup() {
 void loop() {
   server.handleClient();
 
+  if (curOutputProtocol == OUTPUT_PROTOCOL_MQTT) {
+    if (!clientMQTT.connected() && millis() > 5000 + lastMQTTConnectAttempt) {
+      reconnect();
+    }
+
+    clientMQTT.loop();
+  }
+
   // if (millis() > lastPrint + 20) {
   //   lastPrint = millis();
   //   for (int i = 0; i < 32; i++) {
@@ -758,7 +840,7 @@ void loop() {
 #endif
   }
 
-  if(client.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
+  if(clientTCP.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
 
     int packetsToSend = head - tail;
@@ -780,7 +862,7 @@ void loop() {
           channelDataCompute(ringBuf[tail]);
           JsonObject& root = prepareSampleJSON(jsonSampleBuffer);
           digitalWrite(5, HIGH);
-          root.printTo(client);
+          root.printTo(clientTCP);
           digitalWrite(5, LOW);
         } else {
           outputBuf[index++] = ringBuf[tail][j];
@@ -791,11 +873,11 @@ void loop() {
 
     if (curOutputMode == OUTPUT_MODE_RAW) {
       digitalWrite(5, HIGH);
-      client.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
+      clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
       digitalWrite(5, LOW);
     }
 
-    // client.write(outputBuf, BYTES_PER_SPI_PACKET * packetsToSend);
+    // clientTCP.write(outputBuf, BYTES_PER_SPI_PACKET * packetsToSend);
     lastSendToClient = micros();
   }
 }
