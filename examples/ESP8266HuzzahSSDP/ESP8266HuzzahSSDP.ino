@@ -1,3 +1,5 @@
+#define ADS1299_VREF 4.5
+#define ADC_24BIT_RES 8388607.0
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
 #define DEBUG 1
@@ -6,6 +8,11 @@
 #define MAX_PACKETS_PER_SEND 150
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
+#define WIFI_SPI_MSG_GAINS 0x03
+#define MAX_CHANNELS 16
+#define NUM_CHANNELS_CYTON 8
+#define NUM_CHANNELS_CYTON_DAISY 16
+#define NUM_CHANNELS_GANGLION 4
 #define ARDUINOJSON_USE_DOUBLE 1 // we need to store 64-bit doubles
 
 #include <time.h>
@@ -19,8 +26,6 @@
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-// #include "WiFiClientPrint.h"
-
 
 // ENUMS
 typedef enum OUTPUT_MODE {
@@ -28,12 +33,23 @@ typedef enum OUTPUT_MODE {
   OUTPUT_MODE_JSON
 };
 
+typedef enum CYTON_GAIN {
+  CYTON_GAIN_1,
+  CYTON_GAIN_2,
+  CYTON_GAIN_4,
+  CYTON_GAIN_6,
+  CYTON_GAIN_8,
+  CYTON_GAIN_12,
+  CYTON_GAIN_24
+};
 
 boolean spiTXBufferLoaded;
 boolean clientWaitingForResponse;
 boolean underSelfTest;
 
 ESP8266WebServer server(80);
+
+float channelData[MAX_CHANNELS];
 
 int counter;
 int latency;
@@ -44,10 +60,12 @@ StaticJsonBuffer<295> jsonBuffer;
 
 String outputString;
 
-uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
+uint8_t gains[MAX_CHANNELS];
+uint8_t numChannels;
 uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_OBCI_PACKET];
 uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 uint8_t passthroughPosition;
+uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
 uint8_t sampleNumber;
 
 unsigned long lastSendToClient;
@@ -60,6 +78,9 @@ volatile uint8_t tail;
 
 WiFiClient client;
 
+///////////////////////////////////////////
+// NTP BEGIN
+///////////////////////////////////////////
 /**
  * Check to see if SNTP is active
  * @type {Number}
@@ -89,6 +110,63 @@ void ntpStart() {
   Serial.print("Setting time using SNTP");
 #endif
   configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+}
+
+
+///////////////////////////////////////////
+// DATA PROCESSING BEGIN
+///////////////////////////////////////////
+
+void channelDataReset() {
+  for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
+    channelData[i] = 0.0;
+  }
+}
+
+// TODO: finish 24 byte conversion
+
+void gainReset() {
+  for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
+    gains[i] = 0;
+  }
+}
+
+void gainSet(uint8_t *raw) {
+  uint8_t byteCounter = 1;
+  numChannels = raw[byteCounter++];
+
+  if (numChannels < NUM_CHANNELS_GANGLION || numChannels > MAX_CHANNELS) {
+    numChannels
+    return;
+  }
+
+  for (uint8_t i = 0; i < numChannels; i++) {
+    gains[i] = numChannels == NUM_CHANNELS_GANGLION ? gainGanglion() : gainCyton(raw[byteCounter++]);
+  }
+}
+
+float gainCyton(uint8_t b) {
+  switch (b) {
+    case CYTON_GAIN_1:
+      return 1.0;
+    case CYTON_GAIN_2:
+      return 2.0;
+    case CYTON_GAIN_4:
+      return 4.0;
+    case CYTON_GAIN_6:
+      return 6.0;
+    case CYTON_GAIN_8:
+      return 8.0;
+    case CYTON_GAIN_12:
+      return 12.0;
+    case CYTON_GAIN_24:
+    default:
+      return 24.0;
+  }
+}
+
+float gainGanglion() {
+  return 51.0;
 }
 
 
@@ -382,6 +460,7 @@ void initializeVariables() {
   curOutputMode = OUTPUT_MODE_RAW;
 
   passthroughBufferClear();
+  gainReset();
 }
 
 void setup() {
@@ -468,6 +547,9 @@ void setup() {
 #endif
             returnOK(outputString);
             outputString = "";
+            break;
+          case WIFI_SPI_MSG_GAINS:
+
             break;
           default:
             break;
