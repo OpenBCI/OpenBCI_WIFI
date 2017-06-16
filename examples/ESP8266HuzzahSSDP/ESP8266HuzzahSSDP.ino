@@ -67,8 +67,6 @@ int latency;
 OUTPUT_MODE curOutputMode;
 OUTPUT_PROTOCOL curOutputProtocol;
 
-StaticJsonBuffer<295> jsonSampleBuffer;
-
 String jsonStr;
 String outputString;
 
@@ -187,8 +185,6 @@ void channelDataReset() {
   channelsLoaded = 0;
 }
 
-// TODO: finish 24 byte conversion
-
 /**
  * Return true if the channel data array is full
  */
@@ -211,6 +207,8 @@ boolean channelDataCompute(uint8_t *arr) {
       }
 
       channelData[i] = scaleFactors[i] * ((float)raw);
+
+      // Serial.printf("%d: %2.10f\n",i+1,channelData[i] );
     }
     return true;
   }
@@ -262,9 +260,9 @@ void gainSet(uint8_t *raw) {
     } else {
       gains[i] = gainCyton(raw[byteCounter++]);
       scaleFactors[i] = ADS1299_VREF / gains[i] / ADC_24BIT_RES;
-#ifdef DEBUG
-      Serial.printf("Channel: %d\n\tgain: %d\n\tscale factor: %.10f\n", i+1, gains[i], scaleFactors[i]);
-#endif
+// #ifdef DEBUG
+//       Serial.printf("Channel: %d\n\tgain: %d\n\tscale factor: %.10f\n", i+1, gains[i], scaleFactors[i]);
+// #endif
     }
   }
 }
@@ -458,7 +456,7 @@ boolean setupSocketWithClient() {
  */
 JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer) {
   JsonObject& root = jsonBuffer.createObject();
-  root.set<double>("timestamp", ntpActive() ? ntpGetTime() : micros());
+  root["timestamp"] = ntpActive() ? ntpGetTime() : micros();
   JsonArray& data = root.createNestedArray("data");
   for (uint8_t i = 0; i < numChannels; i++) {
     data.add(channelData[i]);
@@ -547,8 +545,10 @@ void initializeVariables() {
 
   outputString = "";
 
-  curOutputMode = OUTPUT_MODE_RAW;
-  curOutputProtocol = OUTPUT_PROTOCOL_TCP;
+  curOutputMode = OUTPUT_MODE_JSON;
+  curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
+  // curOutputProtocol = OUTPUT_PROTOCOL_TCP;
+  mqttSetup();
 
   passthroughBufferClear();
   gainReset();
@@ -556,6 +556,8 @@ void initializeVariables() {
 
 void setup() {
   initializeVariables();
+
+  ntpStart();
 
   pinMode(5, OUTPUT);
   pinMode(0, OUTPUT);
@@ -859,7 +861,7 @@ void loop() {
   }
 
   if((clientTCP.connected() || clientMQTT.connected()) && (micros() > (lastSendToClient + latency)) && head != tail) {
-    // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
+    // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cTCP: "); Serial.print(clientTCP.connected()); Serial.print(" cMQTT: "); Serial.println(clientMQTT.connected());
 
     int packetsToSend = head - tail;
     if (packetsToSend < 0) {
@@ -875,27 +877,30 @@ void loop() {
       if (tail >= NUM_PACKETS_IN_RING_BUFFER) {
         tail = 0;
       }
-      for (uint8_t j = 0; j < BYTES_PER_OBCI_PACKET; j++) {
-        if (curOutputMode == OUTPUT_MODE_JSON) {
-          channelDataCompute(ringBuf[tail]);
-          JsonObject& root = prepareSampleJSON(jsonSampleBuffer);
-          digitalWrite(5, HIGH);
-          switch (curOutputProtocol) {
-            case OUTPUT_PROTOCOL_MQTT:
-              root.printTo(jsonStr);
-              clientMQTT.publish("amq.topic", jsonStr.c_str());
-              jsonStr = "";
-              break;
-            case OUTPUT_PROTOCOL_TCP:
-            default:
-              root.printTo(clientTCP);
-              break;
-          }
-          digitalWrite(5, LOW);
-        } else {
+      if (curOutputMode == OUTPUT_MODE_JSON) {
+        channelDataCompute(ringBuf[tail]);
+        StaticJsonBuffer<300> jsonSampleBuffer;
+        JsonObject& root = prepareSampleJSON(jsonSampleBuffer);
+        digitalWrite(5, HIGH);
+        switch (curOutputProtocol) {
+          case OUTPUT_PROTOCOL_MQTT:
+            root.printTo(jsonStr);
+            // root.printTo(Serial);
+            clientMQTT.publish("amq.topic", jsonStr.c_str());
+            jsonStr = "";
+            break;
+          case OUTPUT_PROTOCOL_TCP:
+          default:
+            root.printTo(clientTCP);
+            break;
+        }
+        digitalWrite(5, LOW);
+      } else {
+        for (uint8_t j = 0; j < BYTES_PER_OBCI_PACKET; j++) {
           outputBuf[index++] = ringBuf[tail][j];
         }
       }
+
       tail++;
     }
 
