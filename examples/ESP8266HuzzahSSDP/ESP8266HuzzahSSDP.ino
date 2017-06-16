@@ -5,7 +5,8 @@
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define NUM_PACKETS_IN_RING_BUFFER 250
-#define MAX_PACKETS_PER_SEND 150
+#define MAX_PACKETS_PER_SEND_JSON 6
+#define MAX_PACKETS_PER_SEND_TCP 150
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
 #define WIFI_SPI_MSG_GAINS 0x03
@@ -58,7 +59,7 @@ const char serverCloudbrain[] = "mock.getcloudbrain.com";
 
 ESP8266WebServer server(80);
 
-float channelData[MAX_CHANNELS];
+float channelData[MAX_PACKETS_PER_SEND_JSON][MAX_CHANNELS];
 float scaleFactors[MAX_CHANNELS];
 
 int counter;
@@ -72,8 +73,7 @@ String outputString;
 
 uint8_t gains[MAX_CHANNELS];
 uint8_t numChannels;
-uint8_t channelsLoaded;
-uint8_t outputBuf[MAX_PACKETS_PER_SEND * BYTES_PER_OBCI_PACKET];
+uint8_t outputBuf[MAX_PACKETS_PER_SEND_TCP * BYTES_PER_OBCI_PACKET];
 uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 uint8_t passthroughPosition;
 uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
@@ -179,16 +179,17 @@ void ntpStart() {
 ///////////////////////////////////////////
 
 void channelDataReset() {
-  for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
-    channelData[i] = 0.0;
+  for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_JSON; i++) {
+    for (uint8_t j = 0; i < MAX_CHANNELS; i++) {
+      channelData[i][j] = 0.0;
+    }
   }
-  channelsLoaded = 0;
 }
 
 /**
  * Return true if the channel data array is full
  */
-boolean channelDataCompute(uint8_t *arr) {
+boolean channelDataCompute(uint8_t *arr, float *farr) {
   const uint8_t byteOffset = 2;
   if (numChannels == NUM_CHANNELS_CYTON_DAISY) {
     // do something awesome
@@ -206,9 +207,9 @@ boolean channelDataCompute(uint8_t *arr) {
         raw &= 0x00FFFFFF;
       }
 
-      channelData[i] = scaleFactors[i] * ((float)raw);
+      farr[i] = scaleFactors[i] * ((float)raw);
 
-      // Serial.printf("%d: %2.10f\n",i+1,channelData[i] );
+      // Serial.printf("%d: %2.10f\n",i+1, farr[i]);
     }
     return true;
   }
@@ -454,12 +455,16 @@ boolean setupSocketWithClient() {
 /**
  * Used to prepare a response in JSON
  */
-JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer) {
+JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
   JsonObject& root = jsonBuffer.createObject();
-  root["timestamp"] = ntpActive() ? ntpGetTime() : micros();
-  JsonArray& data = root.createNestedArray("data");
-  for (uint8_t i = 0; i < numChannels; i++) {
-    data.add(channelData[i]);
+  JsonArray& chunk = root.createNestedArray("chunk");
+  for (uint8_t i = 0; i < packetsToSend; i++) {
+    JsonObject& sample = chunk.createNestedObject();
+    sample["timestamp"] = ntpActive() ? ntpGetTime() : micros();
+    JsonArray& data = sample.createNestedArray("data");
+    for (uint8_t j = 0; i < numChannels; i++) {
+      data.add(channelData[i][j]);
+    }
   }
   return root;
 }
@@ -537,7 +542,7 @@ void initializeVariables() {
   lastMQTTConnectAttempt = 0;
   lastSendToClient = 0;
   lastTimeWasPolled = 0;
-  latency = 1000;
+  latency = 10000;
   passthroughPosition = 0;
   sampleNumber = 0;
   tail = 0;
@@ -871,10 +876,16 @@ void loop() {
     if (packetsToSend < 0) {
       packetsToSend = NUM_PACKETS_IN_RING_BUFFER + packetsToSend; // for wrap around
     }
-    if (packetsToSend > (MAX_PACKETS_PER_SEND - 5)) {
-      packetsToSend = MAX_PACKETS_PER_SEND - 5;
+
+    if (curOutputMode == OUTPUT_MODE_JSON) {
+      if (packetsToSend > MAX_PACKETS_PER_SEND_JSON) {
+        packetsToSend = MAX_PACKETS_PER_SEND_JSON;
+      }
+    } else {
+      if (packetsToSend > (MAX_PACKETS_PER_SEND_TCP - 5)) {
+        packetsToSend = MAX_PACKETS_PER_SEND_TCP - 5;
+      }
     }
-    // Serial.print("Packets to send: "); Serial.println(packetsToSend);
 
     int index = 0;
     for (uint8_t i = 0; i < packetsToSend; i++) {
@@ -882,23 +893,7 @@ void loop() {
         tail = 0;
       }
       if (curOutputMode == OUTPUT_MODE_JSON) {
-        channelDataCompute(ringBuf[tail]);
-        StaticJsonBuffer<300> jsonSampleBuffer;
-        JsonObject& root = prepareSampleJSON(jsonSampleBuffer);
-        digitalWrite(5, HIGH);
-        switch (curOutputProtocol) {
-          case OUTPUT_PROTOCOL_MQTT:
-            root.printTo(jsonStr);
-            // root.printTo(Serial);
-            clientMQTT.publish("amq.topic", jsonStr.c_str());
-            jsonStr = "";
-            break;
-          case OUTPUT_PROTOCOL_TCP:
-          default:
-            root.printTo(clientTCP);
-            break;
-        }
-        digitalWrite(5, LOW);
+        channelDataCompute(ringBuf[tail], channelData[i]);
       } else {
         for (uint8_t j = 0; j < BYTES_PER_OBCI_PACKET; j++) {
           outputBuf[index++] = ringBuf[tail][j];
@@ -907,12 +902,32 @@ void loop() {
 
       tail++;
     }
+    digitalWrite(5, HIGH);
 
-    if (curOutputMode == OUTPUT_MODE_RAW) {
-      digitalWrite(5, HIGH);
-      clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
-      digitalWrite(5, LOW);
+    if (curOutputMode == OUTPUT_MODE_JSON) {
+      StaticJsonBuffer<1500> jsonSampleBuffer;
+
+      JsonObject& root = prepareSampleJSON(jsonSampleBuffer, packetsToSend);
+
+      if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
+        root.printTo(clientTCP);
+      } else {
+        // root.printTo(Serial);
+        root.printTo(jsonStr);
+        clientMQTT.publish("amq.topic", jsonStr.c_str());
+        jsonStr = "";
+      }
+
+    } else {
+      if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
+        clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
+      } else {
+        clientMQTT.publish("amq.topic",(const char*) outputBuf);
+
+      }
     }
+
+    digitalWrite(5, LOW);
 
     // clientTCP.write(outputBuf, BYTES_PER_SPI_PACKET * packetsToSend);
     lastSendToClient = micros();
