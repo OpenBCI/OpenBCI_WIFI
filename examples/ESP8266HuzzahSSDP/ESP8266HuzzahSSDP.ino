@@ -69,6 +69,7 @@ OUTPUT_PROTOCOL curOutputProtocol;
 
 StaticJsonBuffer<295> jsonSampleBuffer;
 
+String jsonStr;
 String outputString;
 
 uint8_t gains[MAX_CHANNELS];
@@ -92,6 +93,53 @@ volatile uint8_t tail;
 WiFiClient clientTCP;
 WiFiClient espClient;
 PubSubClient clientMQTT(espClient);
+
+///////////////////////////////////////////
+// Utility functions
+///////////////////////////////////////////
+String getMac() {
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  macID.toUpperCase();
+  return macID;
+}
+
+String getModelNumber() {
+  String AP_NameString = "PTW-OBCI-0001-" + getMac();
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  return AP_NameString;
+}
+
+String getName() {
+  String AP_NameString = "OpenBCI-" + getMac();
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  return AP_NameString;
+}
+
+void printWifiStatus() {
+  // print the SSID of the network you're attached to:
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // print your WiFi shield's IP address:
+  IPAddress ip = WiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
+}
 
 ///////////////////////////////////////////
 // NTP BEGIN
@@ -224,11 +272,6 @@ void gainSet(uint8_t *raw) {
 // MQTT
 ///////////////////////////////////////////////////
 
-void mqttSetup() {
-  client.setServer(serverCloudbrain, 1883);
-  client.setCallback(callback);
-}
-
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
@@ -240,12 +283,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   // Switch on the LED if an 1 was received as first character
   if ((char)payload[0] == '1') {
-    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    digitalWrite(0, LOW);   // Turn the LED on (Note that LOW is the voltage level
     // but actually the LED is on; this is because
     // it is acive low on the ESP-01)
   } else {
-    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+    digitalWrite(0, HIGH);  // Turn the LED off by making the voltage HIGH
   }
+}
+
+void mqttSetup() {
+  clientMQTT.setServer(serverCloudbrain, 1883);
+  clientMQTT.setCallback(callback);
 }
 
 void reconnect() {
@@ -253,7 +301,7 @@ void reconnect() {
   while (!clientMQTT.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (clientMQTT.connect(getName(), "cloudbrain", "cloudbrain")) {
+    if (clientMQTT.connect(getName().c_str(), "cloudbrain", "cloudbrain")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
       clientMQTT.publish("amq.topic", "hello world");
@@ -434,49 +482,7 @@ JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer) {
 // }
 //
 
-String getMac() {
-  uint8_t mac[WL_MAC_ADDR_LENGTH];
-  WiFi.softAPmacAddress(mac);
-  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
-                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
-  macID.toUpperCase();
-  return macID;
-}
 
-String getModelNumber() {
-  String AP_NameString = "PTW-OBCI-0001-" + getMac();
-
-  char AP_NameChar[AP_NameString.length() + 1];
-  memset(AP_NameChar, 0, AP_NameString.length() + 1);
-
-  for (int i=0; i<AP_NameString.length(); i++)
-    AP_NameChar[i] = AP_NameString.charAt(i);
-
-  return AP_NameString;
-}
-
-String getName() {
-  String AP_NameString = "OpenBCI-" + getMac();
-
-  char AP_NameChar[AP_NameString.length() + 1];
-  memset(AP_NameChar, 0, AP_NameString.length() + 1);
-
-  for (int i=0; i<AP_NameString.length(); i++)
-    AP_NameChar[i] = AP_NameString.charAt(i);
-
-  return AP_NameString;
-}
-
-void printWifiStatus() {
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  // print your WiFi shield's IP address:
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-}
 
 /**
 * @description Test to see if a char follows the stream tail byte format
@@ -552,6 +558,7 @@ void setup() {
   initializeVariables();
 
   pinMode(5, OUTPUT);
+  pinMode(0, OUTPUT);
 
 
 #ifdef DEBUG
@@ -754,6 +761,7 @@ void setup() {
   });
   server.on("/output/protocol/mqtt", HTTP_GET, [](){
     curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
+    mqttSetup();
     returnOK();
   });
 
@@ -783,8 +791,18 @@ void setup() {
   server.on("/latency", HTTP_GET, [](){
     server.send(200, "text/plain", String(latency).c_str());
   });
+  if (!MDNS.begin(getName().c_str())) {
+#ifdef DEBUG
+    Serial.println("Error setting up MDNS responder!");
+#endif
+  } else {
+#ifdef DEBUG
+    Serial.print("Your ESP is called "); Serial.println(getName());
+#endif
+  }
   // server.onNotFound(handleNotFound);
   server.begin();
+  MDNS.addService("http", "tcp", 80);
 
 #ifdef DEBUG
     Serial.printf("Ready!\n");
@@ -840,7 +858,7 @@ void loop() {
 #endif
   }
 
-  if(clientTCP.connected() && (micros() > (lastSendToClient + latency)) && head != tail) {
+  if((clientTCP.connected() || clientMQTT.connected()) && (micros() > (lastSendToClient + latency)) && head != tail) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cc: "); Serial.println(client.connected());
 
     int packetsToSend = head - tail;
@@ -862,7 +880,17 @@ void loop() {
           channelDataCompute(ringBuf[tail]);
           JsonObject& root = prepareSampleJSON(jsonSampleBuffer);
           digitalWrite(5, HIGH);
-          root.printTo(clientTCP);
+          switch (curOutputProtocol) {
+            case OUTPUT_PROTOCOL_MQTT:
+              root.printTo(jsonStr);
+              clientMQTT.publish("amq.topic", jsonStr.c_str());
+              jsonStr = "";
+              break;
+            case OUTPUT_PROTOCOL_TCP:
+            default:
+              root.printTo(clientTCP);
+              break;
+          }
           digitalWrite(5, LOW);
         } else {
           outputBuf[index++] = ringBuf[tail][j];
