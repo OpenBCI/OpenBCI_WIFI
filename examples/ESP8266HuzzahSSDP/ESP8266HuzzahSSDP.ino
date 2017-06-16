@@ -653,9 +653,13 @@ void setup() {
   });
 
   SPISlave.onDataSent([]() {
-// #ifdef DEBUG
-//     Serial.println("Sent data");
-// #endif
+    if (passthroughBuffer[0] > 0) {
+      Serial.println("Sent data: 0x");
+      for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
+        Serial.print(passthroughBuffer[i],HEX);
+      }
+      Serial.println();
+    }
     for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
       passthroughBuffer[i] = 0;
     }
