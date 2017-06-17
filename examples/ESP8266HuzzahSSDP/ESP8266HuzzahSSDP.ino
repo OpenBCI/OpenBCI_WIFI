@@ -52,6 +52,7 @@ typedef enum CYTON_GAIN {
 };
 
 boolean clientWaitingForResponse;
+boolean ntpOffsetSet;
 boolean syncingNtp;
 boolean waitingOnNTP;
 boolean spiTXBufferLoaded;
@@ -466,7 +467,7 @@ JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
   for (uint8_t i = 0; i < packetsToSend; i++) {
     JsonObject& sample = chunk.createNestedObject();
     double curTime = ntpActive() ? ntpGetTime() : micros();
-    sample.set<long>("timestamp", curTime);
+    sample.set<double>("timestamp", curTime);
     JsonArray& data = sample.createNestedArray("data");
     for (uint8_t j = 0; i < numChannels; i++) {
       data.add(channelData[i][j]);
@@ -543,6 +544,7 @@ void initializeVariables() {
   underSelfTest = false;
   syncingNtp = false;
   waitingOnNTP = false;
+  ntpOffsetSet = false;
 
   counter = 0;
   head = 0;
