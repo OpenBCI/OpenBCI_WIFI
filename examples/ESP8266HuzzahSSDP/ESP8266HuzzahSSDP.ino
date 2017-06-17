@@ -51,8 +51,10 @@ typedef enum CYTON_GAIN {
   CYTON_GAIN_24
 };
 
-boolean spiTXBufferLoaded;
 boolean clientWaitingForResponse;
+boolean syncingNtp;
+boolean waitingOnNTP;
+boolean spiTXBufferLoaded;
 boolean underSelfTest;
 
 const char serverCloudbrain[] = "mock.getcloudbrain.com";
@@ -73,6 +75,7 @@ String outputString;
 
 uint8_t gains[MAX_CHANNELS];
 uint8_t numChannels;
+uint8_t ntpTimeSyncAttempts;
 uint8_t outputBuf[MAX_PACKETS_PER_SEND_TCP * BYTES_PER_OBCI_PACKET];
 uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 uint8_t passthroughPosition;
@@ -83,6 +86,8 @@ unsigned long lastSendToClient;
 unsigned long lastHeadMove;
 unsigned long lastMQTTConnectAttempt;
 unsigned long lastTimeWasPolled;
+unsigned long ntpOffset;
+unsigned long ntpLastTimeSeconds;
 unsigned long timeOfWifiTXBufferLoaded;
 
 volatile uint8_t head;
@@ -168,7 +173,7 @@ double ntpGetTime() {
  */
 void ntpStart() {
 #ifdef DEBUG
-  Serial.print("Setting time using SNTP");
+  Serial.println("Setting time using SNTP");
 #endif
   configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 }
@@ -460,7 +465,8 @@ JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
   JsonArray& chunk = root.createNestedArray("chunk");
   for (uint8_t i = 0; i < packetsToSend; i++) {
     JsonObject& sample = chunk.createNestedObject();
-    sample["timestamp"] = ntpActive() ? ntpGetTime() : micros();
+    double curTime = ntpActive() ? ntpGetTime() : micros();
+    sample.set<long>("timestamp", curTime);
     JsonArray& data = sample.createNestedArray("data");
     for (uint8_t j = 0; i < numChannels; i++) {
       data.add(channelData[i][j]);
@@ -535,6 +541,8 @@ void initializeVariables() {
   clientWaitingForResponse = false;
   spiTXBufferLoaded = false;
   underSelfTest = false;
+  syncingNtp = false;
+  waitingOnNTP = false;
 
   counter = 0;
   head = 0;
@@ -543,6 +551,9 @@ void initializeVariables() {
   lastSendToClient = 0;
   lastTimeWasPolled = 0;
   latency = 10000;
+  ntpLastTimeSeconds = 0;
+  ntpOffset = 0;
+  ntpTimeSyncAttempts = 0;
   passthroughPosition = 0;
   sampleNumber = 0;
   tail = 0;
@@ -551,9 +562,9 @@ void initializeVariables() {
   outputString = "";
 
   curOutputMode = OUTPUT_MODE_JSON;
-  curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
-  // curOutputProtocol = OUTPUT_PROTOCOL_TCP;
-  mqttSetup();
+  // curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
+  curOutputProtocol = OUTPUT_PROTOCOL_TCP;
+  // mqttSetup();
 
   passthroughBufferClear();
   gainReset();
@@ -561,8 +572,6 @@ void initializeVariables() {
 
 void setup() {
   initializeVariables();
-
-  ntpStart();
 
   pinMode(5, OUTPUT);
   pinMode(0, OUTPUT);
@@ -588,7 +597,14 @@ void setup() {
 #endif
   wifiManager.autoConnect(getName().c_str());
 
+#ifdef DEBUG
+  Serial.printf("Starting ntp...\n");
+#endif
+  ntpStart();
+
+#ifdef DEBUG
   Serial.printf("Starting SSDP...\n");
+#endif
   SSDP.setSchemaURL("description.xml");
   SSDP.setHTTPPort(80);
   SSDP.setName("PTW - OpenBCI Wifi Shield");
@@ -776,6 +792,14 @@ void setup() {
     returnOK();
   });
 
+  server.on("/version", HTTP_GET, [](){
+    digitalWrite(5, HIGH);
+    server.send(200, "text/plain", "v0.1.0");
+    digitalWrite(5, LOW);
+  });
+
+
+
   // server.on("/data", HTTP_GET, getData);
   server.on("/websocket", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail(500, "Error: Failed to connect to server");
@@ -819,6 +843,17 @@ void setup() {
     Serial.printf("Ready!\n");
 #endif
 
+  // Test to see if ntp is good
+  if (ntpActive()) {
+    syncingNtp = true;
+  } else {
+#ifdef DEBUG
+    Serial.println("Unable to get ntp sync");
+#endif
+    waitingOnNTP = true;
+    ntpLastTimeSeconds = millis();
+  }
+
 }
 // unsigned long lastPrint = 0;
 void loop() {
@@ -830,6 +865,37 @@ void loop() {
     }
 
     clientMQTT.loop();
+  }
+
+  if (syncingNtp) {
+    unsigned long curTime = time(nullptr);
+    if (ntpLastTimeSeconds == 0) {
+      ntpLastTimeSeconds = curTime;
+    } else if (ntpLastTimeSeconds < curTime) {
+      ntpOffset = micros();
+      syncingNtp = false;
+#ifdef DEBUG
+      Serial.print("Time set: "); Serial.println(ntpOffset);
+#endif
+    }
+  }
+
+  if (waitingOnNTP && (millis() > 3000 + ntpLastTimeSeconds)) {
+    // Test to see if ntp is good
+    if (ntpActive()) {
+      waitingOnNTP = false;
+      syncingNtp = true;
+      ntpLastTimeSeconds = 0;
+    }
+    ntpTimeSyncAttempts++;
+    if (ntpTimeSyncAttempts > 3) {
+#ifdef DEBUG
+      Serial.println("Unable to get ntp sync");
+#endif
+      waitingOnNTP = false;
+    } else {
+      ntpLastTimeSeconds = millis();
+    }
   }
 
   // if (millis() > lastPrint + 20) {
@@ -905,15 +971,18 @@ void loop() {
     digitalWrite(5, HIGH);
 
     if (curOutputMode == OUTPUT_MODE_JSON) {
-      StaticJsonBuffer<1500> jsonSampleBuffer;
+      StaticJsonBuffer<500> jsonSampleBuffer;
 
       JsonObject& root = prepareSampleJSON(jsonSampleBuffer, packetsToSend);
+      root.prettyPrintTo(jsonStr);
 
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
-        root.printTo(clientTCP);
-      } else {
         // root.printTo(Serial);
-        root.printTo(jsonStr);
+        // root.printTo(clientTCP);
+        // root.printTo(clientTCP);
+        clientTCP.write(jsonStr.c_str(), jsonStr.length());
+        // jsonStr = "";
+      } else {
         clientMQTT.publish("amq.topic", jsonStr.c_str());
         jsonStr = "";
       }
