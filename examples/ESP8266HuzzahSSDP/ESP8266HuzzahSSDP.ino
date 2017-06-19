@@ -59,6 +59,7 @@ boolean spiTXBufferLoaded;
 boolean underSelfTest;
 
 const char serverCloudbrain[] = "mock.getcloudbrain.com";
+const char serverCloudbrainAuth[] = "http://auth.getcloudbrain.com";
 
 ESP8266WebServer server(80);
 
@@ -339,6 +340,12 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 #endif
 }
 
+
+///////////////////////////////////////////////////
+// MQTT
+///////////////////////////////////////////////////
+
+
 void returnOK(String s) {
   digitalWrite(5, HIGH);
   server.send(200, "text/plain", s);
@@ -378,6 +385,53 @@ JsonObject& getArgFromArgs() {
   // const char* json = "{\"port\":13514}";
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
   return root;
+}
+
+boolean cloudbrainAuthGetVhost(const char *serverAddr, const char *username) {
+  WiFiClient client;
+
+  if (client.connect(serverAddr, 80)) {
+    StaticJsonBuffer<56> jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    root["username"] = username;
+    Serial.println("Connected to server");
+    // Make a HTTP request
+    client.println("POST /rabbitmq/vhost/info HTTP/1.1");
+    client.println("Host: auth.getcloudbrain.com");
+    client.println("Accept: */*");
+    client.println("Content-Length: " + root.measureLength());
+    client.println("Content-Type: application/json");
+    client.println();
+    root.printTo(client);
+
+    int connectLoop = 0;
+    int inChar;
+
+    while(client.connected()) {
+      while(client.available()){
+        inChar = client.read();
+        Serial.write(inChar);
+        connectLoop = 0;
+      }
+
+      delay(1);
+      connectLoop++;
+      if(connectLoop > 10000){
+        Serial.println();
+        Serial.println(F("Timeout"));
+        client.stop();
+      }
+    }
+
+    Serial.println();
+    Serial.println(F("disconnecting."));
+    client.stop();
+    returnOK("Sent command to client");
+    return true;
+  } else {
+    returnFail(500, "Unable to connect to client");
+    return false;
+  }
 }
 
 /**
@@ -797,6 +851,17 @@ void setup() {
   server.on("/version", HTTP_GET, [](){
     digitalWrite(5, HIGH);
     server.send(200, "text/plain", "v0.1.0");
+    digitalWrite(5, LOW);
+  });
+
+  server.on("/cloudbrain/auth", HTTP_GET, []() {
+    digitalWrite(5, HIGH);
+    Serial.println("/cloudbrain/auth");
+    if (cloudbrainAuthGetVhost("auth.getcloudbrain.com", "demo@cloudbrain.com")) {
+      Serial.println("Able to do post request");
+    } else {
+      Serial.println("Not able to do the request");
+    }
     digitalWrite(5, LOW);
   });
 
