@@ -399,11 +399,17 @@ boolean cloudbrainAuthGetVhost(const char *serverAddr, const char *username) {
     client.println("POST /rabbitmq/vhost/info HTTP/1.1");
     client.println("Host: auth.getcloudbrain.com");
     client.println("Accept: */*");
-    client.println("Content-Length: " + root.measureLength());
+    client.print("Content-Length: "); client.println(root.measureLength());
     client.println("Content-Type: application/json");
     client.println();
     root.printTo(client);
-
+    // Serial.println("POST /rabbitmq/vhost/info HTTP/1.1");
+    // Serial.println("Host: auth.getcloudbrain.com");
+    // Serial.println("Accept: */*");
+    // Serial.print("Content-Length: "); Serial.println(root.measureLength());
+    // Serial.println("Content-Type: application/json");
+    // Serial.println();
+    // root.printTo(Serial);
     int connectLoop = 0;
     int inChar;
 
