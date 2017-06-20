@@ -4,8 +4,10 @@
 #define BYTES_PER_OBCI_PACKET 33
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
-#define NUM_PACKETS_IN_RING_BUFFER 250
+// #define NUM_PACKETS_IN_RING_BUFFER 45
+#define NUM_PACKETS_IN_RING_BUFFER 200
 #define MAX_PACKETS_PER_SEND_JSON 6
+// #define MAX_PACKETS_PER_SEND_TCP 20
 #define MAX_PACKETS_PER_SEND_TCP 150
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
@@ -30,6 +32,12 @@
 #include <ArduinoJson.h>
 
 // ENUMS
+
+typedef enum CLIENT_RESPONSE {
+  CLIENT_RESPONSE_NONE,
+  CLIENT_RESPONSE_OUTPUT_STRING
+};
+
 typedef enum OUTPUT_MODE {
   OUTPUT_MODE_RAW,
   OUTPUT_MODE_JSON
@@ -52,14 +60,17 @@ typedef enum CYTON_GAIN {
 };
 
 boolean clientWaitingForResponse;
+boolean clientWaitingForResponseFullfilled;
 boolean ntpOffsetSet;
 boolean syncingNtp;
 boolean waitingOnNTP;
 boolean spiTXBufferLoaded;
 boolean underSelfTest;
 
-const char serverCloudbrain[] = "mock.getcloudbrain.com";
-const char serverCloudbrainAuth[] = "http://auth.getcloudbrain.com";
+CLIENT_RESPONSE curClientResponse;
+
+const char *serverCloudbrain;
+const char *serverCloudbrainAuth;
 
 ESP8266WebServer server(80);
 
@@ -387,58 +398,61 @@ JsonObject& getArgFromArgs() {
   return root;
 }
 
-boolean cloudbrainAuthGetVhost(const char *serverAddr, const char *username) {
-  WiFiClient client;
-
-  if (client.connect(serverAddr, 80)) {
-    StaticJsonBuffer<56> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
-    root["username"] = username;
-    Serial.println("Connected to server");
-    // Make a HTTP request
-    client.println("POST /rabbitmq/vhost/info HTTP/1.1");
-    client.println("Host: auth.getcloudbrain.com");
-    client.println("Accept: */*");
-    client.print("Content-Length: "); client.println(root.measureLength());
-    client.println("Content-Type: application/json");
-    client.println();
-    root.printTo(client);
-    // Serial.println("POST /rabbitmq/vhost/info HTTP/1.1");
-    // Serial.println("Host: auth.getcloudbrain.com");
-    // Serial.println("Accept: */*");
-    // Serial.print("Content-Length: "); Serial.println(root.measureLength());
-    // Serial.println("Content-Type: application/json");
-    // Serial.println();
-    // root.printTo(Serial);
-    int connectLoop = 0;
-    int inChar;
-
-    while(client.connected()) {
-      while(client.available()){
-        inChar = client.read();
-        Serial.write(inChar);
-        connectLoop = 0;
-      }
-
-      delay(1);
-      connectLoop++;
-      if(connectLoop > 10000){
-        Serial.println();
-        Serial.println(F("Timeout"));
-        client.stop();
-      }
-    }
-
-    Serial.println();
-    Serial.println(F("disconnecting."));
-    client.stop();
-    returnOK("Sent command to client");
-    return true;
-  } else {
-    returnFail(500, "Unable to connect to client");
-    return false;
-  }
-}
+// boolean cloudbrainAuthGetVhost(const char *serverAddr, const char *username) {
+//   WiFiClientSecure client;
+//
+//   Serial.print("\nconnecting to "); Serial.println(serverAddr);
+//
+//   if (client.connect(serverAddr, 443)) {
+//     StaticJsonBuffer<56> jsonBuffer;
+//     JsonObject& root = jsonBuffer.createObject();
+//     root["username"] = username;
+//     Serial.println("Connected to server");
+//     // Make a HTTP request
+//     client.println("POST /rabbitmq/vhost/info HTTP/1.1");
+//     client.println("Host: auth.getcloudbrain.com");
+//     client.println("Accept: */*");
+//     client.print("Content-Length: "); client.println(root.measureLength());
+//     client.println("Content-Type: application/json");
+//     client.println();
+//     root.printTo(client);
+//     // Serial.println("POST /rabbitmq/vhost/info HTTP/1.1");
+//     // Serial.println("Host: auth.getcloudbrain.com");
+//     // Serial.println("Accept: */*");
+//     // Serial.print("Content-Length: "); Serial.println(root.measureLength());
+//     // Serial.println("Content-Type: application/json");
+//     // Serial.println();
+//     // root.printTo(Serial);
+//     int connectLoop = 0;
+//     int inChar;
+//
+//     while(client.connected()) {
+//       while(client.available()){
+//         inChar = client.read();
+//         Serial.write(inChar);
+//         connectLoop = 0;
+//         delay(1500);
+//       }
+//
+//       delay(10);
+//       connectLoop++;
+//       if(connectLoop > 10000){
+//         Serial.println();
+//         Serial.println(F("Timeout"));
+//         client.stop();
+//       }
+//     }
+//
+//     Serial.println();
+//     Serial.println(F("disconnecting."));
+//     client.stop();
+//     returnOK("Sent command to client");
+//     return true;
+//   } else {
+//     returnFail(500, "Unable to connect to client");
+//     return false;
+//   }
+// }
 
 /**
  * Used to set the latency of the system.
@@ -598,8 +612,62 @@ void handleSensorCommand() {
   // SPISlave.setData(ip.toString().c_str());
 }
 
+///
+/////
+/////
+/////
+/////
+
+WebSocketsServer webSocket = WebSocketsServer(81);
+
+#define USE_SERIAL Serial
+
+String fragmentBuffer = "";
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+
+	switch(type) {
+		case WStype_DISCONNECTED:
+			USE_SERIAL.printf("[%u] Disconnected!\n", num);
+			break;
+		case WStype_CONNECTED: {
+			IPAddress ip = webSocket.remoteIP(num);
+			USE_SERIAL.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+
+			// send message to client
+			webSocket.sendTXT(num, "Connected");
+		}
+			break;
+		case WStype_TEXT:
+			USE_SERIAL.printf("[%u] get Text: %s\n", num, payload);
+			break;
+		case WStype_BIN:
+			USE_SERIAL.printf("[%u] get binary length: %u\n", num, length);
+			hexdump(payload, length);
+			break;
+
+		// Fragmentation / continuation opcode handling
+		// case WStype_FRAGMENT_BIN_START:
+		case WStype_FRAGMENT_TEXT_START:
+			fragmentBuffer = (char*)payload;
+			USE_SERIAL.printf("[%u] get start start of Textfragment: %s\n", num, payload);
+			break;
+		case WStype_FRAGMENT:
+			fragmentBuffer += (char*)payload;
+			USE_SERIAL.printf("[%u] get Textfragment : %s\n", num, payload);
+			break;
+		case WStype_FRAGMENT_FIN:
+			fragmentBuffer += (char*)payload;
+			USE_SERIAL.printf("[%u] get end of Textfragment: %s\n", num, payload);
+			USE_SERIAL.printf("[%u] full frame: %s\n", num, fragmentBuffer.c_str());
+			break;
+	}
+
+}
+
 void initializeVariables() {
   clientWaitingForResponse = false;
+  clientWaitingForResponseFullfilled = false;
   spiTXBufferLoaded = false;
   underSelfTest = false;
   syncingNtp = false;
@@ -622,10 +690,14 @@ void initializeVariables() {
   timeOfWifiTXBufferLoaded = 0;
 
   outputString = "";
+  serverCloudbrain = "mock.getcloudbrain.com";
+  serverCloudbrainAuth = "http://auth.getcloudbrain.com";
 
+  // curOutputMode = OUTPUT_MODE_RAW;
   curOutputMode = OUTPUT_MODE_JSON;
   // curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
   curOutputProtocol = OUTPUT_PROTOCOL_TCP;
+  curClientResponse = CLIENT_RESPONSE_NONE;
   // mqttSetup();
 
   passthroughBufferClear();
@@ -715,10 +787,14 @@ void setup() {
 #ifdef DEBUG
             Serial.println(outputString);
 #endif
-            returnOK(outputString);
-            outputString = "";
+            curClientResponse = CLIENT_RESPONSE_OUTPUT_STRING;
+            clientWaitingForResponseFullfilled = true;
             break;
           default:
+            curClientResponse = CLIENT_RESPONSE_NONE;
+            clientWaitingForResponseFullfilled = true;
+            clientWaitingForResponse = false;
+            Serial.println("on data");
             break;
         }
       }
@@ -860,16 +936,16 @@ void setup() {
     digitalWrite(5, LOW);
   });
 
-  server.on("/cloudbrain/auth", HTTP_GET, []() {
-    digitalWrite(5, HIGH);
-    Serial.println("/cloudbrain/auth");
-    if (cloudbrainAuthGetVhost("auth.getcloudbrain.com", "demo@cloudbrain.com")) {
-      Serial.println("Able to do post request");
-    } else {
-      Serial.println("Not able to do the request");
-    }
-    digitalWrite(5, LOW);
-  });
+  // server.on("/cloudbrain/auth", HTTP_GET, []() {
+  //   digitalWrite(5, HIGH);
+  //   Serial.println("/cloudbrain/auth");
+  //   if (cloudbrainAuthGetVhost("auth.getcloudbrain.com", "demo@cloudbrain.com")) {
+  //     Serial.println("Able to do post request");
+  //   } else {
+  //     Serial.println("Not able to do the request");
+  //   }
+  //   digitalWrite(5, LOW);
+  // });
 
 
 
@@ -927,10 +1003,14 @@ void setup() {
     ntpLastTimeSeconds = millis();
   }
 
+  webSocket.begin();
+  webSocket.onEvent(webSocketEvent);
+
 }
 // unsigned long lastPrint = 0;
 void loop() {
   server.handleClient();
+  webSocket.loop();
 
   if (curOutputProtocol == OUTPUT_PROTOCOL_MQTT) {
     if (!clientMQTT.connected() && millis() > 5000 + lastMQTTConnectAttempt) {
@@ -981,6 +1061,20 @@ void loop() {
   // Only try to do OTA if 'prog' button is held down
   if (digitalRead(0) == 0) {
     ArduinoOTA.handle();
+  }
+
+  if (clientWaitingForResponseFullfilled) {
+    clientWaitingForResponseFullfilled = false;
+    switch (curClientResponse) {
+      case CLIENT_RESPONSE_OUTPUT_STRING:
+        returnOK(outputString);
+        outputString = "";
+        break;
+      case CLIENT_RESPONSE_NONE:
+      default:
+        returnOK();
+        break;
+    }
   }
 
   if (passthroughPosition > 0) {
@@ -1047,15 +1141,16 @@ void loop() {
       StaticJsonBuffer<500> jsonSampleBuffer;
 
       JsonObject& root = prepareSampleJSON(jsonSampleBuffer, packetsToSend);
-      root.prettyPrintTo(jsonStr);
 
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         // root.printTo(Serial);
         // root.printTo(clientTCP);
-        // root.printTo(clientTCP);
-        clientTCP.write(jsonStr.c_str(), jsonStr.length());
+        root.printTo(clientTCP);
+        // clientTCP.write(jsonStr.c_str(), jsonStr.length());
         // jsonStr = "";
       } else {
+        root.prettyPrintTo(jsonStr);
+
         clientMQTT.publish("amq.topic", jsonStr.c_str());
         jsonStr = "";
       }
