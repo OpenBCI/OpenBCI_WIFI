@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Socket.io Client</title>
+  <base href="/">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/socket.io-client/1.3.2/socket.io.js" />
+  <script>
+    var socket = io('http://192.168.0.11:80'); // ip of wifi shield and port of socket
+    socket.on('data', function (data) {
+      console.log(data);
+    });
+  </script>
+</head>
+<body>
+  Check the console
+</body>
+</html>

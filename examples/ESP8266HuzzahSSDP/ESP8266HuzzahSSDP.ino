@@ -30,6 +30,8 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <WebSocketsServer.h>
+#include <Hash.h>
 
 // ENUMS
 
@@ -46,7 +48,8 @@ typedef enum OUTPUT_MODE {
 typedef enum OUTPUT_PROTOCOL {
   OUTPUT_PROTOCOL_NONE,
   OUTPUT_PROTOCOL_TCP,
-  OUTPUT_PROTOCOL_MQTT
+  OUTPUT_PROTOCOL_MQTT,
+  OUTPUT_PROTOCOL_WEB_SOCKETS
 };
 
 typedef enum CYTON_GAIN {
@@ -612,11 +615,9 @@ void handleSensorCommand() {
   // SPISlave.setData(ip.toString().c_str());
 }
 
-///
-/////
-/////
-/////
-/////
+//////////////////////////////////////////////
+// WebSockets ////////////////////////////////
+//////////////////////////////////////////////
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
@@ -644,22 +645,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 		case WStype_BIN:
 			USE_SERIAL.printf("[%u] get binary length: %u\n", num, length);
 			hexdump(payload, length);
-			break;
-
-		// Fragmentation / continuation opcode handling
-		// case WStype_FRAGMENT_BIN_START:
-		case WStype_FRAGMENT_TEXT_START:
-			fragmentBuffer = (char*)payload;
-			USE_SERIAL.printf("[%u] get start start of Textfragment: %s\n", num, payload);
-			break;
-		case WStype_FRAGMENT:
-			fragmentBuffer += (char*)payload;
-			USE_SERIAL.printf("[%u] get Textfragment : %s\n", num, payload);
-			break;
-		case WStype_FRAGMENT_FIN:
-			fragmentBuffer += (char*)payload;
-			USE_SERIAL.printf("[%u] get end of Textfragment: %s\n", num, payload);
-			USE_SERIAL.printf("[%u] full frame: %s\n", num, fragmentBuffer.c_str());
 			break;
 	}
 
@@ -709,7 +694,7 @@ void setup() {
 
   pinMode(5, OUTPUT);
   pinMode(0, OUTPUT);
-
+  digitalWrite(0, LOW);
 
 #ifdef DEBUG
   Serial.begin(115200);
@@ -849,6 +834,8 @@ void setup() {
   Serial.println("SPI Slave ready");
 #endif
 
+  ArduinoOTA.setHostname(getName().c_str());
+
 #ifdef DEBUG
   ArduinoOTA.onStart([]() {
     String type;
@@ -984,7 +971,20 @@ void setup() {
     Serial.print("Your ESP is called "); Serial.println(getName());
 #endif
   }
+
+  server.onNotFound([](){
+    server.send(404, "text/plain", "FileNotFound");
+  });
   // server.onNotFound(handleNotFound);
+  //
+  //get heap status, analog input value and all GPIO statuses in one json call
+  server.on("/all", HTTP_GET, [](){
+    String json = "{";
+    json += "\"heap\":"+String(ESP.getFreeHeap());
+    json += "}";
+    server.send(200, "text/json", json);
+    json = String();
+  });
   server.begin();
   MDNS.addService("http", "tcp", 80);
 
@@ -1009,6 +1009,7 @@ void setup() {
 }
 // unsigned long lastPrint = 0;
 void loop() {
+  ArduinoOTA.handle();
   server.handleClient();
   webSocket.loop();
 
