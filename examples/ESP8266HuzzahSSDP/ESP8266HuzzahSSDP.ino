@@ -311,11 +311,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-void mqttSetup() {
-  clientMQTT.setServer(serverCloudbrain, 1883);
-  clientMQTT.setCallback(callback);
-}
-
 void reconnect() {
   // Loop until we're reconnected
   while (!clientMQTT.connected()) {
@@ -536,6 +531,39 @@ boolean setupSocketWithClient() {
 }
 
 /**
+ * Function called on route `/mqtt/cloudbrain`
+ */
+boolean setupCloudbrainMQTT() {
+  // Parse args
+  if(server.args() == 0) return returnFail(501, "No body in POST request"); // no body
+  size_t argBufferSize = JSON_OBJECT_SIZE(3) + 170;
+  DynamicJsonBuffer jsonBuffer(argBufferSize);
+  JsonObject& root = jsonBuffer.parseObject(server.arg(0));
+  if (!root.containsKey("username")) return returnFail(502, "No username in body");
+  if (!root.containsKey("password")) return returnFail(503, "No password in body");
+  if (!root.containsKey("vhost")) return returnFail(504, "No vhost in body");
+
+  const char* username = root["username"]; // "alongname.alonglastname@getcloudbrain.com"
+  const char* password = root["password"]; // "that time when i had a big password"
+  const char* vhost = root["vhost"]; // "/the quick brown fox jumped over the lazy dog"
+
+#ifdef DEBUG
+  Serial.print("Got username: "); Serial.println(username);
+  Serial.print("Got password: "); Serial.println(password);
+  Serial.print("Got vhost: "); Serial.println(vhost);
+
+  Serial.println("About to try and connect to cloudbrain MQTT server");
+#endif
+
+  clientMQTT.setServer(serverCloudbrain, 1883);
+  clientMQTT.setCallback(callback);
+
+#ifdef DEBUG
+  Serial.println("Connected to MQTT server");
+#endif
+}
+
+/**
  * Used to prepare a response in JSON
  */
 JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
@@ -683,7 +711,6 @@ void initializeVariables() {
   // curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
   curOutputProtocol = OUTPUT_PROTOCOL_TCP;
   curClientResponse = CLIENT_RESPONSE_NONE;
-  // mqttSetup();
 
   passthroughBufferClear();
   gainReset();
@@ -911,11 +938,8 @@ void setup() {
     curOutputProtocol = OUTPUT_PROTOCOL_TCP;
     returnOK();
   });
-  server.on("/output/protocol/mqtt", HTTP_GET, [](){
-    curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
-    mqttSetup();
-    returnOK();
-  });
+
+  server.on("/mqtt/cloudbrain", HTTP_POST, setupCloudbrainMQTT);
 
   server.on("/version", HTTP_GET, [](){
     digitalWrite(5, HIGH);
