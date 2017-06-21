@@ -74,6 +74,9 @@ CLIENT_RESPONSE curClientResponse;
 
 const char *serverCloudbrain;
 const char *serverCloudbrainAuth;
+const char *cloudbrainUsername;
+const char *cloudbrainPassword;
+const char *cloudbrainVhost;
 
 ESP8266WebServer server(80);
 
@@ -531,26 +534,27 @@ boolean setupSocketWithClient() {
 }
 
 /**
- * Function called on route `/mqtt/cloudbrain`
+ * Function called on route `/mqtt/cloudbrain` with HTTP_POST with body
+ * {"username":"user_name", "password": "you_password", "vhost": "/the_long_vhost_from_auth.getcloudbrain.com"}
  */
 boolean setupCloudbrainMQTT() {
   // Parse args
   if(server.args() == 0) return returnFail(501, "No body in POST request"); // no body
-  size_t argBufferSize = JSON_OBJECT_SIZE(3) + 170;
+  size_t argBufferSize = JSON_OBJECT_SIZE(3) + 190;
   DynamicJsonBuffer jsonBuffer(argBufferSize);
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
   if (!root.containsKey("username")) return returnFail(502, "No username in body");
   if (!root.containsKey("password")) return returnFail(503, "No password in body");
   if (!root.containsKey("vhost")) return returnFail(504, "No vhost in body");
 
-  const char* username = root["username"]; // "alongname.alonglastname@getcloudbrain.com"
-  const char* password = root["password"]; // "that time when i had a big password"
-  const char* vhost = root["vhost"]; // "/the quick brown fox jumped over the lazy dog"
+  cloudbrainUsername = root["username"]; // "alongname.alonglastname@getcloudbrain.com"
+  cloudbrainPassword = root["password"]; // "that time when i had a big password"
+  cloudbrainVhost = root["vhost"]; // "/the quick brown fox jumped over the lazy dog"
 
 #ifdef DEBUG
-  Serial.print("Got username: "); Serial.println(username);
-  Serial.print("Got password: "); Serial.println(password);
-  Serial.print("Got vhost: "); Serial.println(vhost);
+  Serial.print("Got username: "); Serial.println(cloudbrainUsername);
+  Serial.print("Got password: "); Serial.println(cloudbrainPassword);
+  Serial.print("Got vhost: "); Serial.println(cloudbrainVhost);
 
   Serial.println("About to try and connect to cloudbrain MQTT server");
 #endif
@@ -558,9 +562,28 @@ boolean setupCloudbrainMQTT() {
   clientMQTT.setServer(serverCloudbrain, 1883);
   clientMQTT.setCallback(callback);
 
+  if (clientMQTT.connect(getName().c_str(), cloudbrainUsername, cloudbrainPassword)) {
+#ifdef DEBUG
+    Serial.println("connected");
+#endif
+    // Once connected, publish an announcement...
+    clientMQTT.publish("amq.topic", "hello world");
+    // ... and resubscribe
+    clientMQTT.subscribe("inTopic");
+  } else {
+#ifdef DEBUG
+    Serial.print("failed, rc=");
+    Serial.print(clientMQTT.state());
+    Serial.println(" try again in 5 seconds");
+#endif
+    // Wait 5 seconds before retrying
+    lastMQTTConnectAttempt = millis();
+  }
+
 #ifdef DEBUG
   Serial.println("Connected to MQTT server");
 #endif
+
 }
 
 /**
@@ -1038,11 +1061,11 @@ void loop() {
   webSocket.loop();
 
   if (curOutputProtocol == OUTPUT_PROTOCOL_MQTT) {
-    if (!clientMQTT.connected() && millis() > 5000 + lastMQTTConnectAttempt) {
+    if (clientMQTT.connected()) {
+      clientMQTT.loop();
+    } else if (millis() > 5000 + lastMQTTConnectAttempt) {
       reconnect();
     }
-
-    clientMQTT.loop();
   }
 
   if (syncingNtp) {
