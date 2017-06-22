@@ -184,14 +184,22 @@ boolean ntpActive() {
 
 /**
  * Get ntp time in microseconds
- * @type {[type]}
+ * @return [long] - The time in micro second
  */
-double ntpGetTime() {
-  double tim = time(nullptr);
+long ntpGetTime() {
+  long tim = time(nullptr);
   tim *= 1000000;
-  unsigned long microTime = micros();
-  tim += microTime%1000000;
+  if (ntpOffsetSet) {
+
+  } else {
+    unsigned long microTime = micros();
+    tim += microTime%1000000;
+  }
   return tim;
+}
+
+long getTime() {
+  return (ntpActive() ? ntpGetTime() : micros()) * 1000;
 }
 
 /**
@@ -611,20 +619,30 @@ JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
 }
 
 /**
- * Convert sample to JSON, convert to string, return string
+ * Used to prepare a response in JSON
  */
-String convertSampleToJSON(uint8_t *in, uint8_t nchan) {
-  StaticJsonBuffer
+JsonObject& intializeJSONChunk(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
   JsonObject& root = jsonBuffer.createObject();
   JsonArray& chunk = root.createNestedArray("chunk");
+  return root;
+}
+
+/**
+ * Convert sample to JSON, convert to string, return string
+ */
+String convertSampleToJSON(JsonObject& chunkObj, uint8_t *in, uint8_t nchan) {
+  // Get the chunk array
+  JsonArray& chunk = chunkObj["chunk"];
+
+  JsonObject& sample = chunk.createNestedObject();
+  sample["timestamp"] = ntpActive() ? ntpGetTime() : micros();
+  JsonArray& data = sample.createNestedArray("data");
+  for (uint8_t j = 0; i < numChannels; i++) {
+    data.add(channelData[i][j]);
+  }
+
   for (uint8_t i = 0; i < packetsToSend; i++) {
-    JsonObject& sample = chunk.createNestedObject();
-    double curTime = ntpActive() ? ntpGetTime() : micros();
-    sample[]"timestamp"] = curTime;
-    JsonArray& data = sample.createNestedArray("data");
-    for (uint8_t j = 0; i < numChannels; i++) {
-      data.add(channelData[i][j]);
-    }
+
   }
   return root;
 }
@@ -1115,6 +1133,7 @@ void loop() {
     } else if (ntpLastTimeSeconds < curTime) {
       ntpOffset = micros();
       syncingNtp = false;
+      
 #ifdef DEBUG
       Serial.print("Time set: "); Serial.println(ntpOffset);
 #endif
