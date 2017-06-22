@@ -1,5 +1,6 @@
 #define ADS1299_VREF 4.5
-#define ADC_24BIT_RES 8388607.0
+#define MCP3912_VREF 1.2
+#define ADC_24BIT_RES_NANO_VOLT 8388607000000000.0
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
 #define DEBUG 1
@@ -13,10 +14,18 @@
 #define WIFI_SPI_MSG_MULTI 0x02
 #define WIFI_SPI_MSG_GAINS 0x03
 #define MAX_CHANNELS 16
+#define MAX_CHANNELS_PER_PACKET 8
 #define NUM_CHANNELS_CYTON 8
 #define NUM_CHANNELS_CYTON_DAISY 16
 #define NUM_CHANNELS_GANGLION 4
-#define ARDUINOJSON_USE_DOUBLE 1 // we need to store 64-bit doubles
+// Arduino JSON needs bytes for duplication
+// to recalculate visit:
+//   https://bblanchon.github.io/ArduinoJson/assistant/index.html
+#define ARDUINOJSON_ADDITIONAL_BYTES_4_CHAN 115
+#define ARDUINOJSON_ADDITIONAL_BYTES_8_CHAN 195
+#define ARDUINOJSON_ADDITIONAL_BYTES_16_CHAN 355
+#define ARDUINOJSON_ADDITIONAL_BYTES_24_CHAN 515
+#define ARDUINOJSON_ADDITIONAL_BYTES_32_CHAN 675
 
 #include <time.h>
 #include <ESP8266WiFi.h>
@@ -80,8 +89,8 @@ const char *cloudbrainVhost;
 
 ESP8266WebServer server(80);
 
-float channelData[MAX_PACKETS_PER_SEND_JSON][MAX_CHANNELS];
-float scaleFactors[MAX_CHANNELS];
+long channelData[MAX_PACKETS_PER_SEND_JSON][MAX_CHANNELS];
+double scaleFactors[MAX_CHANNELS];
 
 int counter;
 int latency;
@@ -92,7 +101,6 @@ OUTPUT_PROTOCOL curOutputProtocol;
 String jsonStr;
 String outputString;
 
-uint8_t gains[MAX_CHANNELS];
 uint8_t numChannels;
 uint8_t ntpTimeSyncAttempts;
 uint8_t outputBuf[MAX_PACKETS_PER_SEND_TCP * BYTES_PER_OBCI_PACKET];
@@ -205,43 +213,38 @@ void ntpStart() {
 void channelDataReset() {
   for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_JSON; i++) {
     for (uint8_t j = 0; i < MAX_CHANNELS; i++) {
-      channelData[i][j] = 0.0;
+      channelData[i][j] = 0;
     }
   }
 }
 
 /**
  * Return true if the channel data array is full
+ * @param arr [uint8_t *] - 32 byte array from Cyton or Ganglion
+ * @param cdArr [long *] - Long array of channel data in nano volts
  */
-boolean channelDataCompute(uint8_t *arr, float *farr) {
+boolean channelDataCompute(uint8_t *arr, long *cdArr) {
   const uint8_t byteOffset = 2;
-  if (numChannels == NUM_CHANNELS_CYTON_DAISY) {
-    // do something awesome
-    return true;
-  } else {
-    for (uint8_t i = 0; i < numChannels; i++) {
-      // Zero out the new value
-      uint32_t raw = 0;
-      // Pull out 24bit number
-      raw = arr[i*3 + byteOffset] << 16 | arr[i*3 + 1 + byteOffset] << 8 | arr[i*3 + 2 + byteOffset];
-      // carry through the sign
-      if(bitRead(raw,23) == 1){
-        raw |= 0xFF000000;
-      } else{
-        raw &= 0x00FFFFFF;
-      }
-
-      farr[i] = scaleFactors[i] * ((float)raw);
-
-      // Serial.printf("%d: %2.10f\n",i+1, farr[i]);
+  for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
+    // Zero out the new value
+    uint32_t raw = 0;
+    // Pull out 24bit number
+    raw = arr[i*3 + byteOffset] << 16 | arr[i*3 + 1 + byteOffset] << 8 | arr[i*3 + 2 + byteOffset];
+    // carry through the sign
+    if(bitRead(raw,23) == 1){
+      raw |= 0xFF000000;
+    } else{
+      raw &= 0x00FFFFFF;
     }
-    return true;
+
+    farr[i] = (long)(scaleFactors[i] * ((double)raw));
+
+    // Serial.printf("%d: %2.10f\n",i+1, farr[i]);
   }
 }
 
 void gainReset() {
   for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
-    gains[i] = 0.0;
     scaleFactors[i] = 0.0;
   }
 }
@@ -270,32 +273,35 @@ float gainGanglion() {
   return 51.0;
 }
 
+/**
+ * Used to set the gain for the JSON conversion
+ * @param `raw` [uint8_t *] - The array from Pic or Cyton descirbing channels
+ *   and gains.
+ */
 void gainSet(uint8_t *raw) {
-  uint8_t byteCounter = 1;
+  uint8_t byteCounter = 2;
   numChannels = raw[byteCounter++];
 
   if (numChannels < NUM_CHANNELS_GANGLION || numChannels > MAX_CHANNELS) {
     return;
   }
-
   for (uint8_t i = 0; i < numChannels; i++) {
     if (numChannels == NUM_CHANNELS_GANGLION) {
       // do gang related stuffs
-      gains[i] = gainGanglion();
+      scaleFactors[i] = MCP3912_VREF / gainGanglion() / ADC_24BIT_RES_NANO_VOLT;
     } else {
-      gains[i] = gainCyton(raw[byteCounter++]);
-      scaleFactors[i] = ADS1299_VREF / gains[i] / ADC_24BIT_RES;
-// #ifdef DEBUG
-//       Serial.printf("Channel: %d\n\tgain: %d\n\tscale factor: %.10f\n", i+1, gains[i], scaleFactors[i]);
-// #endif
+      scaleFactors[i] = ADS1299_VREF / gainCyton(raw[byteCounter++]) / ADC_24BIT_RES_NANO_VOLT;
     }
+#ifdef DEBUG
+    Serial.printf("Channel: %d\n\tgain: %d\n\tscale factor: %.10f\n", i+1, scaleFactors[i]);
+#endif
   }
 }
 ///////////////////////////////////////////////////
 // MQTT
 ///////////////////////////////////////////////////
 
-void callback(char* topic, byte* payload, unsigned int length) {
+void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -560,7 +566,7 @@ boolean setupCloudbrainMQTT() {
 #endif
 
   clientMQTT.setServer(serverCloudbrain, 1883);
-  clientMQTT.setCallback(callback);
+  clientMQTT.setCallback(callbackMQTT);
 
   if (clientMQTT.connect(getName().c_str(), cloudbrainUsername, cloudbrainPassword)) {
 #ifdef DEBUG
@@ -596,6 +602,25 @@ JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
     JsonObject& sample = chunk.createNestedObject();
     double curTime = ntpActive() ? ntpGetTime() : micros();
     sample.set<double>("timestamp", curTime);
+    JsonArray& data = sample.createNestedArray("data");
+    for (uint8_t j = 0; i < numChannels; i++) {
+      data.add(channelData[i][j]);
+    }
+  }
+  return root;
+}
+
+/**
+ * Convert sample to JSON, convert to string, return string
+ */
+String convertSampleToJSON(uint8_t *in, uint8_t nchan) {
+  StaticJsonBuffer
+  JsonObject& root = jsonBuffer.createObject();
+  JsonArray& chunk = root.createNestedArray("chunk");
+  for (uint8_t i = 0; i < packetsToSend; i++) {
+    JsonObject& sample = chunk.createNestedObject();
+    double curTime = ntpActive() ? ntpGetTime() : micros();
+    sample[]"timestamp"] = curTime;
     JsonArray& data = sample.createNestedArray("data");
     for (uint8_t j = 0; i < numChannels; i++) {
       data.add(channelData[i][j]);
@@ -792,17 +817,27 @@ void setup() {
   // It's up to the user to implement protocol for handling data length
   SPISlave.onData([](uint8_t * data, size_t len) {
     if (isAStreamByte(data[0])) {
-      if (head >= NUM_PACKETS_IN_RING_BUFFER) {
-        head = 0;
+      if (curOutputMode == OUTPUT_MODE_RAW) {
+        if (head >= NUM_PACKETS_IN_RING_BUFFER) {
+          head = 0;
+        }
+        uint8_t stopByte = data[0];
+        ringBuf[head][0] = 0xA0;
+        // Serial.printf("-%d\n",ringBuf[head][1]);
+        ringBuf[head][len] = stopByte;
+        for (int i = 1; i < len; i++) {
+          ringBuf[head][i] = data[i];
+        }
+        head++;
+      } else {
+        if (numChannels > NUM_CHANNELS_CYTON) {
+          // DO DAISY
+        } else {
+          // Do cyton or Ganglion
+          String sample = convertSampleToJSON()
+        }
       }
-      uint8_t stopByte = data[0];
-      ringBuf[head][0] = 0xA0;
-      // Serial.printf("-%d\n",ringBuf[head][1]);
-      ringBuf[head][len] = stopByte;
-      for (int i = 1; i < len; i++) {
-        ringBuf[head][i] = data[i];
-      }
-      head++;
+
     } else {
       // save the client because we will need to send them some ish
       if (clientWaitingForResponse) {
@@ -833,15 +868,19 @@ void setup() {
             break;
         }
       }
-      switch (data[0]) {
-        case WIFI_SPI_MSG_GAINS:
-#ifdef DEBUG
-          Serial.println("gainSet");
-#endif
-          gainSet(data);
-          break;
-        default:
-          break;
+      if (data[0] > 0) {
+        if (data[0] == data[1]) {
+          switch (data[0]) {
+            case WIFI_SPI_MSG_GAINS:
+    #ifdef DEBUG
+              Serial.println("gainSet");
+    #endif
+              gainSet(data);
+              break;
+            default:
+              break;
+          }
+        }
       }
     }
   });
@@ -1032,6 +1071,7 @@ void setup() {
     server.send(200, "text/json", json);
     json = String();
   });
+
   server.begin();
   MDNS.addService("http", "tcp", 80);
 
