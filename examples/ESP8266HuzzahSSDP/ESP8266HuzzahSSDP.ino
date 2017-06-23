@@ -83,9 +83,9 @@ CLIENT_RESPONSE curClientResponse;
 
 const char *serverCloudbrain;
 const char *serverCloudbrainAuth;
-const char *cloudbrainUsername;
-const char *cloudbrainPassword;
-const char *cloudbrainVhost;
+const char *mqttUsername;
+const char *mqttPassword;
+const char *mqttBrokerAddress;
 
 ESP8266WebServer server(80);
 
@@ -328,27 +328,6 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-void reconnect() {
-  // Loop until we're reconnected
-  while (!clientMQTT.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    if (clientMQTT.connect(getName().c_str(), "cloudbrain", "cloudbrain")) {
-      Serial.println("connected");
-      // Once connected, publish an announcement...
-      clientMQTT.publish("amq.topic", "hello world");
-      // ... and resubscribe
-      clientMQTT.subscribe("inTopic");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(clientMQTT.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      lastMQTTConnectAttempt = millis();
-    }
-  }
-}
-
 void passthroughBufferClear() {
   for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
     passthroughBuffer[i] = 0;
@@ -371,11 +350,14 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 // MQTT
 ///////////////////////////////////////////////////
 
+void returnOK(int code, String s) {
+  digitalWrite(5, HIGH);
+  server.send(code, "text/plain", s);
+  digitalWrite(5, LOW);
+}
 
 void returnOK(String s) {
-  digitalWrite(5, HIGH);
-  server.send(200, "text/plain", s);
-  digitalWrite(5, LOW);
+  returnOK(200, s);
 }
 
 void returnOK(void) {
@@ -548,56 +530,55 @@ boolean setupSocketWithClient() {
 }
 
 /**
- * Function called on route `/mqtt/cloudbrain` with HTTP_POST with body
- * {"username":"user_name", "password": "you_password", "vhost": "/the_long_vhost_from_auth.getcloudbrain.com"}
+ * Function called on route `/mqtt` with HTTP_POST with body
+ * {"username":"user_name", "password": "you_password", "broker_address": "/your.broker.com"}
  */
-boolean setupCloudbrainMQTT() {
+void mqttSetup() {
   // Parse args
-  if(server.args() == 0) return returnFail(501, "No body in POST request"); // no body
-  size_t argBufferSize = JSON_OBJECT_SIZE(3) + 190;
+  if(server.args() == 0) return returnFail(501, "Error: No body in POST request"); // no body
+  size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
   DynamicJsonBuffer jsonBuffer(argBufferSize);
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
-  if (!root.containsKey("username")) return returnFail(502, "No username in body");
-  if (!root.containsKey("password")) return returnFail(503, "No password in body");
-  if (!root.containsKey("vhost")) return returnFail(504, "No vhost in body");
+  if (!root.containsKey("username")) return returnFail(502, "Error: No 'username' in body");
+  if (!root.containsKey("password")) return returnFail(503, "Error: No 'password' in body");
+  if (!root.containsKey("broker_address")) return returnFail(504, "Error: No 'broker_address' in body");
 
-  cloudbrainUsername = root["username"]; // "alongname.alonglastname@getcloudbrain.com"
-  cloudbrainPassword = root["password"]; // "that time when i had a big password"
-  cloudbrainVhost = root["vhost"]; // "/the quick brown fox jumped over the lazy dog"
+  mqttUsername = root["username"]; // "alongname.alonglastname@getcloudbrain.com"
+  mqttPassword = root["password"]; // "that time when i had a big password"
+  mqttBrokerAddress = root["broker_address"]; // "/the quick brown fox jumped over the lazy dog"
 
 #ifdef DEBUG
-  Serial.print("Got username: "); Serial.println(cloudbrainUsername);
-  Serial.print("Got password: "); Serial.println(cloudbrainPassword);
-  Serial.print("Got vhost: "); Serial.println(cloudbrainVhost);
+  Serial.print("Got username: "); Serial.println(mqttUsername);
+  Serial.print("Got password: "); Serial.println(mqttPassword);
+  Serial.print("Got broker_address: "); Serial.println(mqttBrokerAddress);
 
   Serial.println("About to try and connect to cloudbrain MQTT server");
 #endif
 
-  clientMQTT.setServer(serverCloudbrain, 1883);
-  clientMQTT.setCallback(callbackMQTT);
+  clientMQTT.setServer(mqttBrokerAddress, 1883);
 
-  if (clientMQTT.connect(getName().c_str(), cloudbrainUsername, cloudbrainPassword)) {
+  if (mqttConnect()) {
+    returnOK("MQTT connected!");
+  } else {
+    returnFail("Unable to connect, please check your username/password/broker_address.");
+  }
+
+  curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
+}
+
+boolean mqttConnect() {
+  if (clientMQTT.connect(getName().c_str(), mqttUsername, mqttPassword)) {
 #ifdef DEBUG
     Serial.println("connected");
 #endif
     // Once connected, publish an announcement...
-    clientMQTT.publish("amq.topic", "hello world");
-    // ... and resubscribe
-    clientMQTT.subscribe("inTopic");
+    clientMQTT.publish("openbci", "Will you Push The World?");
+    return true;
   } else {
-#ifdef DEBUG
-    Serial.print("failed, rc=");
-    Serial.print(clientMQTT.state());
-    Serial.println(" try again in 5 seconds");
-#endif
     // Wait 5 seconds before retrying
     lastMQTTConnectAttempt = millis();
+    return false;
   }
-
-#ifdef DEBUG
-  Serial.println("Connected to MQTT server");
-#endif
-
 }
 
 /**
@@ -769,8 +750,6 @@ void initializeVariables() {
   timeOfWifiTXBufferLoaded = 0;
 
   outputString = "";
-  serverCloudbrain = "mock.getcloudbrain.com";
-  serverCloudbrainAuth = "http://auth.getcloudbrain.com";
 
   // curOutputMode = OUTPUT_MODE_RAW;
   curOutputMode = OUTPUT_MODE_JSON;
@@ -1019,7 +998,16 @@ void setup() {
     returnOK();
   });
 
-  server.on("/mqtt/cloudbrain", HTTP_POST, setupCloudbrainMQTT);
+  server.on("/mqtt", HTTP_GET, []() {
+    if (clientMQTT.connected()) {
+      String str = "Client connected to " + mqttBrokerAddress;
+      returnOK(200, str);
+    } else {
+      returnOK(201, "No client connected");
+    }
+  });
+
+  server.on("/mqtt", HTTP_POST, mqttSetup);
 
   server.on("/version", HTTP_GET, [](){
     digitalWrite(5, HIGH);
@@ -1027,23 +1015,18 @@ void setup() {
     digitalWrite(5, LOW);
   });
 
-  // server.on("/cloudbrain/auth", HTTP_GET, []() {
-  //   digitalWrite(5, HIGH);
-  //   Serial.println("/cloudbrain/auth");
-  //   if (cloudbrainAuthGetVhost("auth.getcloudbrain.com", "demo@cloudbrain.com")) {
-  //     Serial.println("Able to do post request");
-  //   } else {
-  //     Serial.println("Not able to do the request");
-  //   }
-  //   digitalWrite(5, LOW);
-  // });
-
-
-
-  // server.on("/data", HTTP_GET, getData);
-  server.on("/websocket", HTTP_POST, [](){
+  server.on("/tcp", HTTP_GET, []() {
+    if (clientTCP.connected()) {
+      String str = "Client connected to " + mqttBrokerAddress;
+      returnOK(200, str);
+    } else {
+      returnOK(201, "No client connected");
+    }
+  })
+  server.on("/tcp", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail(500, "Error: Failed to connect to server");
   });
+
   server.on("/command", HTTP_POST, [](){
     switch(passThroughCommand()) {
       case 0: // Command sent to board
@@ -1060,12 +1043,13 @@ void setup() {
         break;
     }
   });
+  server.on("/latency", HTTP_GET, [](){
+    returnOK(String(latency).c_str());
+  });
   server.on("/latency", HTTP_POST, [](){
     setLatency() ? returnOK() : returnFail(500, "Error: no \'latency\' in json arg");
   });
-  server.on("/latency", HTTP_GET, [](){
-    server.send(200, "text/plain", String(latency).c_str());
-  });
+
   if (!MDNS.begin(getName().c_str())) {
 #ifdef DEBUG
     Serial.println("Error setting up MDNS responder!");
@@ -1111,6 +1095,8 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
+  clientMQTT.setCallback(callbackMQTT);
+
 }
 // unsigned long lastPrint = 0;
 void loop() {
@@ -1122,7 +1108,7 @@ void loop() {
     if (clientMQTT.connected()) {
       clientMQTT.loop();
     } else if (millis() > 5000 + lastMQTTConnectAttempt) {
-      reconnect();
+      mqttConnect();
     }
   }
 
@@ -1133,7 +1119,7 @@ void loop() {
     } else if (ntpLastTimeSeconds < curTime) {
       ntpOffset = micros();
       syncingNtp = false;
-      
+
 #ifdef DEBUG
       Serial.print("Time set: "); Serial.println(ntpOffset);
 #endif
@@ -1258,7 +1244,7 @@ void loop() {
       } else {
         root.prettyPrintTo(jsonStr);
 
-        clientMQTT.publish("amq.topic", jsonStr.c_str());
+        clientMQTT.publish("openbci", jsonStr.c_str());
         jsonStr = "";
       }
 
@@ -1266,7 +1252,7 @@ void loop() {
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
       } else {
-        clientMQTT.publish("amq.topic",(const char*) outputBuf);
+        clientMQTT.publish("openbci",(const char*) outputBuf);
 
       }
     }
