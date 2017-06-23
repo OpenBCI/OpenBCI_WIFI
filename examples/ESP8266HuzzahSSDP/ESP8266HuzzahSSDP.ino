@@ -76,6 +76,7 @@ boolean clientWaitingForResponseFullfilled;
 boolean ntpOffsetSet;
 boolean syncingNtp;
 boolean waitingOnNTP;
+boolean waitingDaisyPacket;
 boolean spiTXBufferLoaded;
 boolean underSelfTest;
 
@@ -108,6 +109,7 @@ uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 uint8_t passthroughPosition;
 uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
 uint8_t sampleNumber;
+uint8_t samplesLoaded;
 
 unsigned long lastSendToClient;
 unsigned long lastHeadMove;
@@ -245,7 +247,7 @@ boolean channelDataCompute(uint8_t *arr, long *cdArr) {
       raw &= 0x00FFFFFF;
     }
 
-    farr[i] = (long)(scaleFactors[i] * ((double)raw));
+    cdArr[i] = (long)(scaleFactors[i] * ((double)raw));
 
     // Serial.printf("%d: %2.10f\n",i+1, farr[i]);
   }
@@ -529,6 +531,21 @@ boolean setupSocketWithClient() {
   }
 }
 
+boolean mqttConnect() {
+  if (clientMQTT.connect(getName().c_str(), mqttUsername, mqttPassword)) {
+#ifdef DEBUG
+    Serial.println("connected");
+#endif
+    // Once connected, publish an announcement...
+    clientMQTT.publish("openbci", "Will you Push The World?");
+    return true;
+  } else {
+    // Wait 5 seconds before retrying
+    lastMQTTConnectAttempt = millis();
+    return false;
+  }
+}
+
 /**
  * Function called on route `/mqtt` with HTTP_POST with body
  * {"username":"user_name", "password": "you_password", "broker_address": "/your.broker.com"}
@@ -560,25 +577,10 @@ void mqttSetup() {
   if (mqttConnect()) {
     returnOK("MQTT connected!");
   } else {
-    returnFail("Unable to connect, please check your username/password/broker_address.");
+    returnFail(505, "Unable to connect, please check your username/password/broker_address.");
   }
 
   curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
-}
-
-boolean mqttConnect() {
-  if (clientMQTT.connect(getName().c_str(), mqttUsername, mqttPassword)) {
-#ifdef DEBUG
-    Serial.println("connected");
-#endif
-    // Once connected, publish an announcement...
-    clientMQTT.publish("openbci", "Will you Push The World?");
-    return true;
-  } else {
-    // Wait 5 seconds before retrying
-    lastMQTTConnectAttempt = millis();
-    return false;
-  }
 }
 
 /**
@@ -611,21 +613,16 @@ JsonObject& intializeJSONChunk(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
 /**
  * Convert sample to JSON, convert to string, return string
  */
-String convertSampleToJSON(JsonObject& chunkObj, uint8_t *in, uint8_t nchan) {
+void convertSampleToJSON(JsonObject& chunkObj, uint8_t *in, uint8_t nchan) {
   // Get the chunk array
   JsonArray& chunk = chunkObj["chunk"];
 
   JsonObject& sample = chunk.createNestedObject();
   sample["timestamp"] = ntpActive() ? ntpGetTime() : micros();
   JsonArray& data = sample.createNestedArray("data");
-  for (uint8_t j = 0; i < numChannels; i++) {
+  for (uint8_t i = 0; i < numChannels; i++) {
     data.add(channelData[i][j]);
   }
-
-  for (uint8_t i = 0; i < packetsToSend; i++) {
-
-  }
-  return root;
 }
 
 // void handleNotFound(){
@@ -733,6 +730,7 @@ void initializeVariables() {
   syncingNtp = false;
   waitingOnNTP = false;
   ntpOffsetSet = false;
+  waitingDaisyPacket = false;
 
   counter = 0;
   head = 0;
@@ -748,6 +746,7 @@ void initializeVariables() {
   sampleNumber = 0;
   tail = 0;
   timeOfWifiTXBufferLoaded = 0;
+  samplesLoaded = 0;
 
   outputString = "";
 
@@ -1006,14 +1005,7 @@ void setup() {
       returnOK(201, "No client connected");
     }
   });
-
   server.on("/mqtt", HTTP_POST, mqttSetup);
-
-  server.on("/version", HTTP_GET, [](){
-    digitalWrite(5, HIGH);
-    server.send(200, "text/plain", "v0.1.0");
-    digitalWrite(5, LOW);
-  });
 
   server.on("/tcp", HTTP_GET, []() {
     if (clientTCP.connected()) {
@@ -1025,6 +1017,26 @@ void setup() {
   })
   server.on("/tcp", HTTP_POST, [](){
     setupSocketWithClient() ? returnOK() : returnFail(500, "Error: Failed to connect to server");
+  });
+
+  // These could be helpful...
+  server.on("/stream/start", HTTP_GET, []() {
+    passthroughBuffer[0] = 1;
+    passthroughBuffer[1] = 'b';
+    passthroughPosition = 2;
+    returnOK();
+  });
+  server.on("/stream/stop", HTTP_GET, []() {
+    passthroughBuffer[0] = 1;
+    passthroughBuffer[1] = 's';
+    passthroughPosition = 2;
+    returnOK();
+  });
+
+  server.on("/version", HTTP_GET, [](){
+    digitalWrite(5, HIGH);
+    server.send(200, "text/plain", "v0.1.0");
+    digitalWrite(5, LOW);
   });
 
   server.on("/command", HTTP_POST, [](){
