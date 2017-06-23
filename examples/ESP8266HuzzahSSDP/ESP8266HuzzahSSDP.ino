@@ -6,10 +6,11 @@
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 // #define NUM_PACKETS_IN_RING_BUFFER 45
-#define NUM_PACKETS_IN_RING_BUFFER 200
+#define NUM_PACKETS_IN_RING_BUFFER 100
+#define NUM_PACKETS_IN_RING_BUFFER_JSON 12
 #define MAX_PACKETS_PER_SEND_JSON 6
 // #define MAX_PACKETS_PER_SEND_TCP 20
-#define MAX_PACKETS_PER_SEND_TCP 150
+#define MAX_PACKETS_PER_SEND_TCP 50
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
 #define WIFI_SPI_MSG_GAINS 0x03
@@ -26,6 +27,7 @@
 #define ARDUINOJSON_ADDITIONAL_BYTES_16_CHAN 355
 #define ARDUINOJSON_ADDITIONAL_BYTES_24_CHAN 515
 #define ARDUINOJSON_ADDITIONAL_BYTES_32_CHAN 675
+#define MICROS_IN_SECONDS 1000000
 
 #include <time.h>
 #include <ESP8266WiFi.h>
@@ -43,7 +45,6 @@
 #include <Hash.h>
 
 // ENUMS
-
 typedef enum CLIENT_RESPONSE {
   CLIENT_RESPONSE_NONE,
   CLIENT_RESPONSE_OUTPUT_STRING
@@ -71,6 +72,12 @@ typedef enum CYTON_GAIN {
   CYTON_GAIN_24
 };
 
+// STRUCTS
+typedef struct {
+    long *        channelData;
+    unsigned long timestamp;
+} Sample;
+
 boolean clientWaitingForResponse;
 boolean clientWaitingForResponseFullfilled;
 boolean ntpOffsetSet;
@@ -90,7 +97,6 @@ const char *mqttBrokerAddress;
 
 ESP8266WebServer server(80);
 
-long channelData[MAX_PACKETS_PER_SEND_JSON][MAX_CHANNELS];
 double scaleFactors[MAX_CHANNELS];
 
 int counter;
@@ -98,6 +104,8 @@ int latency;
 
 OUTPUT_MODE curOutputMode;
 OUTPUT_PROTOCOL curOutputProtocol;
+
+Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
 
 String jsonStr;
 String outputString;
@@ -110,6 +118,7 @@ uint8_t passthroughPosition;
 uint8_t ringBuf[NUM_PACKETS_IN_RING_BUFFER][BYTES_PER_OBCI_PACKET];
 uint8_t sampleNumber;
 uint8_t samplesLoaded;
+uint8_t lastSampleNumber;
 
 unsigned long lastSendToClient;
 unsigned long lastHeadMove;
@@ -188,20 +197,19 @@ boolean ntpActive() {
  * Get ntp time in microseconds
  * @return [long] - The time in micro second
  */
-long ntpGetTime() {
-  long tim = time(nullptr);
-  tim *= 1000000;
-  if (ntpOffsetSet) {
-
-  } else {
-    unsigned long microTime = micros();
-    tim += microTime%1000000;
-  }
-  return tim;
+unsigned long ntpGetTime() {
+  return time(nullptr) * MICROS_IN_SECONDS;
 }
 
-long getTime() {
-  return (ntpActive() ? ntpGetTime() : micros()) * 1000;
+/**
+ * Safely get the time, defaults to micros() if ntp is not active.
+ */
+unsigned long getTime() {
+  if (ntpActive()) {
+    return ntpGetTime() + ((micros()%MICROS_IN_SECONDS) - (ntpOffset%MICROS_IN_SECONDS));
+  } else {
+    return micros();
+  }
 }
 
 /**
@@ -220,21 +228,16 @@ void ntpStart() {
 // DATA PROCESSING BEGIN
 ///////////////////////////////////////////
 
-void channelDataReset() {
-  for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_JSON; i++) {
-    for (uint8_t j = 0; i < MAX_CHANNELS; i++) {
-      channelData[i][j] = 0;
-    }
-  }
-}
-
 /**
  * Return true if the channel data array is full
  * @param arr [uint8_t *] - 32 byte array from Cyton or Ganglion
- * @param cdArr [long *] - Long array of channel data in nano volts
+ * @param sample [Sample *] - Sample struct to hold data before conversion to float
+ * @param packetOffset [uint8_t] - The offset to shift loading channel data into.
+ *   i.e. should be 1 on second packet for daisy
  */
-boolean channelDataCompute(uint8_t *arr, long *cdArr) {
+void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
   const uint8_t byteOffset = 2;
+  if (packetOffset == 0) sample->timestamp = getTime();
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
     // Zero out the new value
     uint32_t raw = 0;
@@ -247,7 +250,7 @@ boolean channelDataCompute(uint8_t *arr, long *cdArr) {
       raw &= 0x00FFFFFF;
     }
 
-    cdArr[i] = (long)(scaleFactors[i] * ((double)raw));
+    sample->channelData[i + packetOffset] = (long)(scaleFactors[i] * ((double)raw));
 
     // Serial.printf("%d: %2.10f\n",i+1, farr[i]);
   }
@@ -602,7 +605,7 @@ JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
 }
 
 /**
- * Used to prepare a response in JSON
+ * Used to prepare a response in JSON with chunk
  */
 JsonObject& intializeJSONChunk(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
   JsonObject& root = jsonBuffer.createObject();
@@ -736,6 +739,7 @@ void initializeVariables() {
   head = 0;
   lastHeadMove = 0;
   lastMQTTConnectAttempt = 0;
+  lastSampleNumber = 0;
   lastSendToClient = 0;
   lastTimeWasPolled = 0;
   latency = 10000;
@@ -826,11 +830,26 @@ void setup() {
         }
         head++;
       } else {
-        if (numChannels > NUM_CHANNELS_CYTON) {
+
+        if (numChannels > MAX_CHANNELS_PER_PACKET) {
           // DO DAISY
-        } else {
-          // Do cyton or Ganglion
-          String sample = convertSampleToJSON()
+          if (lastSampleNumber != data[1]) {
+            // this is first packet of new sample
+            if (head >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
+              head = 0;
+            }
+          } else {
+            // this is not first packet of new sample
+            channelDataCompute(data, sampleBuffer+head, MAX_CHANNELS_PER_PACKET);
+            head++;
+          }
+        } else { // Cyton or Ganglion
+          if (head >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
+            head = 0;
+          }
+          // Convert sample immidiate, store to buffer and get out!
+          channelDataCompute(data, sampleBuffer+head, 0);
+          head++;
         }
       }
 
