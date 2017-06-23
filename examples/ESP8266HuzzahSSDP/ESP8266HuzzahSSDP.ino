@@ -8,7 +8,6 @@
 // #define NUM_PACKETS_IN_RING_BUFFER 45
 #define NUM_PACKETS_IN_RING_BUFFER 100
 #define NUM_PACKETS_IN_RING_BUFFER_JSON 12
-#define MAX_PACKETS_PER_SEND_JSON 6
 // #define MAX_PACKETS_PER_SEND_TCP 20
 #define MAX_PACKETS_PER_SEND_TCP 50
 #define WIFI_SPI_MSG_LAST 0x01
@@ -106,6 +105,8 @@ OUTPUT_MODE curOutputMode;
 OUTPUT_PROTOCOL curOutputProtocol;
 
 Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
+
+size_t jsonBufferSize;
 
 String jsonStr;
 String outputString;
@@ -308,6 +309,15 @@ void gainSet(uint8_t *raw) {
 #ifdef DEBUG
     Serial.printf("Channel: %d\n\tgain: %d\n\tscale factor: %.10f\n", i+1, scaleFactors[i]);
 #endif
+  }
+
+  if (curOutputMode == OUTPUT_MODE_JSON) {
+    jsonBufferSize = 0; // Reset to 0
+    jsonBufferSize += JSON_OBJECT_SIZE(1); // For {"chunk":[...]}
+    jsonBufferSize += JSON_ARRAY_SIZE(sendJsonMaxPackets()); // For the array of samples
+    jsonBufferSize += sendJsonMaxPackets()*JSON_OBJECT_SIZE(2); // For each sample {"timestamp":0, "data":[...]}
+    jsonBufferSize += sendJsonMaxPackets()*JSON_ARRAY_SIZE(numChannels); // For data array for each sample
+    jsonBufferSize += sendJsonAdditionalBytes(); // The additional bytes needed for input duplication
   }
 }
 ///////////////////////////////////////////////////
@@ -605,9 +615,39 @@ JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
 }
 
 /**
+ * We want to max the size out to < 2000bytes per json chunk
+ */
+uint8_t sendJsonMaxPackets() {
+  switch (numChannels) {
+    case NUM_CHANNELS_GANGLION:
+      return 8; // Size of
+    case NUM_CHANNELS_CYTON_DAISY:
+      return 3;
+    case NUM_CHANNELS_CYTON:
+    default:
+      return 5;
+  }
+}
+
+/**
+ * The additional bytes needed for input duplication, follows max packets
+ */
+int sendJsonAdditionalBytes() {
+  switch (numChannels) {
+    case NUM_CHANNELS_GANGLION:
+      return 1014;
+    case NUM_CHANNELS_CYTON_DAISY:
+      return 1062;
+    case NUM_CHANNELS_CYTON:
+    default:
+      return 966;
+  }
+}
+
+/**
  * Used to prepare a response in JSON with chunk
  */
-JsonObject& intializeJSONChunk(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
+JsonObject& intializeJSONChunk(JsonBuffer& jsonBuffer) {
   JsonObject& root = jsonBuffer.createObject();
   JsonArray& chunk = root.createNestedArray("chunk");
   return root;
@@ -737,6 +777,7 @@ void initializeVariables() {
 
   counter = 0;
   head = 0;
+  jsonBufferSize = 0;
   lastHeadMove = 0;
   lastMQTTConnectAttempt = 0;
   lastSampleNumber = 0;
@@ -830,17 +871,19 @@ void setup() {
         }
         head++;
       } else {
-
         if (numChannels > MAX_CHANNELS_PER_PACKET) {
           // DO DAISY
           if (lastSampleNumber != data[1]) {
+            lastSampleNumber = data[1];
             // this is first packet of new sample
             if (head >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
               head = 0;
             }
+            // this is the first packet, no offset
+            channelDataCompute(data, sampleBuffer + head, 0);
           } else {
             // this is not first packet of new sample
-            channelDataCompute(data, sampleBuffer+head, MAX_CHANNELS_PER_PACKET);
+            channelDataCompute(data, sampleBuffer + head, MAX_CHANNELS_PER_PACKET);
             head++;
           }
         } else { // Cyton or Ganglion
@@ -1229,62 +1272,66 @@ void loop() {
   if((clientTCP.connected() || clientMQTT.connected()) && (micros() > (lastSendToClient + latency)) && head != tail) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cTCP: "); Serial.print(clientTCP.connected()); Serial.print(" cMQTT: "); Serial.println(clientMQTT.connected());
 
-    int packetsToSend = head - tail;
-    if (packetsToSend < 0) {
-      packetsToSend = NUM_PACKETS_IN_RING_BUFFER + packetsToSend; // for wrap around
-    }
+    digitalWrite(5, HIGH);
 
-    if (curOutputMode == OUTPUT_MODE_JSON) {
-      if (packetsToSend > MAX_PACKETS_PER_SEND_JSON) {
-        packetsToSend = MAX_PACKETS_PER_SEND_JSON;
+    int packetsToSend = head - tail;    
+
+    if (curOutputMode == OUTPUT_MODE_RAW) {
+      if (packetsToSend < 0) {
+        packetsToSend = NUM_PACKETS_IN_RING_BUFFER + packetsToSend; // for wrap around
       }
-    } else {
       if (packetsToSend > (MAX_PACKETS_PER_SEND_TCP - 5)) {
         packetsToSend = MAX_PACKETS_PER_SEND_TCP - 5;
       }
-    }
-
-    int index = 0;
-    for (uint8_t i = 0; i < packetsToSend; i++) {
-      if (tail >= NUM_PACKETS_IN_RING_BUFFER) {
-        tail = 0;
-      }
-      if (curOutputMode == OUTPUT_MODE_JSON) {
-        channelDataCompute(ringBuf[tail], channelData[i]);
-      } else {
+      int index = 0;
+      for (uint8_t i = 0; i < packetsToSend; i++) {
+        if (tail >= NUM_PACKETS_IN_RING_BUFFER) {
+          tail = 0;
+        }
         for (uint8_t j = 0; j < BYTES_PER_OBCI_PACKET; j++) {
           outputBuf[index++] = ringBuf[tail][j];
         }
+        tail++;
       }
-
-      tail++;
-    }
-    digitalWrite(5, HIGH);
-
-    if (curOutputMode == OUTPUT_MODE_JSON) {
-      StaticJsonBuffer<500> jsonSampleBuffer;
-
-      JsonObject& root = prepareSampleJSON(jsonSampleBuffer, packetsToSend);
-
-      if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
-        // root.printTo(Serial);
-        // root.printTo(clientTCP);
-        root.printTo(clientTCP);
-        // clientTCP.write(jsonStr.c_str(), jsonStr.length());
-        // jsonStr = "";
-      } else {
-        root.prettyPrintTo(jsonStr);
-
-        clientMQTT.publish("openbci", jsonStr.c_str());
-        jsonStr = "";
-      }
-
-    } else {
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
       } else {
         clientMQTT.publish("openbci",(const char*) outputBuf);
 
+      }
+    } else { // output mode is JSON
+      if (packetsToSend < 0) {
+        packetsToSend = NUM_PACKETS_IN_RING_BUFFER_JSON + packetsToSend; // for wrap around
+      }
+      if (packetsToSend > sendJsonMaxPackets()) {
+        packetsToSend = sendJsonMaxPackets();
+      }
+
+      StaticJsonBuffer<jsonBufferSize> jsonSampleBuffer;
+
+      JsonObject& root = jsonBuffer.createObject();
+      JsonArray& chunk = root.createNestedArray("chunk");
+
+      for (uint8_t i = 0; i < packetsToSend; i++) {
+        if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
+          tail = 0;
+        }
+        JsonObject& sample = chunk.createNestedObject();
+        sample["timestamp"] = (sampleBuffer + tail)->timestamp;
+        JsonArray& data = sample.createNestedArray("data");
+        for (uint8_t j = 0; i < numChannels; i++) {
+          data.add((sampleBuffer + tail)->channelData[j]);
+        }
+        tail++;
+      }
+
+      if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
+        // root.printTo(Serial);
+        root.printTo(clientTCP);
+      } else {
+        root.prettyPrintTo(jsonStr);
+        clientMQTT.publish("openbci", jsonStr.c_str());
+        jsonStr = "";
       }
     }
 
