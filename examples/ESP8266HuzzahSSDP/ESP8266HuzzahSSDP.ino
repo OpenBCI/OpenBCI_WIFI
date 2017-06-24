@@ -176,18 +176,18 @@ String getName() {
 
 String mqttGetInfo() {
   String json = "{";
-  json += "\"broker_address\":"+String(mqttBrokerAddress)+",";
-  json += "\"connected\":"+(clientMQTT.connected() ? "true" : "false")+",";
-  json += "\"username\":"+String(mqttUsername);
+  json += "\"broker_address\":\""+String(mqttBrokerAddress)+"\",";
+  json += "\"connected\":"+String(clientMQTT.connected() ? "true" : "false")+",";
+  json += "\"username\":\""+String(mqttUsername)+"\"";
   json += "}";
   return json;
 }
 
 String tcpGetInfo() {
   String json = "{";
-  json += "\"connected\":"+(clientTCP.connected() ? "true" : "false")+",";
-  json += "\"ip_address\":"+String(tcpAddress)+",";
-  json += "\"port\":"+String(tcpPort);
+  json += "\"connected\":"+String(clientTCP.connected() ? "true" : "false")+",";
+  json += "\"ip_address\":\""+String(tcpAddress)+"\",";
+  json += "\"port\":\""+String(tcpPort)+"\"";
   json += "}";
   return json;
 }
@@ -567,7 +567,7 @@ uint8_t passThroughCommand() {
   return 1;
 }
 
-boolean setupSocketWithClient() {
+void setupSocketWithClient() {
   // Parse args
   if(server.args() == 0) return returnFail(501, "Error: No body in POST request"); // no body
   JsonObject& root = getArgFromArgs();
@@ -591,12 +591,12 @@ boolean setupSocketWithClient() {
     Serial.println("Connected to server");
 #endif
     clientTCP.setNoDelay(1);
-    return sever.send(200, "text/json", tcpGetInfo());
+    return server.send(200, "text/json", tcpGetInfo());
   } else {
 #ifdef DEBUG
     Serial.println("Failed to connect to server");
 #endif
-    return sever.send(504, "text/json", tcpGetInfo());
+    return server.send(504, "text/json", tcpGetInfo());
   }
 }
 
@@ -642,13 +642,13 @@ void mqttSetup() {
 #endif
 
   clientMQTT.setServer(mqttBrokerAddress, 1883);
-  
+
   curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
 
   if (mqttConnect()) {
-    return sever.send(200, "text/json", mqttGetInfo());
+    return server.send(200, "text/json", mqttGetInfo());
   } else {
-    return sever.send(505, "text/json", mqttGetInfo());
+    return server.send(505, "text/json", mqttGetInfo());
   }
 }
 
@@ -1151,7 +1151,9 @@ void setup() {
   //get heap status, analog input value and all GPIO statuses in one json call
   server.on("/all", HTTP_GET, [](){
     String json = "{";
-    json += "\"heap\":"+String(ESP.getFreeHeap());
+    json += "\"heap\":"+String(ESP.getFreeHeap())+",";
+    json += "\"name\":\""+getName()+"\",";
+    json += "\"num_channels\":"+String(numChannels);
     json += "}";
     server.send(200, "text/json", json);
     json = String();
