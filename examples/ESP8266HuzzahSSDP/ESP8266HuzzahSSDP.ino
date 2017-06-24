@@ -93,15 +93,16 @@ const char *serverCloudbrainAuth;
 const char *mqttUsername;
 const char *mqttPassword;
 const char *mqttBrokerAddress;
-const char *tcpAddress;
-const char *tcpPort;
 
 ESP8266WebServer server(80);
 
 double scaleFactors[MAX_CHANNELS];
 
+IPAddress tcpAddress;
+
 int counter;
 int latency;
+int tcpPort;
 
 OUTPUT_MODE curOutputMode;
 OUTPUT_PROTOCOL curOutputProtocol;
@@ -150,6 +151,14 @@ String getMac() {
   return macID;
 }
 
+String getMacFull() {
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = String((const char *)mac);
+  macID.toUpperCase();
+  return macID;
+}
+
 String getModelNumber() {
   String AP_NameString = "PTW-OBCI-0001-" + getMac();
 
@@ -175,20 +184,26 @@ String getName() {
 }
 
 String mqttGetInfo() {
-  String json = "{";
-  json += "\"broker_address\":\""+String(mqttBrokerAddress)+"\",";
-  json += "\"connected\":"+String(clientMQTT.connected() ? "true" : "false")+",";
-  json += "\"username\":\""+String(mqttUsername)+"\"";
-  json += "}";
+  const size_t bufferSize = JSON_OBJECT_SIZE(3) + 195;
+  StaticJsonBuffer<bufferSize> jsonBuffer;
+  String json;
+  JsonObject& root = jsonBuffer.createObject();
+  root["broker_address"] = String(mqttBrokerAddress);
+  root["connected"] = clientMQTT.connected();
+  root["username"] = String(mqttUsername);
+  root.printTo(json);
   return json;
 }
 
 String tcpGetInfo() {
-  String json = "{";
-  json += "\"connected\":"+String(clientTCP.connected() ? "true" : "false")+",";
-  json += "\"ip_address\":\""+String(tcpAddress)+"\",";
-  json += "\"port\":\""+String(tcpPort)+"\"";
-  json += "}";
+  const size_t bufferSize = JSON_OBJECT_SIZE(3) + 80;
+  StaticJsonBuffer<bufferSize> jsonBuffer;
+  String json;
+  JsonObject& root = jsonBuffer.createObject();
+  root["connected"] = clientTCP.connected() == 1;
+  root["ip"] = tcpAddress.toString();
+  root["port"] = tcpPort;
+  root.printTo(json);
   return json;
 }
 
@@ -574,19 +589,19 @@ void setupSocketWithClient() {
   if (!root.containsKey("ip")) return returnFail(502, "Error: No 'ip' in body");
   if (!root.containsKey("port")) return returnFail(503, "Error: No 'port' in body");
 
-  const char *ip = root["ip"];
-  int port = root["port"];
+  tcpAddress = IPAddress(root["ip"]);
+  tcpPort = root["port"];
 
 #ifdef DEBUG
-  Serial.print("Got ip: "); Serial.println(ip);
-  Serial.print("Got port: "); Serial.println(port);
+  Serial.print("Got ip: "); Serial.println(tcpAddress);
+  Serial.print("Got port: "); Serial.println(tcpPort);
   Serial.print("Current uri: "); Serial.println(server.uri());
-  Serial.print("Starting socket to host: "); Serial.print(server.client().remoteIP().toString()); Serial.print(" on port: "); Serial.println(port);
+  Serial.print("Starting socket to host: "); Serial.print(tcpAddress); Serial.print(" on port: "); Serial.println(tcpPort);
 #endif
 
   curOutputProtocol = OUTPUT_PROTOCOL_TCP;
 
-  if (clientTCP.connect(ip, port)) {
+  if (clientTCP.connect(tcpAddress, tcpPort)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
@@ -820,6 +835,10 @@ void initializeVariables() {
   samplesLoaded = 0;
 
   outputString = "";
+  mqttUsername = "";
+  mqttPassword = "";
+  mqttBrokerAddress = "";
+  tcpPort = 3000;
 
   // curOutputMode = OUTPUT_MODE_RAW;
   curOutputMode = OUTPUT_MODE_JSON;
@@ -1152,8 +1171,8 @@ void setup() {
   server.on("/all", HTTP_GET, [](){
     String json = "{";
     json += "\"heap\":"+String(ESP.getFreeHeap())+",";
-    json += "\"ip\":\""+String(WiFi.localIP())+"\"";
-    json += "\"mac\":\""+getMac()+"\",";
+    json += "\"ip\":\""+String(WiFi.localIP())+"\",";
+    json += "\"mac\":\""+getMacFull()+"\",";
     json += "\"name\":\""+getName()+"\",";
     json += "\"num_channels\":"+String(numChannels);
     json += "}";
