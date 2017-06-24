@@ -93,6 +93,8 @@ const char *serverCloudbrainAuth;
 const char *mqttUsername;
 const char *mqttPassword;
 const char *mqttBrokerAddress;
+const char *tcpAddress;
+const char *tcpPort;
 
 ESP8266WebServer server(80);
 
@@ -170,6 +172,24 @@ String getName() {
     AP_NameChar[i] = AP_NameString.charAt(i);
 
   return AP_NameString;
+}
+
+String mqttGetInfo() {
+  String json = "{";
+  json += "\"broker_address\":"+String(mqttBrokerAddress)+",";
+  json += "\"connected\":"+(clientMQTT.connected() ? "true" : "false")+",";
+  json += "\"username\":"+String(mqttUsername);
+  json += "}";
+  return json;
+}
+
+String tcpGetInfo() {
+  String json = "{";
+  json += "\"connected\":"+(clientTCP.connected() ? "true" : "false")+",";
+  json += "\"ip_address\":"+String(tcpAddress)+",";
+  json += "\"port\":"+String(tcpPort);
+  json += "}";
+  return json;
 }
 
 void printWifiStatus() {
@@ -254,6 +274,36 @@ void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
     sample->channelData[i + packetOffset] = (long)(scaleFactors[i] * ((double)raw));
 
     // Serial.printf("%d: %2.10f\n",i+1, farr[i]);
+  }
+}
+
+/**
+ * We want to max the size out to < 2000bytes per json chunk
+ */
+uint8_t sendJsonMaxPackets() {
+  switch (numChannels) {
+    case NUM_CHANNELS_GANGLION:
+      return 8; // Size of
+    case NUM_CHANNELS_CYTON_DAISY:
+      return 3;
+    case NUM_CHANNELS_CYTON:
+    default:
+      return 5;
+  }
+}
+
+/**
+ * The additional bytes needed for input duplication, follows max packets
+ */
+int sendJsonAdditionalBytes() {
+  switch (numChannels) {
+    case NUM_CHANNELS_GANGLION:
+      return 1014;
+    case NUM_CHANNELS_CYTON_DAISY:
+      return 1062;
+    case NUM_CHANNELS_CYTON:
+    default:
+      return 966;
   }
 }
 
@@ -403,7 +453,7 @@ bool readRequest(WiFiClient& client) {
 }
 
 JsonObject& getArgFromArgs() {
-  const size_t argBufferSize = JSON_OBJECT_SIZE(1) + 20;
+  const size_t argBufferSize = JSON_OBJECT_SIZE(3) + 125;
   DynamicJsonBuffer jsonBuffer(argBufferSize);
   // const char* json = "{\"port\":13514}";
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
@@ -519,28 +569,34 @@ uint8_t passThroughCommand() {
 
 boolean setupSocketWithClient() {
   // Parse args
-  if(server.args() == 0) return false;
+  if(server.args() == 0) return returnFail(501, "Error: No body in POST request"); // no body
   JsonObject& root = getArgFromArgs();
-  if (!root.containsKey("port")) return false;
+  if (!root.containsKey("ip")) return returnFail(502, "Error: No 'ip' in body");
+  if (!root.containsKey("port")) return returnFail(503, "Error: No 'port' in body");
+
+  const char *ip = root["ip"];
   int port = root["port"];
 
 #ifdef DEBUG
+  Serial.print("Got ip: "); Serial.println(ip);
   Serial.print("Got port: "); Serial.println(port);
   Serial.print("Current uri: "); Serial.println(server.uri());
   Serial.print("Starting socket to host: "); Serial.print(server.client().remoteIP().toString()); Serial.print(" on port: "); Serial.println(port);
 #endif
 
-  if (clientTCP.connect(server.client().remoteIP(), port)) {
+  curOutputProtocol = OUTPUT_PROTOCOL_TCP;
+
+  if (clientTCP.connect(ip, port)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
     clientTCP.setNoDelay(1);
-    return true;
+    return sever.send(200, "text/json", tcpGetInfo());
   } else {
 #ifdef DEBUG
     Serial.println("Failed to connect to server");
 #endif
-    return false;
+    return sever.send(504, "text/json", tcpGetInfo());
   }
 }
 
@@ -586,63 +642,33 @@ void mqttSetup() {
 #endif
 
   clientMQTT.setServer(mqttBrokerAddress, 1883);
+  
+  curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
 
   if (mqttConnect()) {
-    returnOK("MQTT connected!");
+    return sever.send(200, "text/json", mqttGetInfo());
   } else {
-    returnFail(505, "Unable to connect, please check your username/password/broker_address.");
+    return sever.send(505, "text/json", mqttGetInfo());
   }
-
-  curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
 }
 
 /**
  * Used to prepare a response in JSON
  */
-JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
-  JsonObject& root = jsonBuffer.createObject();
-  JsonArray& chunk = root.createNestedArray("chunk");
-  for (uint8_t i = 0; i < packetsToSend; i++) {
-    JsonObject& sample = chunk.createNestedObject();
-    double curTime = ntpActive() ? ntpGetTime() : micros();
-    sample.set<double>("timestamp", curTime);
-    JsonArray& data = sample.createNestedArray("data");
-    for (uint8_t j = 0; i < numChannels; i++) {
-      data.add(channelData[i][j]);
-    }
-  }
-  return root;
-}
-
-/**
- * We want to max the size out to < 2000bytes per json chunk
- */
-uint8_t sendJsonMaxPackets() {
-  switch (numChannels) {
-    case NUM_CHANNELS_GANGLION:
-      return 8; // Size of
-    case NUM_CHANNELS_CYTON_DAISY:
-      return 3;
-    case NUM_CHANNELS_CYTON:
-    default:
-      return 5;
-  }
-}
-
-/**
- * The additional bytes needed for input duplication, follows max packets
- */
-int sendJsonAdditionalBytes() {
-  switch (numChannels) {
-    case NUM_CHANNELS_GANGLION:
-      return 1014;
-    case NUM_CHANNELS_CYTON_DAISY:
-      return 1062;
-    case NUM_CHANNELS_CYTON:
-    default:
-      return 966;
-  }
-}
+// JsonObject& prepareSampleJSON(JsonBuffer& jsonBuffer, uint8_t packetsToSend) {
+//   JsonObject& root = jsonBuffer.createObject();
+//   JsonArray& chunk = root.createNestedArray("chunk");
+//   for (uint8_t i = 0; i < packetsToSend; i++) {
+//     JsonObject& sample = chunk.createNestedObject();
+//     double curTime = ntpActive() ? ntpGetTime() : micros();
+//     sample.set<double>("timestamp", curTime);
+//     JsonArray& data = sample.createNestedArray("data");
+//     for (uint8_t j = 0; i < numChannels; i++) {
+//       data.add(channelData[i][j]);
+//     }
+//   }
+//   return root;
+// }
 
 /**
  * Used to prepare a response in JSON with chunk
@@ -653,20 +679,20 @@ JsonObject& intializeJSONChunk(JsonBuffer& jsonBuffer) {
   return root;
 }
 
-/**
- * Convert sample to JSON, convert to string, return string
- */
-void convertSampleToJSON(JsonObject& chunkObj, uint8_t *in, uint8_t nchan) {
-  // Get the chunk array
-  JsonArray& chunk = chunkObj["chunk"];
-
-  JsonObject& sample = chunk.createNestedObject();
-  sample["timestamp"] = ntpActive() ? ntpGetTime() : micros();
-  JsonArray& data = sample.createNestedArray("data");
-  for (uint8_t i = 0; i < numChannels; i++) {
-    data.add(channelData[i][j]);
-  }
-}
+// /**
+//  * Convert sample to JSON, convert to string, return string
+//  */
+// void convertSampleToJSON(JsonObject& chunkObj, uint8_t *in, uint8_t nchan) {
+//   // Get the chunk array
+//   JsonArray& chunk = chunkObj["chunk"];
+//
+//   JsonObject& sample = chunk.createNestedObject();
+//   sample["timestamp"] = ntpActive() ? ntpGetTime() : micros();
+//   JsonArray& data = sample.createNestedArray("data");
+//   for (uint8_t i = 0; i < numChannels; i++) {
+//     data.add(channelData[i][j]);
+//   }
+// }
 
 // void handleNotFound(){
 //   String message = "File Not Found\n\n";
@@ -1045,41 +1071,24 @@ void setup() {
     returnOK();
   });
 
-  server.on("/output/mode/json", HTTP_GET, [](){
+  server.on("/output/json", HTTP_GET, [](){
     curOutputMode = OUTPUT_MODE_JSON;
     returnOK();
   });
-  server.on("/output/mode/raw", HTTP_GET, [](){
+  server.on("/output/raw", HTTP_GET, [](){
     curOutputMode = OUTPUT_MODE_RAW;
     returnOK();
   });
 
-  server.on("/output/protocol/tcp", HTTP_GET, [](){
-    curOutputProtocol = OUTPUT_PROTOCOL_TCP;
-    returnOK();
-  });
-
   server.on("/mqtt", HTTP_GET, []() {
-    if (clientMQTT.connected()) {
-      String str = "Client connected to " + mqttBrokerAddress;
-      returnOK(200, str);
-    } else {
-      returnOK(201, "No client connected");
-    }
+    server.send(200, "text/json", mqttGetInfo());
   });
   server.on("/mqtt", HTTP_POST, mqttSetup);
 
   server.on("/tcp", HTTP_GET, []() {
-    if (clientTCP.connected()) {
-      String str = "Client connected to " + mqttBrokerAddress;
-      returnOK(200, str);
-    } else {
-      returnOK(201, "No client connected");
-    }
-  })
-  server.on("/tcp", HTTP_POST, [](){
-    setupSocketWithClient() ? returnOK() : returnFail(500, "Error: Failed to connect to server");
+    server.send(200, "text/json", tcpGetInfo());
   });
+  server.on("/tcp", HTTP_POST, setupSocketWithClient);
 
   // These could be helpful...
   server.on("/stream/start", HTTP_GET, []() {
@@ -1274,7 +1283,7 @@ void loop() {
 
     digitalWrite(5, HIGH);
 
-    int packetsToSend = head - tail;    
+    int packetsToSend = head - tail;
 
     if (curOutputMode == OUTPUT_MODE_RAW) {
       if (packetsToSend < 0) {
@@ -1307,9 +1316,9 @@ void loop() {
         packetsToSend = sendJsonMaxPackets();
       }
 
-      StaticJsonBuffer<jsonBufferSize> jsonSampleBuffer;
+      DynamicJsonBuffer jsonSampleBuffer(jsonBufferSize);
 
-      JsonObject& root = jsonBuffer.createObject();
+      JsonObject& root = jsonSampleBuffer.createObject();
       JsonArray& chunk = root.createNestedArray("chunk");
 
       for (uint8_t i = 0; i < packetsToSend; i++) {
