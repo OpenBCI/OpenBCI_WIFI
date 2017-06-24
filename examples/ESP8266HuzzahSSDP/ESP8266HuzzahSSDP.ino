@@ -1152,6 +1152,8 @@ void setup() {
   server.on("/all", HTTP_GET, [](){
     String json = "{";
     json += "\"heap\":"+String(ESP.getFreeHeap())+",";
+    json += "\"ip\":\""+String(WiFi.localIP())+"\"";
+    json += "\"mac\":\""+getMac()+"\",";
     json += "\"name\":\""+getName()+"\",";
     json += "\"num_channels\":"+String(numChannels);
     json += "}";
