@@ -28,6 +28,14 @@
 #define ARDUINOJSON_ADDITIONAL_BYTES_32_CHAN 675
 #define MICROS_IN_SECONDS 1000000
 
+#define JSON_CONNECTED "connected"
+#define JSON_MQTT_BROKER_ADDR "broker_address"
+#define JSON_MQTT_PASSWORD "password"
+#define JSON_MQTT_USERNAME "username"
+#define JSON_TCP_IP "ip"
+#define JSON_TCP_OUTPUT "output"
+#define JSON_TCP_PORT "port"
+
 #include <time.h>
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -183,26 +191,42 @@ String getName() {
   return AP_NameString;
 }
 
+String getOutputMode(OUTPUT_MODE outputMode) {
+  switch(outputMode) {
+    case OUTPUT_MODE_JSON:
+      return "json";
+    case OUTPUT_MODE_RAW:
+    default:
+      return "raw";
+  }
+}
+
+String getCurOutputMode() {
+  return getOutputMode(curOutputMode);
+}
+
 String mqttGetInfo() {
-  const size_t bufferSize = JSON_OBJECT_SIZE(3) + 195;
+  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 225;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
-  root["broker_address"] = String(mqttBrokerAddress);
-  root["connected"] = clientMQTT.connected();
-  root["username"] = String(mqttUsername);
+  root[JSON_MQTT_BROKER_ADDR] = String(mqttBrokerAddress);
+  root[JSON_CONNECTED] = clientMQTT.connected();
+  root[JSON_MQTT_USERNAME] = String(mqttUsername);
+  root[JSON_TCP_OUTPUT] = getCurOutputMode();
   root.printTo(json);
   return json;
 }
 
 String tcpGetInfo() {
-  const size_t bufferSize = JSON_OBJECT_SIZE(3) + 80;
+  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 100;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
-  root["connected"] = clientTCP.connected() == 1;
-  root["ip"] = tcpAddress.toString();
-  root["port"] = tcpPort;
+  root[JSON_CONNECTED] = clientTCP.connected() == 1;
+  root[JSON_TCP_IP] = tcpAddress.toString();
+  root[JSON_TCP_OUTPUT] = getCurOutputMode();
+  root[JSON_TCP_PORT] = tcpPort;
   root.printTo(json);
   return json;
 }
@@ -586,11 +610,28 @@ void setupSocketWithClient() {
   // Parse args
   if(server.args() == 0) return returnFail(501, "Error: No body in POST request"); // no body
   JsonObject& root = getArgFromArgs();
-  if (!root.containsKey("ip")) return returnFail(502, "Error: No 'ip' in body");
-  if (!root.containsKey("port")) return returnFail(503, "Error: No 'port' in body");
+  if (!root.containsKey(JSON_TCP_IP)) return returnFail(502, "Error: No '"+String(JSON_TCP_IP)+" in body");
+  String tempAddr = root[JSON_TCP_IP];
+  if (!tcpAddress.fromString(tempAddr)) {
+    return returnFail(505, "Error: unable to parse ip address. Please send as string in octets i.e. xxx.xxx.xxx.xxx");
+  }
 
-  tcpAddress = IPAddress(root["ip"]);
-  tcpPort = root["port"];
+  if (!root.containsKey(JSON_TCP_PORT)) return returnFail(503, "Error: No '"+String(JSON_TCP_PORT)+" in body");
+  tcpPort = root[JSON_TCP_PORT];
+
+  if (root.containsKey(JSON_TCP_OUTPUT)) {
+    String outputModeStr = root[JSON_TCP_OUTPUT];
+    if (outputModeStr.equals(getOutputMode(OUTPUT_MODE_RAW))) {
+      curOutputMode = OUTPUT_MODE_RAW;
+    } else if (outputModeStr.equals(getOutputMode(OUTPUT_MODE_JSON))) {
+      curOutputMode = OUTPUT_MODE_JSON;
+    } else {
+      return returnFail(506, "Error: '" + String(JSON_TCP_OUTPUT) +"' must be either "+getOutputMode(OUTPUT_MODE_RAW)+" or "+getOutputMode(OUTPUT_MODE_JSON));
+    }
+#ifdef DEBUG
+    Serial.print("Set output mode to "); Serial.println(getCurOutputMode());
+#endif
+  }
 
 #ifdef DEBUG
   Serial.print("Got ip: "); Serial.println(tcpAddress);
@@ -618,7 +659,7 @@ void setupSocketWithClient() {
 boolean mqttConnect() {
   if (clientMQTT.connect(getName().c_str(), mqttUsername, mqttPassword)) {
 #ifdef DEBUG
-    Serial.println("connected");
+    Serial.println(JSON_CONNECTED);
 #endif
     // Once connected, publish an announcement...
     clientMQTT.publish("openbci", "Will you Push The World?");
@@ -640,13 +681,13 @@ void mqttSetup() {
   size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
   DynamicJsonBuffer jsonBuffer(argBufferSize);
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
-  if (!root.containsKey("username")) return returnFail(502, "Error: No 'username' in body");
-  if (!root.containsKey("password")) return returnFail(503, "Error: No 'password' in body");
-  if (!root.containsKey("broker_address")) return returnFail(504, "Error: No 'broker_address' in body");
+  if (!root.containsKey(JSON_MQTT_USERNAME)) return returnFail(502, "Error: No 'username' in body");
+  if (!root.containsKey(JSON_MQTT_PASSWORD)) return returnFail(503, "Error: No 'password' in body");
+  if (!root.containsKey(JSON_MQTT_BROKER_ADDR)) return returnFail(504, "Error: No 'broker_address' in body");
 
-  mqttUsername = root["username"]; // "alongname.alonglastname@getcloudbrain.com"
-  mqttPassword = root["password"]; // "that time when i had a big password"
-  mqttBrokerAddress = root["broker_address"]; // "/the quick brown fox jumped over the lazy dog"
+  mqttUsername = root[JSON_MQTT_USERNAME]; // "alongname.alonglastname@getcloudbrain.com"
+  mqttPassword = root[JSON_MQTT_PASSWORD]; // "that time when i had a big password"
+  mqttBrokerAddress = root[JSON_MQTT_BROKER_ADDR]; // "/the quick brown fox jumped over the lazy dog"
 
 #ifdef DEBUG
   Serial.print("Got username: "); Serial.println(mqttUsername);
@@ -792,7 +833,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 			USE_SERIAL.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
 
 			// send message to client
-			webSocket.sendTXT(num, "Connected");
+			webSocket.sendTXT(num, JSON_CONNECTED);
 		}
 			break;
 		case WStype_TEXT:
