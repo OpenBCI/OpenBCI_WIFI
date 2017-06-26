@@ -1,5 +1,6 @@
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
+#define ADC_24BIT_RES 8388607.0
 #define ADC_24BIT_RES_NANO_VOLT 8388607000000000.0
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
@@ -32,6 +33,7 @@
 #define SPI_NO_MASTER 401
 #define CLIENT_RESPONSE_NO_BODY_IN_POST 402
 #define CLIENT_RESPONSE_MISSING_REQUIRED_CMD 403
+#define NANO_VOLTS_IN_VOLTS 1000000000.0
 
 #define JSON_BOARD_CONNECTED "board_connected"
 #define JSON_MQTT_BROKER_ADDR "broker_address"
@@ -326,10 +328,14 @@ void ntpStart() {
  */
 void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
   const uint8_t byteOffset = 2;
-  if (packetOffset == 0) sample->timestamp = getTime();
+  if (packetOffset == 0) {
+    sample->timestamp = getTime();
+    long temp[numChannels];
+    sample->channelData = temp;
+  }
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
     // Zero out the new value
-    uint32_t raw = 0;
+    int raw = 0;
     // Pull out 24bit number
     raw = arr[i*3 + byteOffset] << 16 | arr[i*3 + 1 + byteOffset] << 8 | arr[i*3 + 2 + byteOffset];
     // carry through the sign
@@ -339,9 +345,18 @@ void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
       raw &= 0x00FFFFFF;
     }
 
-    sample->channelData[i + packetOffset] = (long)(scaleFactors[i] * ((double)raw));
+    double raw_d = (double)raw;
 
-    // Serial.printf("%d: %2.10f\n",i+1, farr[i]);
+    double volts = raw_d * scaleFactors[i + packetOffset];
+    double nano_volts = volts * NANO_VOLTS_IN_VOLTS;
+
+    if (i == 0) {
+      Serial.printf("volts: %0.20f in nano_volts: %0.4f as long: %ld\n", volts, nano_volts, nano_volts);
+    }
+
+    sample->channelData[i + packetOffset] = (long)(nano_volts);
+
+    // Serial.printf("channel %d: %lu nV raw: %0.20f",i+1, sample->channelData[i + packetOffset], scaleFactors[i] * (double)raw);
   }
 }
 
@@ -420,9 +435,9 @@ void gainSet(uint8_t *raw) {
   for (uint8_t i = 0; i < numChannels; i++) {
     if (numChannels == NUM_CHANNELS_GANGLION) {
       // do gang related stuffs
-      scaleFactors[i] = MCP3912_VREF / gainGanglion() / ADC_24BIT_RES_NANO_VOLT;
+      scaleFactors[i] = MCP3912_VREF / gainGanglion() / ADC_24BIT_RES;
     } else {
-      scaleFactors[i] = ADS1299_VREF / gainCyton(raw[byteCounter++]) / ADC_24BIT_RES_NANO_VOLT;
+      scaleFactors[i] = ADS1299_VREF / gainCyton(raw[byteCounter++]) / ADC_24BIT_RES;
     }
 #ifdef DEBUG
     Serial.printf("Channel: %d\n\tscale factor: %.20f\n", i+1, scaleFactors[i]);
@@ -1453,7 +1468,7 @@ void loop() {
       }
 
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
-        root.printTo(Serial);
+        // root.printTo(Serial);
         // root.printTo(clientTCP);
       } else {
         root.printTo(jsonStr);
