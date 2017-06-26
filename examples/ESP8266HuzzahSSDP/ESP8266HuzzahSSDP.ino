@@ -27,12 +27,24 @@
 #define ARDUINOJSON_ADDITIONAL_BYTES_24_CHAN 515
 #define ARDUINOJSON_ADDITIONAL_BYTES_32_CHAN 675
 #define MICROS_IN_SECONDS 1000000
+#define SPI_MASTER_POLL_TIMEOUT_MS 100
+#define SPI_TIMEOUT_CLIENT_RESPONSE 400
+#define SPI_NO_MASTER 401
+#define CLIENT_RESPONSE_NO_BODY_IN_POST 402
+#define CLIENT_RESPONSE_MISSING_REQUIRED_CMD 403
 
-#define JSON_CONNECTED "connected"
+#define JSON_BOARD_CONNECTED "board_connected"
 #define JSON_MQTT_BROKER_ADDR "broker_address"
+#define JSON_COMMAND "command"
+#define JSON_CONNECTED "connected"
+#define JSON_HEAP "heap"
+#define JSON_MAC "mac"
 #define JSON_MQTT_PASSWORD "password"
 #define JSON_MQTT_USERNAME "username"
+#define JSON_NAME "name"
+#define JSON_NUM_CHANNELS "num_channels"
 #define JSON_TCP_IP "ip"
+#define JSON_TCP_LATENCY "latency"
 #define JSON_TCP_OUTPUT "output"
 #define JSON_TCP_PORT "port"
 
@@ -150,7 +162,18 @@ PubSubClient clientMQTT(espClient);
 ///////////////////////////////////////////
 // Utility functions
 ///////////////////////////////////////////
-String getMac() {
+///
+
+/**
+ * Has the SPI Master polled this device in the past SPI_MASTER_POLL_TIMEOUT_MS
+ * @returns [boolean] True if SPI Master has polled within timeout.
+ */
+boolean noSPIMaster() {
+  return millis() > lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
+}
+
+
+String getMacLastFourBytes() {
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
   String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
@@ -159,16 +182,21 @@ String getMac() {
   return macID;
 }
 
-String getMacFull() {
+String getMac() {
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
-  String macID = String((const char *)mac);
-  macID.toUpperCase();
-  return macID;
+  String fullMac = String(mac[WL_MAC_ADDR_LENGTH - 6], HEX) + ":" +
+                   String(mac[WL_MAC_ADDR_LENGTH - 5], HEX) + ":" +
+                   String(mac[WL_MAC_ADDR_LENGTH - 4], HEX) + ":" +
+                   String(mac[WL_MAC_ADDR_LENGTH - 3], HEX) + ":" +
+                   String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) + ":" +
+                   String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  fullMac.toUpperCase();
+  return fullMac;
 }
 
 String getModelNumber() {
-  String AP_NameString = "PTW-OBCI-0001-" + getMac();
+  String AP_NameString = "PTW-OBCI-0001-" + getMacLastFourBytes();
 
   char AP_NameChar[AP_NameString.length() + 1];
   memset(AP_NameChar, 0, AP_NameString.length() + 1);
@@ -180,7 +208,7 @@ String getModelNumber() {
 }
 
 String getName() {
-  String AP_NameString = "OpenBCI-" + getMac();
+  String AP_NameString = "OpenBCI-" + getMacLastFourBytes();
 
   char AP_NameChar[AP_NameString.length() + 1];
   memset(AP_NameChar, 0, AP_NameString.length() + 1);
@@ -396,7 +424,7 @@ void gainSet(uint8_t *raw) {
       scaleFactors[i] = ADS1299_VREF / gainCyton(raw[byteCounter++]) / ADC_24BIT_RES_NANO_VOLT;
     }
 #ifdef DEBUG
-    Serial.printf("Channel: %d\n\tgain: %d\n\tscale factor: %.10f\n", i+1, scaleFactors[i]);
+    Serial.printf("Channel: %d\n\tscale factor: %.10f\n", i+1, scaleFactors[i]);
 #endif
   }
 
@@ -414,6 +442,8 @@ void gainSet(uint8_t *raw) {
 ///////////////////////////////////////////////////
 
 void callbackMQTT(char* topic, byte* payload, unsigned int length) {
+
+#ifdef DEBUG
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -421,15 +451,7 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
-
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1') {
-    digitalWrite(0, LOW);   // Turn the LED on (Note that LOW is the voltage level
-    // but actually the LED is on; this is because
-    // it is acive low on the ESP-01)
-  } else {
-    digitalWrite(0, HIGH);  // Turn the LED off by making the voltage HIGH
-  }
+#endif
 }
 
 void passthroughBufferClear() {
@@ -451,21 +473,53 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 
 
 ///////////////////////////////////////////////////
-// MQTT
+// HTTP Rest Helpers
 ///////////////////////////////////////////////////
 
-void returnOK(int code, String s) {
+/**
+ * Returns true if there is no args on the POST request.
+ */
+boolean noBodyInParam() {
+  return server.args() == 0;
+}
+
+void serverReturn(int code, String s) {
   digitalWrite(5, HIGH);
-  server.send(code, "text/plain", s);
+  server.send(code, "text/plain", s + "\r\n");
   digitalWrite(5, LOW);
 }
 
 void returnOK(String s) {
-  returnOK(200, s);
+  serverReturn(200, s);
 }
 
 void returnOK(void) {
-  returnOK("");
+  returnOK("OK");
+}
+
+/**
+ * Used to send a response to the client that the board is not attached.
+ */
+void returnNoSPIMaster() {
+  if (lastTimeWasPolled < 1) {
+    serverReturn(SPI_NO_MASTER, "Error: No OpenBCI board attached");
+  } else {
+    serverReturn(SPI_TIMEOUT_CLIENT_RESPONSE, "Error: Lost communication with OpenBCI board");
+  }
+}
+
+/**
+ * Used to send a response to the client that there is no body in the post request.
+ */
+void returnNoBodyInPost() {
+  serverReturn(CLIENT_RESPONSE_NO_BODY_IN_POST, "Error: No body in POST request");
+}
+
+/**
+ * Return if there is a missing param in the required command
+ */
+void returnMissingRequiredParam(const char *err) {
+  serverReturn(CLIENT_RESPONSE_MISSING_REQUIRED_CMD, String(err));
 }
 
 void returnFail(int code, String msg) {
@@ -558,39 +612,39 @@ JsonObject& getArgFromArgs() {
 /**
  * Used to set the latency of the system.
  */
-boolean setLatency() {
-  if(server.args() == 0) return false;
+void setLatency() {
+  if (noBodyInParam()) return returnNoBodyInPost();
 
   JsonObject& root = getArgFromArgs();
 
-  if (root.containsKey("latency")) {
-    latency = root["latency"];
-    return true;
+  if (root.containsKey(JSON_TCP_LATENCY)) {
+    latency = root[JSON_TCP_LATENCY];
+    returnOK();
+  } else {
+    returnMissingRequiredParam(JSON_TCP_LATENCY);
   }
-  return false;
 }
 
 /**
  * Used to set the latency of the system.
  */
-uint8_t passThroughCommand() {
-  if(server.args() == 0) return false;
-
+void passThroughCommand() {
+  if (noBodyInParam()) return returnNoBodyInPost();
+  if (noSPIMaster()) return returnNoSPIMaster();
   JsonObject& root = getArgFromArgs();
 
-  if (root.containsKey("command")) {
-    String cmds = root["command"];
+  if (root.containsKey(JSON_COMMAND)) {
+    String cmds = root[JSON_COMMAND];
     uint8_t numCmds = uint8_t(cmds.length());
-    // const char* cmds = root["command"];
-// #ifdef DEBUG
-//     Serial.printf("Got %d chars: ", numCmds);
-//     for (int i = 0; i < numCmds; i++) {
-//       Serial.print(cmds.charAt(i));
-//     }
-//     Serial.println();Serial.print("cmds ");Serial.println(cmds);
-// #endif
+#ifdef DEBUG
+    Serial.printf("Got %d chars: ", numCmds);
+    for (int i = 0; i < numCmds; i++) {
+      Serial.print(cmds.charAt(i));
+    }
+    Serial.println();Serial.print("cmds ");Serial.println(cmds);
+#endif
     if (numCmds > BYTES_PER_SPI_PACKET - 1) {
-      return 2;
+      return returnFail(501, "Error: Sent more than 31 chars");
     }
 
     passthroughBuffer[0] = numCmds;
@@ -601,22 +655,24 @@ uint8_t passThroughCommand() {
     }
     passthroughPosition += numCmds;
 
-    return 0;
+    spiTXBufferLoaded = true;
+    timeOfWifiTXBufferLoaded = millis();
+    clientWaitingForResponse = true;
   }
-  return 1;
+  return returnMissingRequiredParam(JSON_COMMAND);
 }
 
 void setupSocketWithClient() {
   // Parse args
-  if(server.args() == 0) return returnFail(501, "Error: No body in POST request"); // no body
+  if(noBodyInParam()) return returnNoBodyInPost(); // no body
   JsonObject& root = getArgFromArgs();
-  if (!root.containsKey(JSON_TCP_IP)) return returnFail(502, "Error: No '"+String(JSON_TCP_IP)+" in body");
+  if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
   String tempAddr = root[JSON_TCP_IP];
   if (!tcpAddress.fromString(tempAddr)) {
     return returnFail(505, "Error: unable to parse ip address. Please send as string in octets i.e. xxx.xxx.xxx.xxx");
   }
 
-  if (!root.containsKey(JSON_TCP_PORT)) return returnFail(503, "Error: No '"+String(JSON_TCP_PORT)+" in body");
+  if (!root.containsKey(JSON_TCP_PORT)) return returnMissingRequiredParam(JSON_TCP_PORT);
   tcpPort = root[JSON_TCP_PORT];
 
   if (root.containsKey(JSON_TCP_OUTPUT)) {
@@ -677,13 +733,13 @@ boolean mqttConnect() {
  */
 void mqttSetup() {
   // Parse args
-  if(server.args() == 0) return returnFail(501, "Error: No body in POST request"); // no body
+  if(noBodyInParam()) return returnNoBodyInPost(); // no body
   size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
   DynamicJsonBuffer jsonBuffer(argBufferSize);
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
-  if (!root.containsKey(JSON_MQTT_USERNAME)) return returnFail(502, "Error: No 'username' in body");
-  if (!root.containsKey(JSON_MQTT_PASSWORD)) return returnFail(503, "Error: No 'password' in body");
-  if (!root.containsKey(JSON_MQTT_BROKER_ADDR)) return returnFail(504, "Error: No 'broker_address' in body");
+  if (!root.containsKey(JSON_MQTT_USERNAME)) return returnMissingRequiredParam(JSON_MQTT_USERNAME);
+  if (!root.containsKey(JSON_MQTT_PASSWORD)) return returnMissingRequiredParam(JSON_MQTT_PASSWORD);
+  if (!root.containsKey(JSON_MQTT_BROKER_ADDR)) return returnMissingRequiredParam(JSON_MQTT_BROKER_ADDR);
 
   mqttUsername = root[JSON_MQTT_USERNAME]; // "alongname.alonglastname@getcloudbrain.com"
   mqttPassword = root[JSON_MQTT_PASSWORD]; // "that time when i had a big password"
@@ -799,7 +855,7 @@ boolean isAStreamByte(uint8_t b) {
  * @type {[type]}
  */
 void handleSensorCommand() {
-  if(server.args() == 0) return returnFail(500, "BAD ARGS");
+  if(noBodyInParam()) return returnNoBodyInPost();
   String path = server.arg(0);
 
   Serial.println(path);
@@ -1027,6 +1083,7 @@ void setup() {
         }
       }
     }
+    lastTimeWasPolled = millis();
   });
 
   SPISlave.onDataSent([]() {
@@ -1170,28 +1227,12 @@ void setup() {
     digitalWrite(5, LOW);
   });
 
-  server.on("/command", HTTP_POST, [](){
-    switch(passThroughCommand()) {
-      case 0: // Command sent to board
-        spiTXBufferLoaded = true;
-        timeOfWifiTXBufferLoaded = millis();
-        clientWaitingForResponse = true;
-        break;
-      case 1: // command not found
-        returnFail(500, "Error: no \'command\' in json arg");
-        break;
-      case 2: // length to long
-      default:
-        returnFail(501, "Error: Sent more than 31 chars");
-        break;
-    }
-  });
+  server.on("/command", HTTP_POST, passThroughCommand);
+
   server.on("/latency", HTTP_GET, [](){
     returnOK(String(latency).c_str());
   });
-  server.on("/latency", HTTP_POST, [](){
-    setLatency() ? returnOK() : returnFail(500, "Error: no \'latency\' in json arg");
-  });
+  server.on("/latency", HTTP_POST, setLatency);
 
   if (!MDNS.begin(getName().c_str())) {
 #ifdef DEBUG
@@ -1210,15 +1251,18 @@ void setup() {
   //
   //get heap status, analog input value and all GPIO statuses in one json call
   server.on("/all", HTTP_GET, [](){
-    String json = "{";
-    json += "\"heap\":"+String(ESP.getFreeHeap())+",";
-    json += "\"ip\":\""+String(WiFi.localIP())+"\",";
-    json += "\"mac\":\""+getMacFull()+"\",";
-    json += "\"name\":\""+getName()+"\",";
-    json += "\"num_channels\":"+String(numChannels);
-    json += "}";
-    server.send(200, "text/json", json);
-    json = String();
+    const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 300;
+    DynamicJsonBuffer jsonBuffer(argBufferSize);
+    JsonObject& root = jsonBuffer.createObject();
+    root[JSON_BOARD_CONNECTED] = noSPIMaster();
+    root[JSON_HEAP] = clientMQTT.connected();
+    root[JSON_TCP_IP] = WiFi.localIP().toString();
+    root[JSON_MAC] = getMac();
+    root[JSON_NAME] = getName();
+    root[JSON_NUM_CHANNELS] = numChannels;
+    String output;
+    root.printTo(output);
+    server.send(200, "text/json", output);
   });
 
   server.begin();
@@ -1243,6 +1287,10 @@ void setup() {
   webSocket.onEvent(webSocketEvent);
 
   clientMQTT.setCallback(callbackMQTT);
+
+#ifdef DEBUG
+  Serial.printf("Spi has master: %b", !noSPIMaster());
+#endif
 
 }
 // unsigned long lastPrint = 0;
