@@ -168,8 +168,9 @@ PubSubClient clientMQTT(espClient);
  * Has the SPI Master polled this device in the past SPI_MASTER_POLL_TIMEOUT_MS
  * @returns [boolean] True if SPI Master has polled within timeout.
  */
-boolean noSPIMaster() {
-  return millis() > lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
+boolean hasSpiMaster() {
+  Serial.printf("millis(): %d < %d \nlastTimeWasPolled:%d", millis(), lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS, lastTimeWasPolled);
+  return millis() < lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
 }
 
 
@@ -424,7 +425,7 @@ void gainSet(uint8_t *raw) {
       scaleFactors[i] = ADS1299_VREF / gainCyton(raw[byteCounter++]) / ADC_24BIT_RES_NANO_VOLT;
     }
 #ifdef DEBUG
-    Serial.printf("Channel: %d\n\tscale factor: %.10f\n", i+1, scaleFactors[i]);
+    Serial.printf("Channel: %d\n\tscale factor: %.20f\n", i+1, scaleFactors[i]);
 #endif
   }
 
@@ -630,7 +631,7 @@ void setLatency() {
  */
 void passThroughCommand() {
   if (noBodyInParam()) return returnNoBodyInPost();
-  if (noSPIMaster()) return returnNoSPIMaster();
+  if (!hasSpiMaster()) return returnNoSPIMaster();
   JsonObject& root = getArgFromArgs();
 
   if (root.containsKey(JSON_COMMAND)) {
@@ -1083,10 +1084,11 @@ void setup() {
         }
       }
     }
-    lastTimeWasPolled = millis();
   });
 
   SPISlave.onDataSent([]() {
+    lastTimeWasPolled = millis();
+#ifdef DEBUG
     if (passthroughBuffer[0] > 0) {
       Serial.println("Sent data: 0x");
       for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
@@ -1094,6 +1096,7 @@ void setup() {
       }
       Serial.println();
     }
+#endif
     for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
       passthroughBuffer[i] = 0;
     }
@@ -1254,8 +1257,8 @@ void setup() {
     const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 300;
     DynamicJsonBuffer jsonBuffer(argBufferSize);
     JsonObject& root = jsonBuffer.createObject();
-    root[JSON_BOARD_CONNECTED] = noSPIMaster();
-    root[JSON_HEAP] = clientMQTT.connected();
+    root[JSON_BOARD_CONNECTED] = hasSpiMaster() ? true : false;
+    root[JSON_HEAP] = ESP.getFreeHeap();
     root[JSON_TCP_IP] = WiFi.localIP().toString();
     root[JSON_MAC] = getMac();
     root[JSON_NAME] = getName();
@@ -1263,6 +1266,9 @@ void setup() {
     String output;
     root.printTo(output);
     server.send(200, "text/json", output);
+#ifdef DEBUG
+    root.printTo(Serial);
+#endif
   });
 
   server.begin();
@@ -1289,7 +1295,7 @@ void setup() {
   clientMQTT.setCallback(callbackMQTT);
 
 #ifdef DEBUG
-  Serial.printf("Spi has master: %b", !noSPIMaster());
+  Serial.println("Spi has master: " + String(hasSpiMaster() ? "true" : "false"));
 #endif
 
 }
@@ -1447,10 +1453,10 @@ void loop() {
       }
 
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
-        // root.printTo(Serial);
-        root.printTo(clientTCP);
+        root.printTo(Serial);
+        // root.printTo(clientTCP);
       } else {
-        root.prettyPrintTo(jsonStr);
+        root.printTo(jsonStr);
         clientMQTT.publish("openbci", jsonStr.c_str());
         jsonStr = "";
       }
