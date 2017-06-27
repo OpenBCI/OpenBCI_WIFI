@@ -19,6 +19,7 @@
 #define NUM_CHANNELS_CYTON 8
 #define NUM_CHANNELS_CYTON_DAISY 16
 #define NUM_CHANNELS_GANGLION 4
+#define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
 //   https://bblanchon.github.io/ArduinoJson/assistant/index.html
@@ -903,6 +904,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
 	switch(type) {
 		case WStype_DISCONNECTED:
+    webSocket.sendTXT(num, JSON_CONNECTED);
 			USE_SERIAL.printf("[%u] Disconnected!\n", num);
 			break;
 		case WStype_CONNECTED: {
@@ -1202,12 +1204,16 @@ void setup() {
 
   server.on("/test/start", HTTP_GET, [](){
     underSelfTest = true;
+#ifdef DEBUG
     Serial.println("Under self test start");
+#endif
     returnOK();
   });
   server.on("/test/stop", HTTP_GET, [](){
     underSelfTest = false;
+#ifdef DEBUG
     Serial.println("Under self test start");
+#endif
     returnOK();
   });
 
@@ -1293,6 +1299,7 @@ void setup() {
 
   server.begin();
   MDNS.addService("http", "tcp", 80);
+  MDNS.addService("ws", "tcp", 81);
 
 #ifdef DEBUG
     Serial.printf("Ready!\n");
