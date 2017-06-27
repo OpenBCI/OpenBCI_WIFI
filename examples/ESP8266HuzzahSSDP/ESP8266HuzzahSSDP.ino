@@ -22,6 +22,7 @@
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
 //   https://bblanchon.github.io/ArduinoJson/assistant/index.html
+#define ARDUINOJSON_USE_DOUBLE 1
 #define ARDUINOJSON_ADDITIONAL_BYTES_4_CHAN 115
 #define ARDUINOJSON_ADDITIONAL_BYTES_8_CHAN 195
 #define ARDUINOJSON_ADDITIONAL_BYTES_16_CHAN 355
@@ -95,7 +96,7 @@ typedef enum CYTON_GAIN {
 
 // STRUCTS
 typedef struct {
-    long *        channelData;
+    double *      channelData;
     unsigned long timestamp;
 } Sample;
 
@@ -330,7 +331,7 @@ void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
   const uint8_t byteOffset = 2;
   if (packetOffset == 0) {
     sample->timestamp = getTime();
-    long temp[numChannels];
+    double temp[numChannels];
     sample->channelData = temp;
   }
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
@@ -350,14 +351,12 @@ void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
     double volts = raw_d * scaleFactors[i + packetOffset];
     double nano_volts = volts * NANO_VOLTS_IN_VOLTS;
 
-    if (i == 0) {
-      Serial.printf("volts: %0.20f in nano_volts: %0.4f as long: %ld\n", volts, nano_volts, nano_volts);
-    }
-
-    sample->channelData[i + packetOffset] = (long)(nano_volts);
+    sample->channelData[i + packetOffset] = nano_volts;
 
     // Serial.printf("channel %d: %lu nV raw: %0.20f",i+1, sample->channelData[i + packetOffset], scaleFactors[i] * (double)raw);
   }
+
+  // Serial.printf("Channel 1: %12.4f", sample->channelData[0]); Serial.println(" nV");
 }
 
 /**
@@ -379,14 +378,15 @@ uint8_t sendJsonMaxPackets() {
  * The additional bytes needed for input duplication, follows max packets
  */
 int sendJsonAdditionalBytes() {
+  const int extraDoubleSpace = 500;
   switch (numChannels) {
     case NUM_CHANNELS_GANGLION:
-      return 1014;
+      return 1014 + extraDoubleSpace;
     case NUM_CHANNELS_CYTON_DAISY:
-      return 1062;
+      return 1062 + extraDoubleSpace;
     case NUM_CHANNELS_CYTON:
     default:
-      return 966;
+      return 966 + extraDoubleSpace;
   }
 }
 
@@ -649,6 +649,9 @@ void passThroughCommand() {
   if (!hasSpiMaster()) return returnNoSPIMaster();
   JsonObject& root = getArgFromArgs();
 
+#ifdef DEBUG
+  root.printTo(Serial);
+#endif
   if (root.containsKey(JSON_COMMAND)) {
     String cmds = root[JSON_COMMAND];
     uint8_t numCmds = uint8_t(cmds.length());
@@ -674,8 +677,10 @@ void passThroughCommand() {
     spiTXBufferLoaded = true;
     timeOfWifiTXBufferLoaded = millis();
     clientWaitingForResponse = true;
+    return;
+  } else {
+    return returnMissingRequiredParam(JSON_COMMAND);
   }
-  return returnMissingRequiredParam(JSON_COMMAND);
 }
 
 void setupSocketWithClient() {
@@ -1469,7 +1474,7 @@ void loop() {
 
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         // root.printTo(Serial);
-        // root.printTo(clientTCP);
+        root.printTo(clientTCP);
       } else {
         root.printTo(jsonStr);
         clientMQTT.publish("openbci", jsonStr.c_str());
