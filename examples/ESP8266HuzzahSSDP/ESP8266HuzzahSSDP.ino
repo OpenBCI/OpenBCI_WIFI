@@ -23,7 +23,7 @@
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
 //   https://bblanchon.github.io/ArduinoJson/assistant/index.html
-#define ARDUINOJSON_USE_DOUBLE 1
+// #define ARDUINOJSON_USE_DOUBLE 1
 #define ARDUINOJSON_ADDITIONAL_BYTES_4_CHAN 115
 #define ARDUINOJSON_ADDITIONAL_BYTES_8_CHAN 195
 #define ARDUINOJSON_ADDITIONAL_BYTES_16_CHAN 355
@@ -38,17 +38,18 @@
 #define NANO_VOLTS_IN_VOLTS 1000000000.0
 
 #define JSON_BOARD_CONNECTED "board_connected"
-#define JSON_MQTT_BROKER_ADDR "broker_address"
 #define JSON_COMMAND "command"
 #define JSON_CONNECTED "connected"
 #define JSON_HEAP "heap"
+#define JSON_LATENCY "latency"
 #define JSON_MAC "mac"
+#define JSON_MQTT_BROKER_ADDR "broker_address"
 #define JSON_MQTT_PASSWORD "password"
 #define JSON_MQTT_USERNAME "username"
 #define JSON_NAME "name"
 #define JSON_NUM_CHANNELS "num_channels"
+#define JSON_TCP_DELIMITER "delimiter"
 #define JSON_TCP_IP "ip"
-#define JSON_TCP_LATENCY "latency"
 #define JSON_TCP_OUTPUT "output"
 #define JSON_TCP_PORT "port"
 
@@ -112,11 +113,12 @@ boolean underSelfTest;
 
 CLIENT_RESPONSE curClientResponse;
 
-const char *serverCloudbrain;
-const char *serverCloudbrainAuth;
 const char *mqttUsername;
 const char *mqttPassword;
 const char *mqttBrokerAddress;
+const char *serverCloudbrain;
+const char *serverCloudbrainAuth;
+const char *tcpDelimiter;
 
 ESP8266WebServer server(80);
 
@@ -252,11 +254,12 @@ String mqttGetInfo() {
 }
 
 String tcpGetInfo() {
-  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 100;
+  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 100;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
   root[JSON_CONNECTED] = clientTCP.connected() == 1;
+  root[JSON_TCP_DELIMITER] = tcpDelimiter;
   root[JSON_TCP_IP] = tcpAddress.toString();
   root[JSON_TCP_OUTPUT] = getCurOutputMode();
   root[JSON_TCP_PORT] = tcpPort;
@@ -331,6 +334,7 @@ void ntpStart() {
 void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
   const uint8_t byteOffset = 2;
   if (packetOffset == 0) {
+    Serial.println(getTime());
     sample->timestamp = getTime();
     double temp[numChannels];
     sample->channelData = temp;
@@ -562,12 +566,16 @@ bool readRequest(WiFiClient& client) {
   return false;
 }
 
-JsonObject& getArgFromArgs() {
-  const size_t argBufferSize = JSON_OBJECT_SIZE(3) + 125;
-  DynamicJsonBuffer jsonBuffer(argBufferSize);
+JsonObject& getArgFromArgs(int args) {
+  // size_t argBufferSize = JSON_OBJECT_SIZE(args) + (40 * args);
+  DynamicJsonBuffer jsonBuffer(JSON_OBJECT_SIZE(args) + (40 * args));
   // const char* json = "{\"port\":13514}";
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
   return root;
+}
+
+JsonObject& getArgFromArgs() {
+  return getArgFromArgs(1);
 }
 
 // boolean cloudbrainAuthGetVhost(const char *serverAddr, const char *username) {
@@ -634,11 +642,11 @@ void setLatency() {
 
   JsonObject& root = getArgFromArgs();
 
-  if (root.containsKey(JSON_TCP_LATENCY)) {
-    latency = root[JSON_TCP_LATENCY];
+  if (root.containsKey(JSON_LATENCY)) {
+    latency = root[JSON_LATENCY];
     returnOK();
   } else {
-    returnMissingRequiredParam(JSON_TCP_LATENCY);
+    returnMissingRequiredParam(JSON_LATENCY);
   }
 }
 
@@ -687,13 +695,12 @@ void passThroughCommand() {
 void setupSocketWithClient() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs();
+  JsonObject& root = getArgFromArgs(5);
   if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
   String tempAddr = root[JSON_TCP_IP];
   if (!tcpAddress.fromString(tempAddr)) {
     return returnFail(505, "Error: unable to parse ip address. Please send as string in octets i.e. xxx.xxx.xxx.xxx");
   }
-
   if (!root.containsKey(JSON_TCP_PORT)) return returnMissingRequiredParam(JSON_TCP_PORT);
   tcpPort = root[JSON_TCP_PORT];
 
@@ -708,6 +715,21 @@ void setupSocketWithClient() {
     }
 #ifdef DEBUG
     Serial.print("Set output mode to "); Serial.println(getCurOutputMode());
+#endif
+  }
+
+  if (root.containsKey(JSON_LATENCY)) {
+    latency = root[JSON_LATENCY];
+#ifdef DEBUG
+    Serial.print("Set latency to "); Serial.print(latency); Serial.println(" uS");
+#endif
+  }
+
+  if (root.containsKey(JSON_TCP_DELIMITER)) {
+    String tempDelim = root[JSON_TCP_DELIMITER];
+    tcpDelimiter = tempDelim.c_str();
+#ifdef DEBUG
+    Serial.print("Got delimter of 0x"); Serial.print(tcpDelimiter[0], HEX); Serial.print(tempDelim[1], HEX); Serial.println();
 #endif
   }
 
@@ -756,12 +778,21 @@ boolean mqttConnect() {
 void mqttSetup() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
-  DynamicJsonBuffer jsonBuffer(argBufferSize);
-  JsonObject& root = jsonBuffer.parseObject(server.arg(0));
+  JsonObject& root = getArgFromArgs(5);
+  //
+  // size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
+  // DynamicJsonBuffer jsonBuffer(argBufferSize);
+  // JsonObject& root = jsonBuffer.parseObject(server.arg(0));
   if (!root.containsKey(JSON_MQTT_USERNAME)) return returnMissingRequiredParam(JSON_MQTT_USERNAME);
   if (!root.containsKey(JSON_MQTT_PASSWORD)) return returnMissingRequiredParam(JSON_MQTT_PASSWORD);
   if (!root.containsKey(JSON_MQTT_BROKER_ADDR)) return returnMissingRequiredParam(JSON_MQTT_BROKER_ADDR);
+
+  if (root.containsKey(JSON_LATENCY)) {
+    latency = root[JSON_LATENCY];
+#ifdef DEBUG
+    Serial.print("Set latency to "); Serial.print(latency); Serial.println(" uS");
+#endif
+  }
 
   mqttUsername = root[JSON_MQTT_USERNAME]; // "alongname.alonglastname@getcloudbrain.com"
   mqttPassword = root[JSON_MQTT_PASSWORD]; // "that time when i had a big password"
@@ -954,7 +985,9 @@ void initializeVariables() {
   timeOfWifiTXBufferLoaded = 0;
   samplesLoaded = 0;
 
+  jsonStr = "";
   outputString = "";
+  tcpDelimiter = "";
   mqttUsername = "";
   mqttPassword = "";
   mqttBrokerAddress = "";
@@ -1449,6 +1482,9 @@ void loop() {
       }
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
+        if (tcpDelimiter != NULL) {
+          clientTCP.write(tcpDelimiter);
+        }
       } else {
         clientMQTT.publish("openbci",(const char*) outputBuf);
 
@@ -1482,6 +1518,9 @@ void loop() {
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         // root.printTo(Serial);
         root.printTo(clientTCP);
+        if (tcpDelimiter != NULL) {
+          clientTCP.write("\r\n");
+        }
       } else {
         root.printTo(jsonStr);
         clientMQTT.publish("openbci", jsonStr.c_str());
