@@ -19,11 +19,12 @@
 #define NUM_CHANNELS_CYTON 8
 #define NUM_CHANNELS_CYTON_DAISY 16
 #define NUM_CHANNELS_GANGLION 4
-#define bit(b) (1UL << (b)) // Taken directly from Arduino.h
+// #define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
 //   https://bblanchon.github.io/ArduinoJson/assistant/index.html
 // #define ARDUINOJSON_USE_DOUBLE 1
+#define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_ADDITIONAL_BYTES_4_CHAN 115
 #define ARDUINOJSON_ADDITIONAL_BYTES_8_CHAN 195
 #define ARDUINOJSON_ADDITIONAL_BYTES_16_CHAN 355
@@ -98,18 +99,19 @@ typedef enum CYTON_GAIN {
 
 // STRUCTS
 typedef struct {
-    double *      channelData;
-    unsigned long timestamp;
+    double *channelData;
+    uint64_t timestamp;
 } Sample;
 
 boolean clientWaitingForResponse;
 boolean clientWaitingForResponseFullfilled;
 boolean ntpOffsetSet;
+boolean underSelfTest;
+boolean spiTXBufferLoaded;
 boolean syncingNtp;
+boolean tcpDelimiter;
 boolean waitingOnNTP;
 boolean waitingDaisyPacket;
-boolean spiTXBufferLoaded;
-boolean underSelfTest;
 
 CLIENT_RESPONSE curClientResponse;
 
@@ -118,7 +120,6 @@ const char *mqttPassword;
 const char *mqttBrokerAddress;
 const char *serverCloudbrain;
 const char *serverCloudbrainAuth;
-const char *tcpDelimiter;
 
 ESP8266WebServer server(80);
 
@@ -246,7 +247,7 @@ String mqttGetInfo() {
   String json;
   JsonObject& root = jsonBuffer.createObject();
   root[JSON_MQTT_BROKER_ADDR] = String(mqttBrokerAddress);
-  root[JSON_CONNECTED] = clientMQTT.connected();
+  root[JSON_CONNECTED] = clientMQTT.connected() ? true : false;
   root[JSON_MQTT_USERNAME] = String(mqttUsername);
   root[JSON_TCP_OUTPUT] = getCurOutputMode();
   root.printTo(json);
@@ -258,8 +259,8 @@ String tcpGetInfo() {
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
-  root[JSON_CONNECTED] = clientTCP.connected() == 1;
-  root[JSON_TCP_DELIMITER] = tcpDelimiter;
+  root[JSON_CONNECTED] = clientTCP.connected() ? true : false;
+  root[JSON_TCP_DELIMITER] = tcpDelimiter ? true : false;
   root[JSON_TCP_IP] = tcpAddress.toString();
   root[JSON_TCP_OUTPUT] = getCurOutputMode();
   root[JSON_TCP_PORT] = tcpPort;
@@ -293,16 +294,16 @@ boolean ntpActive() {
  * Get ntp time in microseconds
  * @return [long] - The time in micro second
  */
-unsigned long ntpGetTime() {
-  return time(nullptr) * MICROS_IN_SECONDS;
+uint64_t ntpGetTime() {
+  return ((uint64_t)time(nullptr)) * MICROS_IN_SECONDS;
 }
 
 /**
  * Safely get the time, defaults to micros() if ntp is not active.
  */
-unsigned long getTime() {
+uint64_t getTime() {
   if (ntpActive()) {
-    return ntpGetTime() + ((micros()%MICROS_IN_SECONDS) - (ntpOffset%MICROS_IN_SECONDS));
+    return ntpGetTime() + (uint64_t)((micros()%MICROS_IN_SECONDS) - (ntpOffset%MICROS_IN_SECONDS));
   } else {
     return micros();
   }
@@ -334,7 +335,7 @@ void ntpStart() {
 void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
   const uint8_t byteOffset = 2;
   if (packetOffset == 0) {
-    Serial.println(getTime());
+    // Serial.println(getTime());
     sample->timestamp = getTime();
     double temp[numChannels];
     sample->channelData = temp;
@@ -726,10 +727,9 @@ void setupSocketWithClient() {
   }
 
   if (root.containsKey(JSON_TCP_DELIMITER)) {
-    String tempDelim = root[JSON_TCP_DELIMITER];
-    tcpDelimiter = tempDelim.c_str();
+    tcpDelimiter = root[JSON_TCP_DELIMITER];
 #ifdef DEBUG
-    Serial.print("Got delimter of 0x"); Serial.print(tcpDelimiter[0], HEX); Serial.print(tempDelim[1], HEX); Serial.println();
+    Serial.print("Will use delimiter:"); Serial.println(tcpDelimiter ? "true" : "false");
 #endif
   }
 
@@ -960,12 +960,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 void initializeVariables() {
   clientWaitingForResponse = false;
   clientWaitingForResponseFullfilled = false;
-  spiTXBufferLoaded = false;
-  underSelfTest = false;
-  syncingNtp = false;
-  waitingOnNTP = false;
   ntpOffsetSet = false;
+  underSelfTest = false;
+  spiTXBufferLoaded = false;
+  syncingNtp = false;
+  tcpDelimiter = false;
   waitingDaisyPacket = false;
+  waitingOnNTP = false;
 
   counter = 0;
   head = 0;
@@ -987,7 +988,6 @@ void initializeVariables() {
 
   jsonStr = "";
   outputString = "";
-  tcpDelimiter = "";
   mqttUsername = "";
   mqttPassword = "";
   mqttBrokerAddress = "";
@@ -1482,8 +1482,8 @@ void loop() {
       }
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
-        if (tcpDelimiter != NULL) {
-          clientTCP.write(tcpDelimiter);
+        if (tcpDelimiter) {
+          clientTCP.write("\r\n");
         }
       } else {
         clientMQTT.publish("openbci",(const char*) outputBuf);
@@ -1507,7 +1507,18 @@ void loop() {
           tail = 0;
         }
         JsonObject& sample = chunk.createNestedObject();
-        sample["timestamp"] = (sampleBuffer + tail)->timestamp;
+        // sample["timestamp"] = (sampleBuffer + tail)->timestamp;
+        root.set<uint64_t>("timestamp", (sampleBuffer + tail)->timestamp);
+
+        // unsigned long long1 = (unsigned long)(((sampleBuffer + tail)->timestamp & 0xFFFF0000) >> 16 );
+        // unsigned long long2 = (unsigned long)(((sampleBuffer + tail)->timestamp & 0x0000FFFF));
+        //
+        // String hex = String(long1) + String(long2);
+        //
+        // root["timestampStr"] = hex;
+
+        root["count"] = counter++;
+
         JsonArray& data = sample.createNestedArray("data");
         for (uint8_t j = 0; i < numChannels; i++) {
           data.add((sampleBuffer + tail)->channelData[j]);
@@ -1518,7 +1529,7 @@ void loop() {
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         // root.printTo(Serial);
         root.printTo(clientTCP);
-        if (tcpDelimiter != NULL) {
+        if (tcpDelimiter) {
           clientTCP.write("\r\n");
         }
       } else {
