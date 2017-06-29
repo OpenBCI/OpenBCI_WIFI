@@ -1,6 +1,6 @@
 # My makefile
 LIBARAIES_DIR = $(HOME)/Documents/Arduino/libraries
-SKETCH = $(LIBARAIES_DIR)/OpenBCI_Wifi/examples/ESP8266HuzzahSSDP/ESP8266HuzzahSSDP.ino
+SKETCH = $(LIBARAIES_DIR)/OpenBCI_Wifi/examples/DefaultBoard/DefaultBoard.ino
 OPENBCI_WIFI_DIR = $(LIBARAIES_DIR)/OpenBCI_Wifi
 
 UPLOAD_PORT = /dev/cu.usbserial-A104JV88
