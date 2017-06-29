@@ -8,10 +8,12 @@ Use SSDP or mDNS
 
 ## What does not work yet
 
-* Over the air uploading 
+* Over the air uploading
 
 
 ## Developing and Building
+
+Use the `ESP8266HuzzahSSDP.ino` in examples!
 
 You need to clone the [ESP8266 library from github](https://github.com/esp8266/Arduino#using-git-version).
 
