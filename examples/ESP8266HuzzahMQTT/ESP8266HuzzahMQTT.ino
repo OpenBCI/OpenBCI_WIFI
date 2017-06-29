@@ -18,7 +18,7 @@
  // Check out https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
  // #include "OpenBCI_Wifi.h"
 
-const char* mqtt_server = "localhost";
+const char* mqtt_server = "mock.getcloudbrain.com";
 
 // Create an instance of the server
 // specify the port to listen on as an argument
@@ -46,13 +46,11 @@ uint8_t ringBuf[maxPackets][bytesPerPacket];
 boolean packing = false;
 boolean clientSet = false;
 
-uint8_t lastSS = 0;
-uint8_t lastVal = 0xFF;
-uint8_t curOp = 0xFF;
 long lastReconnectAttempt = 0;
 
 boolean reconnect() {
-  if (client.connect("arduinoClient")) {
+  if (client.connect(mqtt_server, "cloudbrain", "cloudbrain")) {
+    Serial.println("MQTT connected");
     // Once connected, publish an announcement...
     client.publish("openbci/node","helloWorld");
     // ... and resubscribe
@@ -70,7 +68,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print((char)payload[i]);
   }
   Serial.println();
-  client.publish("openbci/node","helloWorld1");
 }
 
 void configModeCallback (WiFiManager *myWiFiManager) {
@@ -115,14 +112,6 @@ void printWifiStatus() {
 }
 
 void setup() {
-  // Start up wifi for OpenBCI
-  // wifi.begin(true);
-  //
-  // Udp.begin(localUdpPort);
-
-  // Boot up the library
-  // OpenBCI_Wifi.begin();
-
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.setDebugOutput(true);
@@ -198,10 +187,14 @@ void loop() {
   if (!client.connected()) {
     long now = millis();
     if (now - lastReconnectAttempt > 5000) {
+      Serial.println("Attempting reconnect...");
       lastReconnectAttempt = now;
       // Attempt to reconnect
       if (reconnect()) {
+        Serial.println("Able to connect");
         lastReconnectAttempt = 0;
+      } else {
+        Serial.println("not able to connect");
       }
     }
   } else {
@@ -209,82 +202,4 @@ void loop() {
     client.loop();
   }
 
-  // unsigned long now = micros();
-  // if (now - lastSendToClient > packetIntervalUs) {
-  //   //check SPI buffers for data
-  //   if (head != tail) {
-  //     uint8_t _head = head;
-  //     lastSendToClient = now;
-  //     // Serial.print("flushing buffer at "); Serial.print(now); Serial.print(" head: "); Serial.print(_head); Serial.print(" tail: "); Serial.println(tail);
-  //     tail = flushSPIToAllClients(tail, _head);
-  //     // tail = _head >= maxPackets ? 0 : ;
-  //   }
-  // }
 }
-
-// int flushSPIToAllClients(int _tail, int _head) {
-//   // size_t len = Serial.available();
-//   // uint8_t sbuf[len];
-//   // Serial.readBytes(sbuf, len);
-//   for(uint8_t i = 0; i < MAX_SRV_CLIENTS; i++){
-//     int __tail = _tail;
-//     if (serverClients[i] && serverClients[i].connected()){
-//       // Serial.print("flushing buffer at "); Serial.print(now); Serial.print(" head: "); Serial.print(_head); Serial.print(" tail: "); Serial.println(tail);
-//       while (__tail != _head) {
-//         if (__tail >= maxPackets) {
-//           __tail = 0;
-//         }
-//         // Serial.print("h "); Serial.print(_head); Serial.print("t: "); Serial.println(__tail);
-//         serverClients[i].write(ringBuf[__tail], bytesPerPacket);
-//         __tail++;
-//       }
-//       // for (int j = _tail; j < _head; j++) {
-//       //   Serial.write(ringBuf[j][1]);
-//       //   // serverClients[i].write(ringBuf[j], bytesPerPacket);
-//       // }
-//       delay(1);
-//     }
-//   }
-//   return _head;
-//   // Serial.println("Flushed");
-// }
-
-// void udpLoop() {
-//   int packetSize = Udp.parsePacket();
-//   if (packetSize) {
-//     if (!clientSet) {
-//       client = Udp.remoteIP();
-//       clientSet = true;
-//       Serial.println("client connected");
-//       Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
-//       Udp.write("ready fredy");
-//       Udp.endPacket();
-//     }
-//   }
-//   // If the client is set then try to flush the buffer.
-//   if (clientSet) {
-//     tryFlushBuffer();
-//   }
-// }
-//
-// void flushBufferToUDP(int start, int stop) {
-//   Udp.beginPacket(client, 2391);
-//   for (int j = start; j < stop; j++) {
-//     Udp.write(ringBuf[j], bytesPerPacket);
-//   }
-//   Udp.endPacket();
-//   // Serial.println("Flushed");
-//   if (stop == maxPackets) {
-//     tail = 0;
-//   } else {
-//     tail = stop;
-//   }
-// }
-
-// void tryFlushBuffer() {
-//   if (tail == 0 && head == 10) {
-//     flushBufferToUDP(tail, head);
-//   } else if (tail == 10 && head == 20) {
-//     flushBufferToUDP(tail, head);
-//   }
-// }

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Socket.io Client</title>
+  <base href="/">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js" type="text/javascript"></script>
+  <script type="text/javascript">
+    var allowedOrigins = "localhost:* 192.168.1.206:*";
+    var socket = io('http://192.168.1.206:80', {origins:allowedOrigins}); // ip of wifi shield and port of socket
+    socket.on('data', function (data) {
+      console.log(data);
+    });
+//    console.log('hey');
+  </script>
+</head>
+<body>
+  Check the console
+</body>
+</html>
