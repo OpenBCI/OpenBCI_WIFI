@@ -8,7 +8,7 @@
 #define MAX_SRV_CLIENTS 2
 // #define NUM_PACKETS_IN_RING_BUFFER 45
 #define NUM_PACKETS_IN_RING_BUFFER 100
-#define NUM_PACKETS_IN_RING_BUFFER_JSON 12
+#define NUM_PACKETS_IN_RING_BUFFER_JSON 100
 // #define MAX_PACKETS_PER_SEND_TCP 20
 #define MAX_PACKETS_PER_SEND_TCP 50
 #define WIFI_SPI_MSG_LAST 0x01
@@ -1088,6 +1088,7 @@ void setup() {
           if (head >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
             head = 0;
           }
+
           // Convert sample immidiate, store to buffer and get out!
           channelDataCompute(data, sampleBuffer+head, 0);
           head++;
@@ -1497,10 +1498,14 @@ void loop() {
         packetsToSend = sendJsonMaxPackets();
       }
 
+      // Serial.printf("New: PTS: %d h: %d t: %d\n", packetsToSend, head, tail);
+
       DynamicJsonBuffer jsonSampleBuffer(jsonBufferSize);
 
       JsonObject& root = jsonSampleBuffer.createObject();
       JsonArray& chunk = root.createNestedArray("chunk");
+
+      root["count"] = counter++;
 
       for (uint8_t i = 0; i < packetsToSend; i++) {
         if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
@@ -1508,30 +1513,28 @@ void loop() {
         }
         JsonObject& sample = chunk.createNestedObject();
         // sample["timestamp"] = (sampleBuffer + tail)->timestamp;
-        root.set<uint64_t>("timestamp", (sampleBuffer + tail)->timestamp);
+        sample.set<uint64_t>("timestamp", (sampleBuffer + tail)->timestamp);
 
-        // unsigned long long1 = (unsigned long)(((sampleBuffer + tail)->timestamp & 0xFFFF0000) >> 16 );
-        // unsigned long long2 = (unsigned long)(((sampleBuffer + tail)->timestamp & 0x0000FFFF));
-        //
-        // String hex = String(long1) + String(long2);
-        //
-        // root["timestampStr"] = hex;
-
-        root["count"] = counter++;
 
         JsonArray& data = sample.createNestedArray("data");
-        for (uint8_t j = 0; i < numChannels; i++) {
-          data.add((sampleBuffer + tail)->channelData[j]);
+        for (uint8_t j = 0; j < numChannels; j++) {
+          data.add(((sampleBuffer + tail)->channelData[j]));
         }
+
         tail++;
       }
 
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         // root.printTo(Serial);
-        root.printTo(clientTCP);
+        jsonStr = "";
+        root.printTo(jsonStr);
+
+        clientTCP.write(jsonStr.c_str());
+
         if (tcpDelimiter) {
           clientTCP.write("\r\n");
         }
+
       } else {
         root.printTo(jsonStr);
         clientMQTT.publish("openbci", jsonStr.c_str());
