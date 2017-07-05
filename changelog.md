@@ -1,3 +1,9 @@
+# v0.1.2
+
+### Enhancements
+
+* Removed WifiClientPrint dependency from make file.
+
 # v0.1.1
 
 ### Bug Fixes
