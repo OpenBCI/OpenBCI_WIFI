@@ -1317,7 +1317,7 @@ void setup() {
 
   server.on("/version", HTTP_GET, [](){
     digitalWrite(5, HIGH);
-    server.send(200, "text/plain", "v0.1.1");
+    server.send(200, "text/plain", "v0.1.2");
     digitalWrite(5, LOW);
   });
 
