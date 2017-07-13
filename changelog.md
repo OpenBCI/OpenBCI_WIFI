@@ -4,6 +4,10 @@
 
 * Removed WifiClientPrint dependency from make file.
 
+### New Features
+
+* Add route `/board` to get board type, connection status, number of channels and gains for each channel
+
 # v0.1.1
 
 ### Bug Fixes
