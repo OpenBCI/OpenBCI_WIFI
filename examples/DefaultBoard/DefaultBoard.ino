@@ -38,9 +38,16 @@
 #define CLIENT_RESPONSE_MISSING_REQUIRED_CMD 403
 #define NANO_VOLTS_IN_VOLTS 1000000000.0
 
+#define BOARD_TYPE_CYTON "cyton"
+#define BOARD_TYPE_DAISY "daisy"
+#define BOARD_TYPE_GANGLION "ganglion"
+#define BOARD_TYPE_NONE "none"
+
 #define JSON_BOARD_CONNECTED "board_connected"
+#define JSON_BOARD_TYPE "board_type"
 #define JSON_COMMAND "command"
 #define JSON_CONNECTED "connected"
+#define JSON_GAINS "gains"
 #define JSON_HEAP "heap"
 #define JSON_LATENCY "latency"
 #define JSON_MAC "mac"
@@ -123,6 +130,7 @@ const char *serverCloudbrainAuth;
 
 ESP8266WebServer server(80);
 
+uint8_t gains[MAX_CHANNELS];
 double scaleFactors[MAX_CHANNELS];
 
 IPAddress tcpAddress;
@@ -234,6 +242,22 @@ String getOutputMode(OUTPUT_MODE outputMode) {
     case OUTPUT_MODE_RAW:
     default:
       return "raw";
+  }
+}
+
+/**
+ * Used to get a pretty description of the board connected to the shield
+ */
+String getBoardType(uint8_t numChan) {
+  switch(numChan) {
+    case NUM_CHANNELS_CYTON_DAISY:
+      return BOARD_TYPE_DAISY;
+    case NUM_CHANNELS_CYTON:
+      return BOARD_TYPE_CYTON;
+    case NUM_CHANNELS_GANGLION:
+      return BOARD_TYPE_GANGLION;
+    default:
+      return BOARD_TYPE_NONE;
   }
 }
 
@@ -398,6 +422,7 @@ int sendJsonAdditionalBytes() {
 
 void gainReset() {
   for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
+    gains[i] = 0;
     scaleFactors[i] = 0.0;
   }
 }
@@ -441,8 +466,10 @@ void gainSet(uint8_t *raw) {
   for (uint8_t i = 0; i < numChannels; i++) {
     if (numChannels == NUM_CHANNELS_GANGLION) {
       // do gang related stuffs
+      gains[i] = gainGanglion();
       scaleFactors[i] = MCP3912_VREF / gainGanglion() / ADC_24BIT_RES;
     } else {
+      gains[i] = gainCyton(raw[byteCounter]); // Save the gains for later sending in /all
       scaleFactors[i] = ADS1299_VREF / gainCyton(raw[byteCounter++]) / ADC_24BIT_RES;
     }
 #ifdef DEBUG
@@ -1269,6 +1296,10 @@ void setup() {
     server.send(200, "text/json", tcpGetInfo());
   });
   server.on("/tcp", HTTP_POST, setupSocketWithClient);
+  server.on("/tcp", HTTP_DELETE, []() {
+    clientTCP.stop();
+    server.send(200, "text/json", tcpGetInfo());
+  });
 
   // These could be helpful...
   server.on("/stream/start", HTTP_GET, []() {
@@ -1286,7 +1317,7 @@ void setup() {
 
   server.on("/version", HTTP_GET, [](){
     digitalWrite(5, HIGH);
-    server.send(200, "text/plain", "v0.1.0");
+    server.send(200, "text/plain", "v0.1.2");
     digitalWrite(5, LOW);
   });
 
@@ -1314,7 +1345,7 @@ void setup() {
   //
   //get heap status, analog input value and all GPIO statuses in one json call
   server.on("/all", HTTP_GET, [](){
-    const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 300;
+    const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 115;
     DynamicJsonBuffer jsonBuffer(argBufferSize);
     JsonObject& root = jsonBuffer.createObject();
     root[JSON_BOARD_CONNECTED] = hasSpiMaster() ? true : false;
@@ -1323,6 +1354,25 @@ void setup() {
     root[JSON_MAC] = getMac();
     root[JSON_NAME] = getName();
     root[JSON_NUM_CHANNELS] = numChannels;
+    String output;
+    root.printTo(output);
+    server.send(200, "text/json", output);
+#ifdef DEBUG
+    root.printTo(Serial);
+#endif
+  });
+
+  server.on("/board", HTTP_GET, [](){
+    const size_t argBufferSize = JSON_OBJECT_SIZE(4) + 150 + JSON_ARRAY_SIZE(numChannels);
+    DynamicJsonBuffer jsonBuffer(argBufferSize);
+    JsonObject& root = jsonBuffer.createObject();
+    root[JSON_BOARD_CONNECTED] = hasSpiMaster() ? true : false;
+    root[JSON_BOARD_TYPE] = getBoardType(numChannels);
+    root[JSON_NUM_CHANNELS] = numChannels;
+    JsonArray& gainsArr = root.createNestedArray(JSON_GAINS);
+    for (uint8_t i = 0; i < numChannels; i++) {
+      gainsArr.add(gains[i]);
+    }
     String output;
     root.printTo(output);
     server.send(200, "text/json", output);
@@ -1414,9 +1464,6 @@ void loop() {
   //   Serial.println();
   // }
   // Only try to do OTA if 'prog' button is held down
-  if (digitalRead(0) == 0) {
-    ArduinoOTA.handle();
-  }
 
   if (clientWaitingForResponseFullfilled) {
     clientWaitingForResponseFullfilled = false;
