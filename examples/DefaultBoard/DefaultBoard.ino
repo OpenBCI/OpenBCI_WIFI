@@ -8,7 +8,7 @@
 #define MAX_SRV_CLIENTS 2
 // #define NUM_PACKETS_IN_RING_BUFFER 45
 #define NUM_PACKETS_IN_RING_BUFFER 100
-#define NUM_PACKETS_IN_RING_BUFFER_JSON 12
+#define NUM_PACKETS_IN_RING_BUFFER_JSON 100
 // #define MAX_PACKETS_PER_SEND_TCP 20
 #define MAX_PACKETS_PER_SEND_TCP 50
 #define WIFI_SPI_MSG_LAST 0x01
@@ -19,10 +19,12 @@
 #define NUM_CHANNELS_CYTON 8
 #define NUM_CHANNELS_CYTON_DAISY 16
 #define NUM_CHANNELS_GANGLION 4
+// #define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
 //   https://bblanchon.github.io/ArduinoJson/assistant/index.html
-#define ARDUINOJSON_USE_DOUBLE 1
+// #define ARDUINOJSON_USE_DOUBLE 1
+#define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_ADDITIONAL_BYTES_4_CHAN 115
 #define ARDUINOJSON_ADDITIONAL_BYTES_8_CHAN 195
 #define ARDUINOJSON_ADDITIONAL_BYTES_16_CHAN 355
@@ -36,18 +38,26 @@
 #define CLIENT_RESPONSE_MISSING_REQUIRED_CMD 403
 #define NANO_VOLTS_IN_VOLTS 1000000000.0
 
+#define BOARD_TYPE_CYTON "cyton"
+#define BOARD_TYPE_DAISY "daisy"
+#define BOARD_TYPE_GANGLION "ganglion"
+#define BOARD_TYPE_NONE "none"
+
 #define JSON_BOARD_CONNECTED "board_connected"
-#define JSON_MQTT_BROKER_ADDR "broker_address"
+#define JSON_BOARD_TYPE "board_type"
 #define JSON_COMMAND "command"
 #define JSON_CONNECTED "connected"
+#define JSON_GAINS "gains"
 #define JSON_HEAP "heap"
+#define JSON_LATENCY "latency"
 #define JSON_MAC "mac"
+#define JSON_MQTT_BROKER_ADDR "broker_address"
 #define JSON_MQTT_PASSWORD "password"
 #define JSON_MQTT_USERNAME "username"
 #define JSON_NAME "name"
 #define JSON_NUM_CHANNELS "num_channels"
+#define JSON_TCP_DELIMITER "delimiter"
 #define JSON_TCP_IP "ip"
-#define JSON_TCP_LATENCY "latency"
 #define JSON_TCP_OUTPUT "output"
 #define JSON_TCP_PORT "port"
 
@@ -96,29 +106,31 @@ typedef enum CYTON_GAIN {
 
 // STRUCTS
 typedef struct {
-    double *      channelData;
-    unsigned long timestamp;
+    double *channelData;
+    uint64_t timestamp;
 } Sample;
 
 boolean clientWaitingForResponse;
 boolean clientWaitingForResponseFullfilled;
 boolean ntpOffsetSet;
+boolean underSelfTest;
+boolean spiTXBufferLoaded;
 boolean syncingNtp;
+boolean tcpDelimiter;
 boolean waitingOnNTP;
 boolean waitingDaisyPacket;
-boolean spiTXBufferLoaded;
-boolean underSelfTest;
 
 CLIENT_RESPONSE curClientResponse;
 
-const char *serverCloudbrain;
-const char *serverCloudbrainAuth;
 const char *mqttUsername;
 const char *mqttPassword;
 const char *mqttBrokerAddress;
+const char *serverCloudbrain;
+const char *serverCloudbrainAuth;
 
 ESP8266WebServer server(80);
 
+uint8_t gains[MAX_CHANNELS];
 double scaleFactors[MAX_CHANNELS];
 
 IPAddress tcpAddress;
@@ -233,6 +245,22 @@ String getOutputMode(OUTPUT_MODE outputMode) {
   }
 }
 
+/**
+ * Used to get a pretty description of the board connected to the shield
+ */
+String getBoardType(uint8_t numChan) {
+  switch(numChan) {
+    case NUM_CHANNELS_CYTON_DAISY:
+      return BOARD_TYPE_DAISY;
+    case NUM_CHANNELS_CYTON:
+      return BOARD_TYPE_CYTON;
+    case NUM_CHANNELS_GANGLION:
+      return BOARD_TYPE_GANGLION;
+    default:
+      return BOARD_TYPE_NONE;
+  }
+}
+
 String getCurOutputMode() {
   return getOutputMode(curOutputMode);
 }
@@ -243,7 +271,7 @@ String mqttGetInfo() {
   String json;
   JsonObject& root = jsonBuffer.createObject();
   root[JSON_MQTT_BROKER_ADDR] = String(mqttBrokerAddress);
-  root[JSON_CONNECTED] = clientMQTT.connected();
+  root[JSON_CONNECTED] = clientMQTT.connected() ? true : false;
   root[JSON_MQTT_USERNAME] = String(mqttUsername);
   root[JSON_TCP_OUTPUT] = getCurOutputMode();
   root.printTo(json);
@@ -251,11 +279,12 @@ String mqttGetInfo() {
 }
 
 String tcpGetInfo() {
-  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 100;
+  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 100;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
-  root[JSON_CONNECTED] = clientTCP.connected() == 1;
+  root[JSON_CONNECTED] = clientTCP.connected() ? true : false;
+  root[JSON_TCP_DELIMITER] = tcpDelimiter ? true : false;
   root[JSON_TCP_IP] = tcpAddress.toString();
   root[JSON_TCP_OUTPUT] = getCurOutputMode();
   root[JSON_TCP_PORT] = tcpPort;
@@ -289,16 +318,16 @@ boolean ntpActive() {
  * Get ntp time in microseconds
  * @return [long] - The time in micro second
  */
-unsigned long ntpGetTime() {
-  return time(nullptr) * MICROS_IN_SECONDS;
+uint64_t ntpGetTime() {
+  return ((uint64_t)time(nullptr)) * MICROS_IN_SECONDS;
 }
 
 /**
  * Safely get the time, defaults to micros() if ntp is not active.
  */
-unsigned long getTime() {
+uint64_t getTime() {
   if (ntpActive()) {
-    return ntpGetTime() + ((micros()%MICROS_IN_SECONDS) - (ntpOffset%MICROS_IN_SECONDS));
+    return ntpGetTime() + (uint64_t)((micros()%MICROS_IN_SECONDS) - (ntpOffset%MICROS_IN_SECONDS));
   } else {
     return micros();
   }
@@ -330,6 +359,7 @@ void ntpStart() {
 void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
   const uint8_t byteOffset = 2;
   if (packetOffset == 0) {
+    // Serial.println(getTime());
     sample->timestamp = getTime();
     double temp[numChannels];
     sample->channelData = temp;
@@ -392,6 +422,7 @@ int sendJsonAdditionalBytes() {
 
 void gainReset() {
   for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
+    gains[i] = 0;
     scaleFactors[i] = 0.0;
   }
 }
@@ -435,8 +466,10 @@ void gainSet(uint8_t *raw) {
   for (uint8_t i = 0; i < numChannels; i++) {
     if (numChannels == NUM_CHANNELS_GANGLION) {
       // do gang related stuffs
+      gains[i] = gainGanglion();
       scaleFactors[i] = MCP3912_VREF / gainGanglion() / ADC_24BIT_RES;
     } else {
+      gains[i] = gainCyton(raw[byteCounter]); // Save the gains for later sending in /all
       scaleFactors[i] = ADS1299_VREF / gainCyton(raw[byteCounter++]) / ADC_24BIT_RES;
     }
 #ifdef DEBUG
@@ -561,12 +594,16 @@ bool readRequest(WiFiClient& client) {
   return false;
 }
 
-JsonObject& getArgFromArgs() {
-  const size_t argBufferSize = JSON_OBJECT_SIZE(3) + 125;
-  DynamicJsonBuffer jsonBuffer(argBufferSize);
+JsonObject& getArgFromArgs(int args) {
+  // size_t argBufferSize = JSON_OBJECT_SIZE(args) + (40 * args);
+  DynamicJsonBuffer jsonBuffer(JSON_OBJECT_SIZE(args) + (40 * args));
   // const char* json = "{\"port\":13514}";
   JsonObject& root = jsonBuffer.parseObject(server.arg(0));
   return root;
+}
+
+JsonObject& getArgFromArgs() {
+  return getArgFromArgs(1);
 }
 
 // boolean cloudbrainAuthGetVhost(const char *serverAddr, const char *username) {
@@ -633,11 +670,11 @@ void setLatency() {
 
   JsonObject& root = getArgFromArgs();
 
-  if (root.containsKey(JSON_TCP_LATENCY)) {
-    latency = root[JSON_TCP_LATENCY];
+  if (root.containsKey(JSON_LATENCY)) {
+    latency = root[JSON_LATENCY];
     returnOK();
   } else {
-    returnMissingRequiredParam(JSON_TCP_LATENCY);
+    returnMissingRequiredParam(JSON_LATENCY);
   }
 }
 
@@ -686,13 +723,12 @@ void passThroughCommand() {
 void setupSocketWithClient() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs();
+  JsonObject& root = getArgFromArgs(5);
   if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
   String tempAddr = root[JSON_TCP_IP];
   if (!tcpAddress.fromString(tempAddr)) {
     return returnFail(505, "Error: unable to parse ip address. Please send as string in octets i.e. xxx.xxx.xxx.xxx");
   }
-
   if (!root.containsKey(JSON_TCP_PORT)) return returnMissingRequiredParam(JSON_TCP_PORT);
   tcpPort = root[JSON_TCP_PORT];
 
@@ -707,6 +743,20 @@ void setupSocketWithClient() {
     }
 #ifdef DEBUG
     Serial.print("Set output mode to "); Serial.println(getCurOutputMode());
+#endif
+  }
+
+  if (root.containsKey(JSON_LATENCY)) {
+    latency = root[JSON_LATENCY];
+#ifdef DEBUG
+    Serial.print("Set latency to "); Serial.print(latency); Serial.println(" uS");
+#endif
+  }
+
+  if (root.containsKey(JSON_TCP_DELIMITER)) {
+    tcpDelimiter = root[JSON_TCP_DELIMITER];
+#ifdef DEBUG
+    Serial.print("Will use delimiter:"); Serial.println(tcpDelimiter ? "true" : "false");
 #endif
   }
 
@@ -755,12 +805,21 @@ boolean mqttConnect() {
 void mqttSetup() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
-  DynamicJsonBuffer jsonBuffer(argBufferSize);
-  JsonObject& root = jsonBuffer.parseObject(server.arg(0));
+  JsonObject& root = getArgFromArgs(5);
+  //
+  // size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
+  // DynamicJsonBuffer jsonBuffer(argBufferSize);
+  // JsonObject& root = jsonBuffer.parseObject(server.arg(0));
   if (!root.containsKey(JSON_MQTT_USERNAME)) return returnMissingRequiredParam(JSON_MQTT_USERNAME);
   if (!root.containsKey(JSON_MQTT_PASSWORD)) return returnMissingRequiredParam(JSON_MQTT_PASSWORD);
   if (!root.containsKey(JSON_MQTT_BROKER_ADDR)) return returnMissingRequiredParam(JSON_MQTT_BROKER_ADDR);
+
+  if (root.containsKey(JSON_LATENCY)) {
+    latency = root[JSON_LATENCY];
+#ifdef DEBUG
+    Serial.print("Set latency to "); Serial.print(latency); Serial.println(" uS");
+#endif
+  }
 
   mqttUsername = root[JSON_MQTT_USERNAME]; // "alongname.alonglastname@getcloudbrain.com"
   mqttPassword = root[JSON_MQTT_PASSWORD]; // "that time when i had a big password"
@@ -903,6 +962,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
 	switch(type) {
 		case WStype_DISCONNECTED:
+    webSocket.sendTXT(num, JSON_CONNECTED);
 			USE_SERIAL.printf("[%u] Disconnected!\n", num);
 			break;
 		case WStype_CONNECTED: {
@@ -927,12 +987,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 void initializeVariables() {
   clientWaitingForResponse = false;
   clientWaitingForResponseFullfilled = false;
-  spiTXBufferLoaded = false;
-  underSelfTest = false;
-  syncingNtp = false;
-  waitingOnNTP = false;
   ntpOffsetSet = false;
+  underSelfTest = false;
+  spiTXBufferLoaded = false;
+  syncingNtp = false;
+  tcpDelimiter = false;
   waitingDaisyPacket = false;
+  waitingOnNTP = false;
 
   counter = 0;
   head = 0;
@@ -952,6 +1013,7 @@ void initializeVariables() {
   timeOfWifiTXBufferLoaded = 0;
   samplesLoaded = 0;
 
+  jsonStr = "";
   outputString = "";
   mqttUsername = "";
   mqttPassword = "";
@@ -1053,6 +1115,7 @@ void setup() {
           if (head >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
             head = 0;
           }
+
           // Convert sample immidiate, store to buffer and get out!
           channelDataCompute(data, sampleBuffer+head, 0);
           head++;
@@ -1202,12 +1265,16 @@ void setup() {
 
   server.on("/test/start", HTTP_GET, [](){
     underSelfTest = true;
+#ifdef DEBUG
     Serial.println("Under self test start");
+#endif
     returnOK();
   });
   server.on("/test/stop", HTTP_GET, [](){
     underSelfTest = false;
+#ifdef DEBUG
     Serial.println("Under self test start");
+#endif
     returnOK();
   });
 
@@ -1229,6 +1296,10 @@ void setup() {
     server.send(200, "text/json", tcpGetInfo());
   });
   server.on("/tcp", HTTP_POST, setupSocketWithClient);
+  server.on("/tcp", HTTP_DELETE, []() {
+    clientTCP.stop();
+    server.send(200, "text/json", tcpGetInfo());
+  });
 
   // These could be helpful...
   server.on("/stream/start", HTTP_GET, []() {
@@ -1246,7 +1317,7 @@ void setup() {
 
   server.on("/version", HTTP_GET, [](){
     digitalWrite(5, HIGH);
-    server.send(200, "text/plain", "v0.1.0");
+    server.send(200, "text/plain", "v0.1.2");
     digitalWrite(5, LOW);
   });
 
@@ -1274,7 +1345,7 @@ void setup() {
   //
   //get heap status, analog input value and all GPIO statuses in one json call
   server.on("/all", HTTP_GET, [](){
-    const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 300;
+    const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 115;
     DynamicJsonBuffer jsonBuffer(argBufferSize);
     JsonObject& root = jsonBuffer.createObject();
     root[JSON_BOARD_CONNECTED] = hasSpiMaster() ? true : false;
@@ -1291,8 +1362,28 @@ void setup() {
 #endif
   });
 
+  server.on("/board", HTTP_GET, [](){
+    const size_t argBufferSize = JSON_OBJECT_SIZE(4) + 150 + JSON_ARRAY_SIZE(numChannels);
+    DynamicJsonBuffer jsonBuffer(argBufferSize);
+    JsonObject& root = jsonBuffer.createObject();
+    root[JSON_BOARD_CONNECTED] = hasSpiMaster() ? true : false;
+    root[JSON_BOARD_TYPE] = getBoardType(numChannels);
+    root[JSON_NUM_CHANNELS] = numChannels;
+    JsonArray& gainsArr = root.createNestedArray(JSON_GAINS);
+    for (uint8_t i = 0; i < numChannels; i++) {
+      gainsArr.add(gains[i]);
+    }
+    String output;
+    root.printTo(output);
+    server.send(200, "text/json", output);
+#ifdef DEBUG
+    root.printTo(Serial);
+#endif
+  });
+
   server.begin();
   MDNS.addService("http", "tcp", 80);
+  MDNS.addService("ws", "tcp", 81);
 
 #ifdef DEBUG
     Serial.printf("Ready!\n");
@@ -1373,9 +1464,6 @@ void loop() {
   //   Serial.println();
   // }
   // Only try to do OTA if 'prog' button is held down
-  if (digitalRead(0) == 0) {
-    ArduinoOTA.handle();
-  }
 
   if (clientWaitingForResponseFullfilled) {
     clientWaitingForResponseFullfilled = false;
@@ -1442,6 +1530,9 @@ void loop() {
       }
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         clientTCP.write(outputBuf, BYTES_PER_OBCI_PACKET * packetsToSend);
+        if (tcpDelimiter) {
+          clientTCP.write("\r\n");
+        }
       } else {
         clientMQTT.publish("openbci",(const char*) outputBuf);
 
@@ -1454,27 +1545,43 @@ void loop() {
         packetsToSend = sendJsonMaxPackets();
       }
 
+      // Serial.printf("New: PTS: %d h: %d t: %d\n", packetsToSend, head, tail);
+
       DynamicJsonBuffer jsonSampleBuffer(jsonBufferSize);
 
       JsonObject& root = jsonSampleBuffer.createObject();
       JsonArray& chunk = root.createNestedArray("chunk");
+
+      root["count"] = counter++;
 
       for (uint8_t i = 0; i < packetsToSend; i++) {
         if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
           tail = 0;
         }
         JsonObject& sample = chunk.createNestedObject();
-        sample["timestamp"] = (sampleBuffer + tail)->timestamp;
+        // sample["timestamp"] = (sampleBuffer + tail)->timestamp;
+        sample.set<uint64_t>("timestamp", (sampleBuffer + tail)->timestamp);
+
+
         JsonArray& data = sample.createNestedArray("data");
-        for (uint8_t j = 0; i < numChannels; i++) {
-          data.add((sampleBuffer + tail)->channelData[j]);
+        for (uint8_t j = 0; j < numChannels; j++) {
+          data.add(((sampleBuffer + tail)->channelData[j]));
         }
+
         tail++;
       }
 
       if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
         // root.printTo(Serial);
-        root.printTo(clientTCP);
+        jsonStr = "";
+        root.printTo(jsonStr);
+
+        clientTCP.write(jsonStr.c_str());
+
+        if (tcpDelimiter) {
+          clientTCP.write("\r\n");
+        }
+
       } else {
         root.printTo(jsonStr);
         clientMQTT.publish("openbci", jsonStr.c_str());
