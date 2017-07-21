@@ -65,6 +65,7 @@
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266SSDP.h>
 #include <WiFiManager.h>
 #include "SPISlave.h"
@@ -129,6 +130,7 @@ const char *serverCloudbrain;
 const char *serverCloudbrainAuth;
 
 ESP8266WebServer server(80);
+ESP8266HTTPUpdateServer httpUpdater;
 
 uint8_t gains[MAX_CHANNELS];
 double scaleFactors[MAX_CHANNELS];
@@ -1380,6 +1382,8 @@ void setup() {
     root.printTo(Serial);
 #endif
   });
+
+  httpUpdater.setup(&server);
 
   server.begin();
   MDNS.addService("http", "tcp", 80);

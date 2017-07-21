@@ -1,3 +1,9 @@
+# v0.2.0
+
+### Enhancements
+
+* Over the air uploading working! Woo yess go to `/update` and boom! Victory!
+
 # v0.1.2
 
 ### Enhancements
