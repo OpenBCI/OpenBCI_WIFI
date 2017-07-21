@@ -92,7 +92,8 @@ typedef enum OUTPUT_PROTOCOL {
   OUTPUT_PROTOCOL_NONE,
   OUTPUT_PROTOCOL_TCP,
   OUTPUT_PROTOCOL_MQTT,
-  OUTPUT_PROTOCOL_WEB_SOCKETS
+  OUTPUT_PROTOCOL_WEB_SOCKETS,
+  OUTPUT_PROTOCOL_SERIAL
 };
 
 typedef enum CYTON_GAIN {
@@ -221,7 +222,7 @@ String getMac() {
 }
 
 String getModelNumber() {
-  String AP_NameString = "PTW-OBCI-0001-" + getMacLastFourBytes();
+  String AP_NameString = "PTW-0001-" + getMacLastFourBytes();
 
   char AP_NameChar[AP_NameString.length() + 1];
   memset(AP_NameChar, 0, AP_NameString.length() + 1);
@@ -1068,7 +1069,7 @@ void initializeVariables() {
   // curOutputMode = OUTPUT_MODE_RAW;
   curOutputMode = OUTPUT_MODE_JSON;
   // curOutputProtocol = OUTPUT_PROTOCOL_MQTT;
-  curOutputProtocol = OUTPUT_PROTOCOL_TCP;
+  curOutputProtocol = OUTPUT_PROTOCOL_SERIAL;
   curClientResponse = CLIENT_RESPONSE_NONE;
 
   passthroughBufferClear();
@@ -1477,7 +1478,7 @@ void loop() {
       ntpLastTimeSeconds = 0;
     }
     ntpTimeSyncAttempts++;
-    if (ntpTimeSyncAttempts > 3) {
+    if (ntpTimeSyncAttempts > 10) {
 #ifdef DEBUG
       Serial.println("Unable to get ntp sync");
 #endif
@@ -1535,7 +1536,7 @@ void loop() {
 #endif
   }
 
-  if((clientTCP.connected() || clientMQTT.connected()) && (micros() > (lastSendToClient + latency)) && head != tail) {
+  if((clientTCP.connected() || clientMQTT.connected() || curOutputProtocol == OUTPUT_PROTOCOL_SERIAL) && (micros() > (lastSendToClient + latency)) && head != tail) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cTCP: "); Serial.print(clientTCP.connected()); Serial.print(" cMQTT: "); Serial.println(clientMQTT.connected());
 
     digitalWrite(5, HIGH);
@@ -1564,9 +1565,10 @@ void loop() {
         if (tcpDelimiter) {
           clientTCP.write("\r\n");
         }
-      } else {
+      } else if (curOutputProtocol == OUTPUT_PROTOCOL_MQTT) {
         clientMQTT.publish("openbci",(const char*) outputBuf);
-
+      } else {
+        Serial.println((const char*)outputBuf);
       }
     } else { // output mode is JSON
       if (packetsToSend < 0) {
@@ -1593,7 +1595,6 @@ void loop() {
         // sample["timestamp"] = (sampleBuffer + tail)->timestamp;
         sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
 
-
         JsonArray& data = sample.createNestedArray("data");
         for (uint8_t j = 0; j < numChannels; j++) {
           data.add(((sampleBuffer + tail)->channelData[j]));
@@ -1613,10 +1614,12 @@ void loop() {
           clientTCP.write("\r\n");
         }
 
-      } else {
+      } else if (curOutputProtocol == OUTPUT_PROTOCOL_MQTT) {
         root.printTo(jsonStr);
         clientMQTT.publish("openbci", jsonStr.c_str());
         jsonStr = "";
+      } else {
+        root.printTo(Serial);
       }
     }
 
