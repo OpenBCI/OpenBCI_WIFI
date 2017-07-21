@@ -1,5 +1,9 @@
 # v0.2.0
 
+### Bug Fixes
+
+* When mac address was less than 16 i.e. 0x0X where X is 0-15 the device name would be like "OpenBCI-CF1" instead of "OpenBCI-0CF1".
+
 ### Enhancements
 
 * Over the air uploading working! Woo yess go to `/update` and boom! Victory!
