@@ -1,3 +1,9 @@
+# v0.2.1
+
+### Bug Fixes
+
+* Timestamp was not correct due to offset issue.
+
 # v0.2.0
 
 ### Bug Fixes

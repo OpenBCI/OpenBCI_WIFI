@@ -108,7 +108,7 @@ typedef enum CYTON_GAIN {
 // STRUCTS
 typedef struct {
     double *channelData;
-    uint64_t timestamp;
+    unsigned long long timestamp;
 } Sample;
 
 boolean clientWaitingForResponse;
@@ -186,7 +186,7 @@ PubSubClient clientMQTT(espClient);
  * @returns [boolean] True if SPI Master has polled within timeout.
  */
 boolean hasSpiMaster() {
-  Serial.printf("millis(): %d < %d \nlastTimeWasPolled:%d", millis(), lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS, lastTimeWasPolled);
+  Serial.printf("millis(): %d < %d \nlastTimeWasPolled:%d\n", millis(), lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS, lastTimeWasPolled);
   return millis() < lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
 }
 
@@ -327,16 +327,23 @@ boolean ntpActive() {
  * Get ntp time in microseconds
  * @return [long] - The time in micro second
  */
-uint64_t ntpGetTime() {
-  return ((uint64_t)time(nullptr)) * MICROS_IN_SECONDS;
+unsigned long long ntpGetTime() {
+  unsigned long long curTime = time(nullptr);
+  return curTime * MICROS_IN_SECONDS;
 }
 
 /**
  * Safely get the time, defaults to micros() if ntp is not active.
  */
-uint64_t getTime() {
+unsigned long long getTime() {
   if (ntpActive()) {
-    return ntpGetTime() + (uint64_t)((micros()%MICROS_IN_SECONDS) - (ntpOffset%MICROS_IN_SECONDS));
+    unsigned long long boardTime_uS = micros() % MICROS_IN_SECONDS;
+    unsigned long long adj = boardTime_uS - ntpOffset;
+    if (boardTime_uS < ntpOffset) {
+      boardTime_uS += MICROS_IN_SECONDS;
+      adj = boardTime_uS - ntpOffset;
+    }
+    return ntpGetTime() + adj;
   } else {
     return micros();
   }
@@ -957,6 +964,35 @@ void handleSensorCommand() {
   // SPISlave.setData(ip.toString().c_str());
 }
 
+void printLLNumber(unsigned long long n, uint8_t base) {
+  unsigned char buf[16 * sizeof(long)]; // Assumes 8-bit chars.
+  unsigned long long i = 0;
+
+  if (n == 0) {
+    Serial.print('0');
+    return;
+  }
+
+  while (n > 0) {
+    buf[i++] = n % base;
+    n /= base;
+  }
+
+  for (; i > 0; i--)
+    Serial.print((char) (buf[i - 1] < 10 ?
+      '0' + buf[i - 1] :
+      'A' + buf[i - 1] - 10));
+}
+
+void print(unsigned long long n, int base) {
+  printLLNumber(n, base);
+}
+
+void println(unsigned long long n, int base) {
+  print(n, base);
+  Serial.println();
+}
+
 //////////////////////////////////////////////
 // WebSockets ////////////////////////////////
 //////////////////////////////////////////////
@@ -1357,6 +1393,22 @@ void setup() {
 #endif
   });
 
+  server.on("/wifi", HTTP_DELETE, []() {
+
+#ifdef DEBUG
+    Serial.println("Forgetting wifi and restarting");
+#endif
+    server.send(200, "text/plain", "Forgetting wifi credentials and rebooting");
+
+#ifdef DEBUG
+    Serial.println(ESP.eraseConfig());
+#else
+    ESP.eraseConfig();
+#endif
+    delay(5000);
+    ESP.reset();
+  });
+
   httpUpdater.setup(&server);
 
   server.begin();
@@ -1403,15 +1455,16 @@ void loop() {
   }
 
   if (syncingNtp) {
-    unsigned long curTime = time(nullptr);
+    unsigned long long curTime = time(nullptr);
     if (ntpLastTimeSeconds == 0) {
       ntpLastTimeSeconds = curTime;
     } else if (ntpLastTimeSeconds < curTime) {
-      ntpOffset = micros();
+      ntpOffset = micros() % MICROS_IN_SECONDS;
       syncingNtp = false;
+      ntpOffsetSet = true;
 
 #ifdef DEBUG
-      Serial.print("Time set: "); Serial.println(ntpOffset);
+      Serial.print("\nTime set: "); Serial.println(ntpOffset);
 #endif
     }
   }
@@ -1538,7 +1591,7 @@ void loop() {
         }
         JsonObject& sample = chunk.createNestedObject();
         // sample["timestamp"] = (sampleBuffer + tail)->timestamp;
-        sample.set<uint64_t>("timestamp", (sampleBuffer + tail)->timestamp);
+        sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
 
 
         JsonArray& data = sample.createNestedArray("data");
