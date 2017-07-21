@@ -7,7 +7,7 @@
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 // #define NUM_PACKETS_IN_RING_BUFFER 45
-#define NUM_PACKETS_IN_RING_BUFFER 100
+#define NUM_PACKETS_IN_RING_BUFFER 200
 #define NUM_PACKETS_IN_RING_BUFFER_JSON 100
 // #define MAX_PACKETS_PER_SEND_TCP 20
 #define MAX_PACKETS_PER_SEND_TCP 50
@@ -65,6 +65,7 @@
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266SSDP.h>
 #include <WiFiManager.h>
 #include "SPISlave.h"
@@ -129,6 +130,7 @@ const char *serverCloudbrain;
 const char *serverCloudbrainAuth;
 
 ESP8266WebServer server(80);
+ESP8266HTTPUpdateServer httpUpdater;
 
 uint8_t gains[MAX_CHANNELS];
 double scaleFactors[MAX_CHANNELS];
@@ -188,12 +190,19 @@ boolean hasSpiMaster() {
   return millis() < lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
 }
 
+String perfectPrintByteHex(uint8_t b) {
+  if (b <= 0x0F) {
+    return "0" + String(b, HEX);
+  } else {
+    return String(b, HEX);
+  }
+}
 
 String getMacLastFourBytes() {
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
-  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
-                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  String macID = perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 2]) +
+                 perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 1]);
   macID.toUpperCase();
   return macID;
 }
@@ -201,12 +210,12 @@ String getMacLastFourBytes() {
 String getMac() {
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
-  String fullMac = String(mac[WL_MAC_ADDR_LENGTH - 6], HEX) + ":" +
-                   String(mac[WL_MAC_ADDR_LENGTH - 5], HEX) + ":" +
-                   String(mac[WL_MAC_ADDR_LENGTH - 4], HEX) + ":" +
-                   String(mac[WL_MAC_ADDR_LENGTH - 3], HEX) + ":" +
-                   String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) + ":" +
-                   String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  String fullMac = perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 6]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 5]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 4]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 3]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 2]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 1]);
   fullMac.toUpperCase();
   return fullMac;
 }
@@ -1208,39 +1217,6 @@ void setup() {
 
 #ifdef DEBUG
   Serial.println("SPI Slave ready");
-#endif
-
-  ArduinoOTA.setHostname(getName().c_str());
-
-#ifdef DEBUG
-  ArduinoOTA.onStart([]() {
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH)
-      type = "sketch";
-    else // U_SPIFFS
-      type = "filesystem";
-
-    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-    Serial.println("Start updating " + type);
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
-  });
-#endif
-  ArduinoOTA.begin();
-
-#ifdef DEBUG
   printWifiStatus();
   Serial.printf("Starting HTTP...\n");
 #endif
@@ -1317,7 +1293,7 @@ void setup() {
 
   server.on("/version", HTTP_GET, [](){
     digitalWrite(5, HIGH);
-    server.send(200, "text/plain", "v0.1.2");
+    server.send(200, "text/plain", "v0.2.0");
     digitalWrite(5, LOW);
   });
 
@@ -1380,6 +1356,8 @@ void setup() {
     root.printTo(Serial);
 #endif
   });
+
+  httpUpdater.setup(&server);
 
   server.begin();
   MDNS.addService("http", "tcp", 80);
