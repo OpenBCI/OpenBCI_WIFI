@@ -88,29 +88,51 @@ int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
   return raw;
 }
 
-double OpenBCI_Wifi_Class::getScaleFactorGanglion() {
-  return MCP3912_VREF / (8388607.0 * 51.0 * 1.5);
+float OpenBCI_Wifi_Class::getScaleFactorVoltsGanglion() {
+  return MCP_SCALE_FACTOR_VOLTS;
 }
 
-double OpenBCI_Wifi_Class::getScaleFactorCyton(uint8_t gain) {
-  return ADS1299_VREF / gain / (2^23 - 1);
+float OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
+  switch (gain) {
+    case ADS_GAIN_1:
+      return ADS_SCALE_FACTOR_VOLTS_1;
+    case ADS_GAIN_2:
+      return ADS_SCALE_FACTOR_VOLTS_2;
+    case ADS_GAIN_4:
+      return ADS_SCALE_FACTOR_VOLTS_4;
+    case ADS_GAIN_6:
+      return ADS_SCALE_FACTOR_VOLTS_6;
+    case ADS_GAIN_8:
+      return ADS_SCALE_FACTOR_VOLTS_8;
+    case ADS_GAIN_12:
+      return ADS_SCALE_FACTOR_VOLTS_12;
+    case ADS_GAIN_24:
+      return ADS_SCALE_FACTOR_VOLTS_24;
+    default:
+      return 0.0;
+  }
 }
 
 double OpenBCI_Wifi_Class::rawToLongLong(int32_t raw, uint8_t gain, uint8_t numChannels, uint8_t packetOffset) {
   double scaleFactor = 0.0;
 
   if (packetOffset == 1) {
-    scaleFactor = ADS1299_VREF / gain / (2^23 - 1);
+    scaleFactor = getScaleFactorVoltsCyton(gain);
   } else {
     if (numChannels == 4) {
-      scaleFactor = getScaleFactorGanglion();
+      scaleFactor = getScaleFactorVoltsGanglion();
     } else {
-      scaleFactor = ADS1299_VREF / gain / (2^23 - 1);
+      scaleFactor = getScaleFactorVoltsCyton(gain);
     }
   }
 
   // Convert the three byte signed integer and convert it
   return scaleFactor * NANO_VOLTS_IN_VOLTS * raw;
+}
+
+double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, float scaleFactor) {
+  // Convert the three byte signed integer and convert it
+  return scaleFactor * raw * NANO_VOLTS_IN_VOLTS;
 }
 
 /**

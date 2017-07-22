@@ -24,23 +24,50 @@ void testGetOutputMode() {
   test.assertEqualString(wifi.getOutputMode(wifi.OUTPUT_MODE_JSON),"json","Should have gotten 'json' string");
 }
 
-void testGetScaleFactorCyton() {
-  test.describe("getScaleFactorCyton");
+void testGetScaleFactorVoltsCyton() {
+  test.describe("getScaleFactorVoltsCyton");
 
+  uint8_t expectedGain = 1;
+  float expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, 0.000000001, "should be within 0.000001 with gain 1");
+
+  expectedGain = 2;
+  expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, 0.000000001, "should be within 0.000001 with gain 2");
+
+  expectedGain = 4;
+  expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, 0.000000001, "should be within 0.000001 with gain 4");
+
+  expectedGain = 6;
+  expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, 0.000000001, "should be within 0.000001 with gain 6");
+
+  expectedGain = 8;
+  expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, 0.000000001, "should be within 0.000001 with gain 8");
+
+  expectedGain = 12;
+  expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, 0.000000001, "should be within 0.000001 with gain 12");
+
+  expectedGain = 24;
+  expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, 0.000000001, "should be within 0.000001 with gain 24");
 }
 
-void testGetScaleFactorGanglion() {
-  test.describe("getScaleFactorGanglion");
+void testGetScaleFactorVoltsGanglion() {
+  test.describe("getScaleFactorVoltsGanglion");
 
+  float expectedScaleFactor = 1.2 / 51.0 / 1.5 / (pow(2,23) - 1);
+  test.assertApproximately(wifi.getScaleFactorVoltsGanglion(), expectedScaleFactor, 0.0000000001, "should be within 0.000001");
 
 }
-
-
 
 void testGetters() {
   testGetOutputMode();
-  testGetScaleFactorCyton();
-  testGetScaleFactorGanglion();
+  testGetScaleFactorVoltsCyton();
+  testGetScaleFactorVoltsGanglion();
 }
 
 void testInt24To32() {
@@ -73,22 +100,20 @@ void testRawToLongLong() {
     else arr[i] = 0;
   }
 
-  long long
-
   test.assertApproximately(103.01, 103.3, 1, "should be within 1");
-
-  for (let i = 0; i < k.OBCINumberOfChannelsDefault; i++) {
-  expect(sample.channelData[i]).to.be.approximately(newSample.channelData[i], 0.001);
 }
 
-  // for (let i = 0; i < k.OBCINumberOfChannelsDefault; i++) {
-  // expect(sample.channelData[i]).to.be.approximately(newSample.channelData[i], 0.001);
+void testRawToScaled() {
+    test.describe("rawToScaled");
+
+    
 
 }
 
 void testUtils() {
   testInt24To32();
   testRawToLongLong();
+  testRawToScaled();
 }
 
 void go() {
@@ -106,7 +131,6 @@ void setup() {
   Serial.begin(115200);
   test.setSerial(Serial);
   test.failVerbosity = true;
-
 }
 
 void loop() {
