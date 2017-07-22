@@ -189,7 +189,9 @@ PubSubClient clientMQTT(espClient);
  * @returns [boolean] True if SPI Master has polled within timeout.
  */
 boolean hasSpiMaster() {
+#ifdef DEBUG
   Serial.printf("millis(): %d < %d \nlastTimeWasPolled:%d\n", millis(), lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS, lastTimeWasPolled);
+#endif
   return millis() < lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
 }
 

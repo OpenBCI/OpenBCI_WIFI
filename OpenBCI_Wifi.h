@@ -68,6 +68,10 @@ public:
   OpenBCI_Wifi_Class();
   void begin(void);
   String getOutputMode(OUTPUT_MODE);
+  double getScaleFactorCyton(uint8_t);
+  double getScaleFactorGanglion(void);
+  int32_t int24To32(uint8_t *);
+  double rawToLongLong(int32_t, uint8_t, uint8_t, uint8_t);
   // Variables
 
 
