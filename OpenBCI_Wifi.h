@@ -14,55 +14,62 @@
 #define __OpenBCI_Wifi__
 
 #include <Arduino.h>
+#include <time.h>
+#include <ESP8266WiFi.h>
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266HTTPUpdateServer.h>
+#include <ESP8266SSDP.h>
+#include <WiFiManager.h>
+#include "SPISlave.h"
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+#include <WebSocketsServer.h>
+#include <Hash.h>
 #include "OpenBCI_Wifi_Definitions.h"
 
 class OpenBCI_Wifi_Class {
 
 public:
-  // ENUMS
-  typedef enum STREAM_STATE {
-    STREAM_STATE_INIT,
-    STREAM_STATE_STORING,
-    STREAM_STATE_TAIL,
-    STREAM_STATE_READY
-  };
-  // STRUCTS
 
-  typedef struct {
-    uint8_t         typeByte;
-    char            data[OPENBCI_MAX_PACKET_SIZE_BYTES];
-    uint8_t         bytesIn;
-    STREAM_STATE    state;
-  } StreamPacketBuffer;
+  // ENUMS
+  typedef enum CLIENT_RESPONSE {
+    CLIENT_RESPONSE_NONE,
+    CLIENT_RESPONSE_OUTPUT_STRING
+  };
+
+  typedef enum OUTPUT_MODE {
+    OUTPUT_MODE_RAW,
+    OUTPUT_MODE_JSON
+  };
+
+  typedef enum OUTPUT_PROTOCOL {
+    OUTPUT_PROTOCOL_NONE,
+    OUTPUT_PROTOCOL_TCP,
+    OUTPUT_PROTOCOL_MQTT,
+    OUTPUT_PROTOCOL_WEB_SOCKETS,
+    OUTPUT_PROTOCOL_SERIAL
+  };
+
+  typedef enum CYTON_GAIN {
+    CYTON_GAIN_1,
+    CYTON_GAIN_2,
+    CYTON_GAIN_4,
+    CYTON_GAIN_6,
+    CYTON_GAIN_8,
+    CYTON_GAIN_12,
+    CYTON_GAIN_24
+  };
 
   // Functions and Methods
   OpenBCI_Wifi_Class();
   void begin(void);
-  void bufferStreamAddChar(StreamPacketBuffer *, char);
-  boolean bufferStreamAddData(char *);
-  void bufferStreamFlush(StreamPacketBuffer *);
-  void bufferStreamFlushBuffers(void);
-  boolean bufferStreamReadyToSend(StreamPacketBuffer *);
-  void bufferStreamReset(void);
-  void bufferStreamReset(StreamPacketBuffer *);
-  boolean bufferStreamTimeout(void);
-  byte byteIdGetStreamPacketType(uint8_t);
-  boolean dataReady(void);
-  void initialize(void);
-  void initializeSPISlave(boolean debug);
-  boolean isATailByte(uint8_t);
-  byte outputGetStopByteFromByteId(char);
-  byte xfer(byte);
-
+  String getOutputMode(OUTPUT_MODE);
   // Variables
-  uint8_t packetBuffer[OPENBCI_NUMBER_STREAM_BUFFERS][OPENBCI_MAX_PACKET_SIZE_BYTES];
-  uint8_t lastChipSelectLevel;
-  uint8_t bufSpi[WIFI_BUFFER_LENGTH];
-  uint8_t bufUdp[WIFI_BUFFER_LENGTH];
-  uint8_t bufferTxPosition;
-  uint8_t streamPacketBufferHead;
-  uint8_t streamPacketBufferTail;
-  unsigned long lastTimeSpiRead;
+
 
 private:
   void initArduino(void);
@@ -72,6 +79,7 @@ private:
 
 };
 
-extern OpenBCI_Wifi_Class OpenBCI_Wifi;
+// Very important, major key to success #christmas
+extern OpenBCI_Wifi_Class wifi;
 
 #endif // OPENBCI_WIFI_H

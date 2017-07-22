@@ -7,10 +7,10 @@
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 // #define NUM_PACKETS_IN_RING_BUFFER 45
-#define NUM_PACKETS_IN_RING_BUFFER 200
-#define NUM_PACKETS_IN_RING_BUFFER_JSON 100
+#define NUM_PACKETS_IN_RING_BUFFER 50
+#define NUM_PACKETS_IN_RING_BUFFER_JSON 50
 // #define MAX_PACKETS_PER_SEND_TCP 20
-#define MAX_PACKETS_PER_SEND_TCP 50
+#define MAX_PACKETS_PER_SEND_TCP 25
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
 #define WIFI_SPI_MSG_GAINS 0x03
@@ -108,7 +108,9 @@ typedef enum CYTON_GAIN {
 
 // STRUCTS
 typedef struct {
-    double *channelData;
+    long *channelData;
+    double *raw;
+    double *nano_volts;
     unsigned long long timestamp;
 } Sample;
 
@@ -197,6 +199,45 @@ String perfectPrintByteHex(uint8_t b) {
   } else {
     return String(b, HEX);
   }
+}
+
+void printLLNumber(unsigned long long n, uint8_t base) {
+  unsigned char buf[16 * sizeof(long)]; // Assumes 8-bit chars.
+  unsigned long long i = 0;
+
+  if (n == 0) {
+    Serial.print('0');
+    return;
+  }
+
+  while (n > 0) {
+    buf[i++] = n % base;
+    n /= base;
+  }
+
+  for (; i > 0; i--)
+    Serial.print((char) (buf[i - 1] < 10 ?
+      '0' + buf[i - 1] :
+      'A' + buf[i - 1] - 10));
+}
+
+void print(long long n, int base) {
+  if (n < 0) Serial.print("-");
+  printLLNumber(n, base);
+}
+
+void println(long long n, int base) {
+  print(n, base);
+  Serial.println();
+}
+
+void print(unsigned long long n, int base) {
+  printLLNumber(n, base);
+}
+
+void println(unsigned long long n, int base) {
+  print(n, base);
+  Serial.println();
 }
 
 String getMacLastFourBytes() {
@@ -378,8 +419,18 @@ void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
   if (packetOffset == 0) {
     // Serial.println(getTime());
     sample->timestamp = getTime();
-    double temp[numChannels];
+    long temp[numChannels];
+    double temp_raw[numChannels];
+    double tmp[numChannels];
     sample->channelData = temp;
+    sample->nano_volts = tmp;
+    sample->raw = temp_raw;
+
+    for (uint8_t i = 0; i < numChannels; i++) {
+      sample->channelData[i] = 0;
+      sample->nano_volts[i] = 0;
+      sample->raw[i] = 0;
+    }
   }
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
     // Zero out the new value
@@ -393,14 +444,42 @@ void channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
       raw &= 0x00FFFFFF;
     }
 
+    // Serial.println(raw, HEX);
+    //
+
+    // int raw_i = (int)raw;
     double raw_d = (double)raw;
+    // Serial.printf("%4.10f %d ", raw_d, raw);
 
     double volts = raw_d * scaleFactors[i + packetOffset];
     double nano_volts = volts * NANO_VOLTS_IN_VOLTS;
+    // Serial.printf("%4.10f ", nano_volts);
+    // Serial.println((long)nano_volts);
 
-    sample->channelData[i + packetOffset] = nano_volts;
+    // if (nano_volts != 0.0 && nano_volts * 2 == nano_volts) {
+      // Serial.printf("\nraw_d %4.10f \tvolts %4.10f", raw_d, nano_volts);
+    // }
+    // Serial.println(nano_volts);
 
-    // Serial.printf("channel %d: %lu nV raw: %0.20f",i+1, sample->channelData[i + packetOffset], scaleFactors[i] * (double)raw);
+    sample->channelData[i + packetOffset] = (long)nano_volts;
+    sample->raw[i + packetOffset] = raw_d;
+    sample->nano_volts[i + packetOffset] = nano_volts;
+
+    // Serial.println(sample->channelData[i + packetOffset]);
+    // sample->channelData[i + packetOffset] = nano_volts;
+
+    // if (nano_volts < 0) {
+    //   if (nano_volts < (-1 * 958994846070.5)) {
+    //     Serial.printf("\nneg\nraw_d %4.10f \tvolts %4.10f", raw_d, nano_volts);
+    //   }
+    // } else {
+    //   if (nano_volts > (958994846070.5)) {
+    //     Serial.printf("\npos\nraw_d %4.10f \tvolts %4.10f", raw_d, nano_volts);
+    //   }
+    // }
+    // print(sample->channelData[i + packetOffset], DEC);
+    // Serial.printf(" %0.4f\n", nano_volts);
+
   }
 
   // Serial.printf("Channel 1: %12.4f", sample->channelData[0]); Serial.println(" nV");
@@ -963,35 +1042,6 @@ void handleSensorCommand() {
   }
 
   // SPISlave.setData(ip.toString().c_str());
-}
-
-void printLLNumber(unsigned long long n, uint8_t base) {
-  unsigned char buf[16 * sizeof(long)]; // Assumes 8-bit chars.
-  unsigned long long i = 0;
-
-  if (n == 0) {
-    Serial.print('0');
-    return;
-  }
-
-  while (n > 0) {
-    buf[i++] = n % base;
-    n /= base;
-  }
-
-  for (; i > 0; i--)
-    Serial.print((char) (buf[i - 1] < 10 ?
-      '0' + buf[i - 1] :
-      'A' + buf[i - 1] - 10));
-}
-
-void print(unsigned long long n, int base) {
-  printLLNumber(n, base);
-}
-
-void println(unsigned long long n, int base) {
-  print(n, base);
-  Serial.println();
 }
 
 //////////////////////////////////////////////
@@ -1597,9 +1647,11 @@ void loop() {
 
         JsonArray& data = sample.createNestedArray("data");
         for (uint8_t j = 0; j < numChannels; j++) {
-          data.add(((sampleBuffer + tail)->channelData[j]));
+          if ((sampleBuffer + tail)->channelData[j] == 0) {
+            Serial.printf("\nrawd %4.0f \tnv %4.10f", (sampleBuffer + tail)->raw[j], (sampleBuffer + tail)->nano_volts[j]);
+          }
+          data.add((sampleBuffer + tail)->channelData[j]);
         }
-
         tail++;
       }
 
@@ -1619,7 +1671,11 @@ void loop() {
         clientMQTT.publish("openbci", jsonStr.c_str());
         jsonStr = "";
       } else {
-        root.printTo(Serial);
+        root.printTo(jsonStr);
+        Serial.println(jsonStr);
+        jsonStr = "";
+        // root.printTo(Serial);
+        Serial.println();
       }
     }
 
