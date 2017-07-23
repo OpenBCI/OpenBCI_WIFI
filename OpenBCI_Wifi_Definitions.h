@@ -17,6 +17,7 @@
 #define BYTES_PER_OBCI_PACKET 33
 #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
+#define BYTES_PER_CHANNEL 3
 // #define NUM_PACKETS_IN_RING_BUFFER 45
 #define NUM_PACKETS_IN_RING_BUFFER 50
 #define NUM_PACKETS_IN_RING_BUFFER_JSON 50
@@ -34,7 +35,7 @@
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
 //   https://bblanchon.github.io/ArduinoJson/assistant/index.html
-// #define ARDUINOJSON_USE_DOUBLE 1
+#define ARDUINOJSON_USE_DOUBLE 1
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_ADDITIONAL_BYTES_4_CHAN 115
 #define ARDUINOJSON_ADDITIONAL_BYTES_8_CHAN 195

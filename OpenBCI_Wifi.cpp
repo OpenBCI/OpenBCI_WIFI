@@ -77,7 +77,7 @@ String OpenBCI_Wifi_Class::getOutputMode(OUTPUT_MODE outputMode) {
  * @return     int32 - The converted number
  */
 int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
-  int32_t raw = 0;
+  uint32_t raw = 0;
   raw = arr[0] << 16 | arr[1] << 8 | arr[2];
   // carry through the sign
   if(bitRead(raw,23) == 1){
@@ -85,14 +85,14 @@ int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
   } else{
     raw &= 0x00FFFFFF;
   }
-  return raw;
+  return (int32_t)raw;
 }
 
-float OpenBCI_Wifi_Class::getScaleFactorVoltsGanglion() {
+double OpenBCI_Wifi_Class::getScaleFactorVoltsGanglion() {
   return MCP_SCALE_FACTOR_VOLTS;
 }
 
-float OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
+double OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
   switch (gain) {
     case ADS_GAIN_1:
       return ADS_SCALE_FACTOR_VOLTS_1;
@@ -109,28 +109,51 @@ float OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
     case ADS_GAIN_24:
       return ADS_SCALE_FACTOR_VOLTS_24;
     default:
-      return 0.0;
+      return 1.0;
   }
 }
 
-double OpenBCI_Wifi_Class::rawToLongLong(int32_t raw, uint8_t gain, uint8_t numChannels, uint8_t packetOffset) {
-  double scaleFactor = 0.0;
-
-  if (packetOffset == 1) {
-    scaleFactor = getScaleFactorVoltsCyton(gain);
-  } else {
-    if (numChannels == 4) {
-      scaleFactor = getScaleFactorVoltsGanglion();
-    } else {
-      scaleFactor = getScaleFactorVoltsCyton(gain);
-    }
+/**
+ * Should extract raw int32_t array of length number of channels to get
+ * @param arr         {uint8_t *} The array of 3byte signed 2's complement numbers
+ * @param numChannels {uint8_t} The number of channels to pull out of `arr`
+ * @param output      {int32_t *} An array of length `numChannels` to store
+ *                    the extracted values
+ */
+void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output) {
+  for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
+    output[i] = int24To32(arr + (i*3));
   }
-
-  // Convert the three byte signed integer and convert it
-  return scaleFactor * NANO_VOLTS_IN_VOLTS * raw;
 }
 
-double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, float scaleFactor) {
+/**
+ * Used to convert extracted raw data and scale with gains for Cyton and Daisy
+ * @param raw          {int32_t *} An array of int32_t of extracted raw values
+ * @param gains        {uint8_t *} Should use the look up table to get scale
+ *                     factor given the gain
+ * @param numChannels  {uint8_t} The number of channels, size of `raw` and
+ *                     `gains` and `scaledOutput` shall be of this length
+ * @param scaledOutput {double *} The calculated scaled value for each channel
+ */
+void OpenBCI_Wifi_Class::transformRawsToScaledCyton(int32_t *raw, uint8_t *gains, uint8_t numChannels, double *scaledOutput) {
+  for (uint8_t i = 0; i < numChannels; i++) {
+    scaledOutput[i] = wifi.rawToScaled(raw[i], wifi.getScaleFactorVoltsCyton(gains[i]));
+  }
+}
+
+/**
+ * Used to convert extracted raw data and scale with gains for Ganglion. The
+ *  Ganglion is fixed gain of 51.0
+ * @param raw          {int32_t *} An array of int32_t of extracted raw values
+ * @param scaledOutput {double *} The calculated scaled value for each channel
+ */
+void OpenBCI_Wifi_Class::transformRawsToScaledGanglion(int32_t *raw, double *scaledOutput) {
+  for (uint8_t i = 0; i < NUM_CHANNELS_GANGLION; i++) {
+    scaledOutput[i] = wifi.rawToScaled(raw[i], wifi.getScaleFactorVoltsGanglion());
+  }
+}
+
+double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
   // Convert the three byte signed integer and convert it
   return scaleFactor * raw * NANO_VOLTS_IN_VOLTS;
 }
