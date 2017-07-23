@@ -108,9 +108,8 @@ typedef enum CYTON_GAIN {
 
 // STRUCTS
 typedef struct {
-    long *channelData;
-    double *raw;
-    double *nano_volts;
+    double *channelData;
+    int32_t *raw;
     unsigned long long timestamp;
 } Sample;
 

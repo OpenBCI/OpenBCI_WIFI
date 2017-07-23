@@ -64,26 +64,45 @@ public:
     CYTON_GAIN_24
   };
 
+  // STRUCTS
+  typedef struct {
+      double *channelData;
+      unsigned long long timestamp;
+  } Sample;
+
   // Functions and Methods
   OpenBCI_Wifi_Class();
   void begin(void);
-  void extractRaws(uint8_t *, int32_t *);
+  void channelDataCompute(uint8_t *arr, uint8_t *gains, Sample *sample, uint8_t packetOffset, uint8_t numChannels);
+  void extractRaws(uint8_t *, int32_t *, uint8_t);
   String getOutputMode(OUTPUT_MODE);
   double getScaleFactorVoltsCyton(uint8_t);
   double getScaleFactorVoltsGanglion(void);
+  unsigned long long getTime(void);
+  boolean ntpActive(void);
+  unsigned long long ntpGetPreciseAdjustment(unsigned long);
+  unsigned long long ntpGetTime(void);
   int32_t int24To32(uint8_t *);
   double rawToScaled(int32_t, double);
   void transformRawsToScaledCyton(int32_t *, uint8_t *, uint8_t, double *);
   void transformRawsToScaledGanglion(int32_t *, double *);
 
   // Variables
+  Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
 
+  volatile uint8_t head;
+  volatile uint8_t tail;
 
 private:
+  // Functions
   void initArduino(void);
   void initArrays(void);
   void initObjects(void);
   void initVariables(void);
+
+  // Variables
+  unsigned long _ntpOffset;
+
 
 };
 

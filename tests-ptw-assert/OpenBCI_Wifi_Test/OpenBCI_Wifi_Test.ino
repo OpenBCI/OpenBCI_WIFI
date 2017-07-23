@@ -72,6 +72,35 @@ void testGetters() {
   testGetScaleFactorVoltsGanglion();
 }
 
+void testChannelDataCompute() {
+  test.describe("channelDataCompute");
+
+  uint8_t numChannels = NUM_CHANNELS_CYTON;
+  uint8_t packetOffset = 0;
+  uint8_t gains[24];
+  uint8_t arr[MAX_CHANNELS_PER_PACKET * BYTES_PER_CHANNEL];
+  double expected_channelData[numChannels];
+  uint8_t index = 0;
+  for (int i = 0; i < 24; i++) {
+    arr[i] = 0;
+    if (i%3==2) {
+      arr[i]=index+1;
+      gains[index] = 24;
+      int32_t raww = wifi.int24To32(arr + (i*3));
+      expected_channelData[index] = wifi.rawToScaled(raww, wifi.getScaleFactorVoltsCyton(24));
+      index++;
+    }
+  }
+
+  wifi.channelDataCompute(arr, gains, wifi.sampleBuffer, packetOffset, numChannels);
+
+  for (uint8_t i = 0; i < numChannels; i++) {
+    test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should be able to get cyton channel data into sample");
+  }
+
+
+}
+
 void testExtractRaws() {
   test.describe("extractRaws");
 
@@ -89,7 +118,7 @@ void testExtractRaws() {
   }
 
   int32_t actual_raws[MAX_CHANNELS_PER_PACKET];
-  wifi.extractRaws(arr, actual_raws);
+  wifi.extractRaws(arr, actual_raws, MAX_CHANNELS_PER_PACKET);
 
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
     test.assertEqualInt(actual_raws[i], i+1, "should match the index number");
@@ -138,7 +167,7 @@ void testTransformRawsToScaledCyton() {
   }
 
   // Do Cyton first
-  wifi.transformRawsToScaledCyton(raw, gains, NUM_CHANNELS_CYTON, actual_scaledOutput);
+  wifi.transformRawsToScaledCyton(raw, gains, 0, actual_scaledOutput);
 
   for (uint8_t i = 0; i < NUM_CHANNELS_CYTON; i++) {
     test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton");
@@ -146,9 +175,9 @@ void testTransformRawsToScaledCyton() {
   }
 
   // Then daisy
-  wifi.transformRawsToScaledCyton(raw, gains, NUM_CHANNELS_CYTON_DAISY, actual_scaledOutput);
+  wifi.transformRawsToScaledCyton(raw, gains, MAX_CHANNELS_PER_PACKET, actual_scaledOutput);
 
-  for (uint8_t i = 0; i < NUM_CHANNELS_CYTON_DAISY; i++) {
+  for (uint8_t i = NUM_CHANNELS_CYTON; i < NUM_CHANNELS_CYTON_DAISY; i++) {
     test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton daisy");
   }
 }
@@ -214,6 +243,7 @@ void testUtils() {
   testTransformRawsToScaledCyton();
   testTransformRawsToScaledGanglion();
   testRawToScaled();
+  testChannelDataCompute();
 }
 
 void go() {

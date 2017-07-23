@@ -58,7 +58,7 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initVariables(void) {
-
+  _ntpOffset = 0;
 }
 
 String OpenBCI_Wifi_Class::getOutputMode(OUTPUT_MODE outputMode) {
@@ -120,9 +120,52 @@ double OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
  * @param output      {int32_t *} An array of length `numChannels` to store
  *                    the extracted values
  */
-void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output) {
-  for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
+void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output, uint8_t numChannels) {
+  for (uint8_t i = 0; i < numChannels; i++) {
     output[i] = int24To32(arr + (i*3));
+  }
+}
+
+/**
+ * Check to see if SNTP is active
+ * @type {Number}
+ */
+boolean OpenBCI_Wifi_Class::ntpActive() {
+  return time(nullptr) > 1000;
+}
+
+/**
+ * Calculate an adjusment based off an offset and the internal micros
+ * @param  ntpOffset {unsigned long} A time in micro seconds
+ * @return           {unsigned long long} The adjested offset.
+ */
+unsigned long long OpenBCI_Wifi_Class::ntpGetPreciseAdjustment(unsigned long ntpOffset) {
+  unsigned long long boardTime_uS = micros() % MICROS_IN_SECONDS;
+  unsigned long long adj = boardTime_uS - ntpOffset;
+  if (boardTime_uS < ntpOffset) {
+    boardTime_uS += MICROS_IN_SECONDS;
+    adj = boardTime_uS - ntpOffset;
+  }
+  return adj;
+}
+
+/**
+ * Get ntp time in microseconds
+ * @return [long] - The time in micro second
+ */
+unsigned long long OpenBCI_Wifi_Class::ntpGetTime(void) {
+  unsigned long long curTime = time(nullptr);
+  return curTime * MICROS_IN_SECONDS;
+}
+
+/**
+ * Safely get the time, defaults to micros() if ntp is not active.
+ */
+unsigned long long OpenBCI_Wifi_Class::getTime() {
+  if (ntpActive()) {
+    return ntpGetTime() + ntpGetPreciseAdjustment(_ntpOffset);
+  } else {
+    return micros();
   }
 }
 
@@ -131,13 +174,16 @@ void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output) {
  * @param raw          {int32_t *} An array of int32_t of extracted raw values
  * @param gains        {uint8_t *} Should use the look up table to get scale
  *                     factor given the gain
- * @param numChannels  {uint8_t} The number of channels, size of `raw` and
- *                     `gains` and `scaledOutput` shall be of this length
+ * @param packetOffset {uint8_t} The packet offset, always assume 8 channels
+ *                     per packet. If this is a daisy for example, then
+ *                     packetOffset should equal 8.
  * @param scaledOutput {double *} The calculated scaled value for each channel
  */
-void OpenBCI_Wifi_Class::transformRawsToScaledCyton(int32_t *raw, uint8_t *gains, uint8_t numChannels, double *scaledOutput) {
-  for (uint8_t i = 0; i < numChannels; i++) {
-    scaledOutput[i] = wifi.rawToScaled(raw[i], wifi.getScaleFactorVoltsCyton(gains[i]));
+void OpenBCI_Wifi_Class::transformRawsToScaledCyton(int32_t *raw, uint8_t *gains, uint8_t packetOffset, double *scaledOutput) {
+  for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
+
+    scaledOutput[i + packetOffset] = wifi.rawToScaled(raw[i + packetOffset], wifi.getScaleFactorVoltsCyton(gains[i + packetOffset]));
+    Serial.printf("%d %0.10f\n", i + packetOffset, scaledOutput[i + packetOffset]);
   }
 }
 
@@ -165,45 +211,26 @@ double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
  * @param packetOffset [uint8_t] - The offset to shift loading channel data into.
  *   i.e. should be 1 on second packet for daisy
  */
-// void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, Sample *sample, uint8_t packetOffset) {
-//   const uint8_t byteOffset = 2;
-//   if (packetOffset == 0) {
-//     // Serial.println(getTime());
-//     sample->timestamp = getTime();
-//     long temp[numChannels];
-//     double temp_raw[numChannels];
-//     double tmp[numChannels];
-//     sample->channelData = temp;
-//     sample->nano_volts = tmp;
-//     sample->raw = temp_raw;
-//
-//     for (uint8_t i = 0; i < numChannels; i++) {
-//       sample->channelData[i] = 0;
-//       sample->nano_volts[i] = 0;
-//       sample->raw[i] = 0;
-//     }
-//   }
-//   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
-//     // Zero out the new value
-//     int raw = 0;
-//     // Pull out 24bit number
-//     raw = arr[i*3 + byteOffset] << 16 | arr[i*3 + 1 + byteOffset] << 8 | arr[i*3 + 2 + byteOffset];
-//     // carry through the sign
-//     if(bitRead(raw,23) == 1){
-//       raw |= 0xFF000000;
-//     } else{
-//       raw &= 0x00FFFFFF;
-//     }
-//
-//     double raw_d = (double)raw;
-//
-//     double volts = raw_d * scaleFactors[i + packetOffset];
-//     double nano_volts = volts * NANO_VOLTS_IN_VOLTS;
-//
-//     sample->channelData[i + packetOffset] = (long)nano_volts;
-//   }
-//
-//   // Serial.printf("Channel 1: %12.4f", sample->channelData[0]); Serial.println(" nV");
-// }
+void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, uint8_t *gains, Sample *sample, uint8_t packetOffset, uint8_t numChannels) {
+  const uint8_t byteOffset = 2;
+  if (packetOffset == 0) {
+    sample->timestamp = getTime();
+    double temp_channelData[numChannels];
+    sample->channelData = temp_channelData;
+    for (uint8_t i = 0; i < numChannels; i++) {
+      sample->channelData[i] = 0;
+    }
+  }
+
+  if (numChannels == NUM_CHANNELS_GANGLION) {
+    int32_t temp_raw[NUM_CHANNELS_GANGLION];
+    extractRaws(arr + 2, temp_raw, NUM_CHANNELS_GANGLION);
+    transformRawsToScaledGanglion(temp_raw, sample->channelData);
+  } else {
+    int32_t temp_raw[MAX_CHANNELS_PER_PACKET];
+    extractRaws(arr + 2, temp_raw, MAX_CHANNELS_PER_PACKET);
+    transformRawsToScaledCyton(temp_raw, gains, packetOffset, sample->channelData);
+  }
+}
 
 OpenBCI_Wifi_Class wifi;
