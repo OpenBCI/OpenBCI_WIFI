@@ -53,6 +53,58 @@ void testGetJSONBufferSize() {
 
 }
 
+// #define ARDUINOJSON_USE_DOUBLE 1
+// #define ARDUINOJSON_USE_LONG_LONG 1
+
+void testGetJSONFromSampleCyton() {
+  test.describe("getJSONFromSampleCyton");
+
+  wifi.sampleReset(wifi.sampleBuffer);
+  uint8_t numChannels = NUM_CHANNELS_CYTON;
+  uint8_t numSamples = 1;
+  uint8_t expected_sampleNumber = 29;
+  unsigned long long expected_timestamp = 1500916934017000;
+  double expected_channelData[MAX_CHANNELS];
+  for (int i = 0; i < MAX_CHANNELS; i++) {
+    if (i%2 == 0) {
+      expected_channelData[i] = ADC_24BIT_MAX_VAL_NANO_VOLT;
+    } else {
+      expected_channelData[i] = -1 * ADC_24BIT_MAX_VAL_NANO_VOLT;
+    }
+  }
+
+  wifi.sampleBuffer->sampleNumber = expected_sampleNumber;
+  wifi.sampleBuffer->timestamp = expected_timestamp;
+  memcpy(wifi.sampleBuffer->channelData, expected_channelData, numChannels);
+
+  String actual_serializedOutput = wifi.getJSONFromSample(wifi.sampleBuffer, numChannels, numSamples);
+
+  // const char* json = "{\"chunk\":[{\"timestamp\":1500916934017000,\"sampleNumber\":255,\"data\":[8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000]}]}";
+  const size_t bufferSize = JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3) + 220;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+
+  JsonObject& root = jsonBuffer.parseObject(actual_serializedOutput);
+
+  JsonObject& chunk0 = root["chunk"][0];
+  double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
+  test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "should be able to set timestamp", __LINE__);
+
+  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
+  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
+
+  JsonArray& chunk0_data = chunk0["data"];
+  for (int i = 0; i < numChannels; i++) {
+    double chunk0_tempData = chunk0_data[i];
+    test.assertApproximately(expected_channelData[i], chunk0_data[i], 1.0, "should be able load sample channel data", __LINE__);
+  }
+}
+
+void testGetJSONFromSample() {
+  testGetJSONFromSampleCyton();
+  // testGetJSONFromSampleDaisy();
+  // testGetJSONFromSampleGanglion();
+}
+
 void testGetJSONMaxPackets() {
   test.describe("getJSONMaxPackets");
 
@@ -119,6 +171,7 @@ void testGetters() {
   testGetGainGanglion();
   testGetJSONAdditionalBytes();
   testGetJSONBufferSize();
+  testGetJSONFromSample();
   testGetJSONMaxPackets();
   testGetOutputMode();
   testGetScaleFactorVoltsCyton();

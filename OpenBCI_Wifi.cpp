@@ -179,6 +179,36 @@ size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
   return _jsonBufferSize;
 }
 
+String OpenBCI_Wifi_Class::getJSONFromSample(Sample *sample, uint8_t numChannels, uint8_t numPackets) {
+
+  DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize);
+
+  JsonObject& root = jsonSampleBuffer.createObject();
+  JsonArray& chunk = root.createNestedArray("chunk");
+
+  root["count"] = _counter++;
+
+  for (uint8_t i = 0; i < packetsToSend; i++) {
+    if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
+      tail = 0;
+    }
+    JsonObject& sample = chunk.createNestedObject();
+    // sample["timestamp"] = (sampleBuffer + tail)->timestamp;
+    sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
+
+    JsonArray& data = sample.createNestedArray("data");
+    for (uint8_t j = 0; j < numChannels; j++) {
+      if ((sampleBuffer + tail)->channelData[j] == 0) {
+        Serial.printf("\nrawd %4.0f \tnv %4.10f", (sampleBuffer + tail)->raw[j], (sampleBuffer + tail)->nano_volts[j]);
+      }
+      data.add((sampleBuffer + tail)->channelData[j]);
+    }
+    tail++;
+  }
+
+  return "";
+}
+
 /**
  * We want to max the size out to < 2000bytes per json chunk
  */
@@ -249,7 +279,7 @@ void OpenBCI_Wifi_Class::setNumChannels(uint8_t numChannels) {
   _numChannels = numChannels;
   // Used for JSON output mode
   _jsonBufferSize = 0; // Reset to 0
-  _jsonBufferSize += JSON_OBJECT_SIZE(1); // For {"chunk":[...]}
+  _jsonBufferSize += JSON_OBJECT_SIZE(2); // For {"chunk":[...], "count":0}
   _jsonBufferSize += JSON_ARRAY_SIZE(getJSONMaxPackets(numChannels)); // For the array of samples
   _jsonBufferSize += getJSONMaxPackets(numChannels)*JSON_OBJECT_SIZE(3); // For each sample {"timestamp":0, "data":[...], "sampleNumber":0}
   _jsonBufferSize += getJSONMaxPackets(numChannels)*JSON_ARRAY_SIZE(numChannels); // For data array for each sample

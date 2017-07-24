@@ -81,6 +81,7 @@ public:
   uint8_t getGainGanglion(void);
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
+  String getJSONFromSample(Sample *, uint8_t, uint8_t);
   uint8_t getJSONMaxPackets(uint8_t);
   uint8_t getNumChannels(void);
   unsigned long getNTPOffset(void);
