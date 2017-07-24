@@ -66,7 +66,7 @@ public:
 
   // STRUCTS
   typedef struct {
-      double channelData[NUM_CHANNELS_CYTON];
+      double channelData[NUM_CHANNELS_CYTON_DAISY];
       unsigned long long timestamp;
       uint8_t sampleNumber;
   } Sample;
@@ -76,6 +76,14 @@ public:
   void begin(void);
   void channelDataCompute(uint8_t *, uint8_t *, Sample *, uint8_t, uint8_t);
   void extractRaws(uint8_t *, int32_t *, uint8_t);
+  void gainReset(void);
+  uint8_t getGainCyton(uint8_t b);
+  uint8_t getGainGanglion(void);
+  int getJSONAdditionalBytes(uint8_t);
+  size_t getJSONBufferSize(void);
+  uint8_t getJSONMaxPackets(uint8_t);
+  uint8_t getNumChannels(void);
+  unsigned long getNTPOffset(void);
   String getOutputMode(OUTPUT_MODE);
   double getScaleFactorVoltsCyton(uint8_t);
   double getScaleFactorVoltsGanglion(void);
@@ -84,17 +92,18 @@ public:
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
   int32_t int24To32(uint8_t *);
+  void reset(void);
   double rawToScaled(int32_t, double);
   void sampleReset(Sample *);
   void sampleReset(Sample *, uint8_t);
+  void setGains(uint8_t *, uint8_t *);
+  void setNumChannels(uint8_t);
+  void setNTPOffset(unsigned long);
   void transformRawsToScaledCyton(int32_t *, uint8_t *, uint8_t, double *);
   void transformRawsToScaledGanglion(int32_t *, double *);
 
   // Variables
   Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
-
-  volatile uint8_t head;
-  volatile uint8_t tail;
 
 private:
   // Functions
@@ -104,7 +113,15 @@ private:
   void initVariables(void);
 
   // Variables
+  size_t _jsonBufferSize;
+
+  uint8_t _gains[MAX_CHANNELS];
+  uint8_t _numChannels;
+
   unsigned long _ntpOffset;
+
+  volatile uint8_t head;
+  volatile uint8_t tail;
 
 
 };

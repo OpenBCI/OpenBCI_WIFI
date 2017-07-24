@@ -14,14 +14,62 @@
 
 int ledPin = 0;
 
+void testGetGainCyton() {
+  test.describe("getGainCyton");
+
+  test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_1), 1, "should be able to get cyton gain of 1");
+  test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_2), 2, "should be able to get cyton gain of 2");
+  test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_4), 4, "should be able to get cyton gain of 4");
+  test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_6), 6, "should be able to get cyton gain of 6");
+  test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_8), 8, "should be able to get cyton gain of 8");
+  test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_12), 12, "should be able to get cyton gain of 12");
+  test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_24), 24, "should be able to get cyton gain of 24");
+
+}
+
+void testGetGainGanglion() {
+  test.describe("getGainGanglion");
+
+  test.assertEqual(wifi.getGainGanglion(), 51, "should get the gain of 51 for ganglion");
+}
+
+void testGetJSONAdditionalBytes() {
+  test.describe("getJSONAdditionalBytes");
+
+  test.assertEqual(wifi.getJSONAdditionalBytes(NUM_CHANNELS_GANGLION), 1164, "should get the right num of bytes for ganglion", __LINE__);
+  test.assertEqual(wifi.getJSONAdditionalBytes(NUM_CHANNELS_CYTON), 1116, "should get the right num of bytes for cyton", __LINE__);
+  test.assertEqual(wifi.getJSONAdditionalBytes(NUM_CHANNELS_CYTON_DAISY), 1212, "should get the right num of bytes for cyton daisy", __LINE__);
+}
+
+void testGetJSONBufferSize() {
+  test.describe("getJSONBufferSize");
+
+  wifi.reset();
+  size_t intialSize = wifi.getJSONBufferSize();
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2008, "should initialize json buffer size to zero", __LINE__);
+  wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
+  test.assertGreaterThan(wifi.getJSONBufferSize(), intialSize, "should set the json buffer greater than zero or inital", __LINE__);
+  test.assertLessThan(wifi.getJSONBufferSize(), (size_t)3000, "should be less than 3000bytes per chunk", __LINE__);
+
+}
+
+void testGetJSONMaxPackets() {
+  test.describe("getJSONMaxPackets");
+
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_GANGLION), 8, "should get the correct number for packets for ganglion", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON), 5, "should get the correct number for packets for cyton daisy", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON_DAISY), 3, "should get the correct number for packets for cyton", __LINE__);
+}
+
+
 void testGetOutputMode() {
   test.describe("getOutputMode");
 
   // RAW
-  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_RAW),"raw","Should have gotten 'raw' string");
+  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_RAW),"raw","Should have gotten 'raw' string",__LINE__);
 
   // JSON
-  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_JSON),"json","Should have gotten 'json' string");
+  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_JSON),"json","Should have gotten 'json' string",__LINE__);
 }
 
 void testGetScaleFactorVoltsCyton() {
@@ -30,31 +78,31 @@ void testGetScaleFactorVoltsCyton() {
   uint8_t expectedGain = 1;
   double epsilon = 0.000000001;
   double expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
-  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 1");
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 1",__LINE__);
 
   expectedGain = 2;
   expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
-  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 2");
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 2",__LINE__);
 
   expectedGain = 4;
   expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
-  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 4");
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 4",__LINE__);
 
   expectedGain = 6;
   expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
-  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 6");
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 6",__LINE__);
 
   expectedGain = 8;
   expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
-  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 8");
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 8",__LINE__);
 
   expectedGain = 12;
   expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
-  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 12");
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 12",__LINE__);
 
   expectedGain = 24;
   expectedScaleFactor = 4.5 / expectedGain / (pow(2,23) - 1);
-  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 24");
+  test.assertApproximately(wifi.getScaleFactorVoltsCyton(expectedGain), expectedScaleFactor, epsilon, "should be within 0.000001 with gain 24",__LINE__);
 }
 
 void testGetScaleFactorVoltsGanglion() {
@@ -62,14 +110,87 @@ void testGetScaleFactorVoltsGanglion() {
 
   double expectedScaleFactor = 1.2 / 51.0 / 1.5 / (pow(2,23) - 1);
   double epsilon = 0.0000000001;
-  test.assertApproximately(wifi.getScaleFactorVoltsGanglion(), expectedScaleFactor, epsilon, "should be within 0.000001");
+  test.assertApproximately(wifi.getScaleFactorVoltsGanglion(), expectedScaleFactor, epsilon, "should be within 0.000001",__LINE__);
 
 }
 
 void testGetters() {
+  testGetGainCyton();
+  testGetGainGanglion();
+  testGetJSONAdditionalBytes();
+  testGetJSONBufferSize();
+  testGetJSONMaxPackets();
   testGetOutputMode();
   testGetScaleFactorVoltsCyton();
   testGetScaleFactorVoltsGanglion();
+}
+
+void testSetGain() {
+  test.describe("setGains");
+
+  uint8_t byteCounter = 0;
+  uint8_t numChannels = NUM_CHANNELS_CYTON;
+  uint8_t rawGainArray[numChannels];
+  uint8_t actual_gains[numChannels];
+  uint8_t expected_gains[numChannels];
+
+  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
+  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
+  rawGainArray[byteCounter++] = numChannels;
+
+  for (int i = 0; i < numChannels; i++) {
+    rawGainArray[byteCounter++] = wifi.CYTON_GAIN_2;
+    expected_gains[i] = wifi.getGainCyton(wifi.CYTON_GAIN_2);
+  }
+
+  wifi.setGains(rawGainArray, actual_gains);
+
+  boolean allCorrect = true;
+
+  for (int i = 0; i < numChannels; i++) {
+    if (actual_gains[i] != expected_gains[i]) {
+      allCorrect = false;
+    }
+  }
+
+  test.assertTrue(true, "should be able to set all the gains correctly", __LINE__);
+}
+
+void testSetNumChannels() {
+  test.describe("setNumChannels");
+
+  uint8_t expected_numChannels = wifi.getNumChannels() + NUM_CHANNELS_CYTON;
+  size_t expected_jsonBufferSize = wifi.getJSONBufferSize();
+  wifi.setNumChannels(expected_numChannels);
+  test.assertEqual(wifi.getNumChannels(), expected_numChannels, "should be able to set the number of channels",__LINE__);
+  test.assertGreaterThan(wifi.getJSONBufferSize(), expected_jsonBufferSize, "should increase the size of the json buffer after raising the number of channels",__LINE__);
+}
+
+void testSetNTPOffset() {
+  test.describe("setNTPOffset");
+  unsigned long expected_ntpOffset = wifi.getNTPOffset() * 2;
+  wifi.setNTPOffset(expected_ntpOffset);
+  test.assertEqual(wifi.getNTPOffset(), expected_ntpOffset, "should be able to set the ntp offset", __LINE__);
+}
+
+void testReset() {
+  test.describe("reset");
+
+  wifi.setNTPOffset(123456);
+  wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
+
+  wifi.reset();
+
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2008, "should reset jsonBufferSize to 0", __LINE__);
+  test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
+  test.assertEqual(wifi.getNumChannels(), 8, "should reset numChannels to 8", __LINE__);
+}
+
+void testSetters() {
+  testReset();
+  testSetGain();
+  testSetNumChannels();
+  testSetNTPOffset();
 }
 
 void testChannelDataComputeCyton() {
@@ -94,15 +215,13 @@ void testChannelDataComputeCyton() {
   }
   arr[1] = expected_sampleNumber;
 
-  // Now for cyton
-
   wifi.sampleReset(wifi.sampleBuffer);
   wifi.channelDataCompute(arr, gains, wifi.sampleBuffer, packetOffset, numChannels);
   for (uint8_t i = 0; i < numChannels; i++) {
     test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0);
   }
-  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number");
-  test.assertGreaterThan((uint32_t)wifi.sampleBuffer->timestamp, 0, "should be able to set the timestamp");
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number", __LINE__);
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (unsigned long long)0, "should be able to set the timestamp", __LINE__);
 }
 
 void testChannelDataComputeDaisy() {
@@ -130,8 +249,8 @@ void testChannelDataComputeDaisy() {
   // Now for daisy
   wifi.sampleReset(wifi.sampleBuffer);
   wifi.channelDataCompute(arr, gains, wifi.sampleBuffer, packetOffset, numChannels);
-  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number");
-  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp");
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number", __LINE__);
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp", __LINE__);
 
   unsigned long long firstPacketTime = wifi.sampleBuffer->timestamp;
   packetOffset = MAX_CHANNELS_PER_PACKET;
@@ -143,8 +262,8 @@ void testChannelDataComputeDaisy() {
       test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0);
     }
   }
-  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should still have valid sample number");
-  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp");
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should still have valid sample number", __LINE__);
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp", __LINE__);
 }
 
 void testChannelDataComputeGanglion() {
@@ -176,8 +295,8 @@ void testChannelDataComputeGanglion() {
   for (uint8_t i = 0; i < numChannels; i++) {
     test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0);
   }
-  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number");
-  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp");
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number", __LINE__);
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp", __LINE__);
 }
 
 void testExtractRaws() {
@@ -200,7 +319,7 @@ void testExtractRaws() {
   wifi.extractRaws(arr, actual_raws, MAX_CHANNELS_PER_PACKET);
 
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
-    test.assertEqual(actual_raws[i], (int32_t)i+1, "should match the index number");
+    test.assertEqual(actual_raws[i], (int32_t)i+1, "should match the index number", __LINE__);
   }
 
 }
@@ -210,16 +329,16 @@ void testInt24To32() {
 
   uint8_t arr[3];
   arr[0] = 0x00; arr[1] = 0x06; arr[2] = 0x90;
-  test.assertEqual(wifi.int24To32(arr), 1680, "Should convert a small positive number");
+  test.assertEqual(wifi.int24To32(arr), 1680, "Should convert a small positive number", __LINE__);
 
   arr[0] = 0x02; arr[1] = 0xC0; arr[2] = 0x01; // 0x02C001 === 180225
-  test.assertEqual(wifi.int24To32(arr), 180225, "converts a large positive number");
+  test.assertEqual(wifi.int24To32(arr), 180225, "converts a large positive number", __LINE__);
 
   arr[0] = 0xFF; arr[1] = 0xFF; arr[2] = 0xFF; // 0xFFFFFF === -1
-  test.assertEqual(wifi.int24To32(arr), -1, "converts a small negative number");
+  test.assertEqual(wifi.int24To32(arr), -1, "converts a small negative number", __LINE__);
 
   arr[0] = 0x81; arr[1] = 0xA1; arr[2] = 0x01; // 0x81A101 === -8281855
-  test.assertEqual(wifi.int24To32(arr), -8281855, "converts a large negative number");
+  test.assertEqual(wifi.int24To32(arr), -8281855, "converts a large negative number", __LINE__);
 }
 
 void testTransformRawsToScaledCyton() {
@@ -249,7 +368,7 @@ void testTransformRawsToScaledCyton() {
   wifi.transformRawsToScaledCyton(raw, gains, 0, actual_scaledOutput);
 
   for (uint8_t i = 0; i < NUM_CHANNELS_CYTON; i++) {
-    test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton");
+    test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton", __LINE__);
     actual_scaledOutput[i] = 0.0; // clear
   }
 
@@ -257,7 +376,7 @@ void testTransformRawsToScaledCyton() {
   wifi.transformRawsToScaledCyton(raw, gains, MAX_CHANNELS_PER_PACKET, actual_scaledOutput);
 
   for (uint8_t i = NUM_CHANNELS_CYTON; i < NUM_CHANNELS_CYTON_DAISY; i++) {
-    test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton daisy");
+    test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton daisy", __LINE__);
   }
 }
 
@@ -278,7 +397,7 @@ void testTransformRawsToScaledGanglion() {
   wifi.transformRawsToScaledGanglion(raw, actual_scaledOutput);
 
   for (uint8_t i = 0; i < NUM_CHANNELS_GANGLION; i++) {
-    test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton");
+    test.assertApproximately(actual_scaledOutput[i], expected_scaledOutput[i], 1.0, "should be able to transform raws to scaled for cyton", __LINE__);
   }
 
 }
@@ -291,28 +410,28 @@ void testRawToScaled() {
     double scaleFactor = 5.0;
     double expected_output = 5000000000.0;
     double actual_output = wifi.rawToScaled(raw, scaleFactor);
-    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled small positive double");
+    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled small positive double", __LINE__);
 
     raw = 123456789;
     scaleFactor = 0.0000001234;
     epsilon = 50.0;
     expected_output = 15234567762.6; // on mac
     actual_output = wifi.rawToScaled(raw, scaleFactor);
-    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled large positive double");
+    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled large positive double", __LINE__);
 
     raw = -1;
     scaleFactor = 5.0;
     expected_output = -5000000000.0;
     epsilon = 1.0;
     actual_output = wifi.rawToScaled(raw, scaleFactor);
-    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled small negative double");
+    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled small negative double", __LINE__);
 
     raw = -123456789;
     scaleFactor = 0.0000001234;
     expected_output = -15234567762.6; // on mac
     epsilon = 50.0;
     actual_output = wifi.rawToScaled(raw, scaleFactor);
-    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled large positive double");
+    test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled large positive double", __LINE__);
 }
 
 void testSampleReset() {
@@ -324,17 +443,20 @@ void testSampleReset() {
   for (int i = 0; i < numChannels; i++) {
     wifi.sampleBuffer->channelData[i] = 1099.0;
   }
+  // Serial.printf("pre: wifi.sampleBuffer->sampleNumber %d\n", wifi.sampleBuffer->sampleNumber);
+
   wifi.sampleReset(wifi.sampleBuffer);
 
   test.assertEqual(wifi.sampleBuffer->timestamp, (uint64_t)0, String("should set timestamp to zero but got " + String((unsigned long)wifi.sampleBuffer->timestamp, DEC)).c_str());
-  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, 0, "should clear the sample number");
+  // Serial.printf("post: wifi.sampleBuffer->sampleNumber %d\n", wifi.sampleBuffer->sampleNumber);
+  test.assertEqual(wifi.sampleBuffer->sampleNumber, 0, String("should set sampleNumber to zero but got " + String((uint8_t)wifi.sampleBuffer->sampleNumber, DEC)).c_str());
   boolean isAllClear = true;
   for (int i = 0; i < numChannels; i++) {
     if (wifi.sampleBuffer->channelData[i] > 0.001 || wifi.sampleBuffer->channelData[i] < -0.001) {
       isAllClear = false;
     }
   }
-  test.assertBoolean(isAllClear, true, "should have cleared all values to 0.0");
+  test.assertBoolean(isAllClear, true, "should have cleared all values to 0.0", __LINE__);
 }
 
 void testUtils() {
@@ -352,6 +474,7 @@ void go() {
   test.begin();
   digitalWrite(ledPin, HIGH);
   testGetters();
+  testSetters();
   testUtils();
   test.end();
   digitalWrite(ledPin, LOW);
