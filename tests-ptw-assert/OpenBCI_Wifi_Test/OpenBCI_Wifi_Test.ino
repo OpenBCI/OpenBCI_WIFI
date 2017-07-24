@@ -18,10 +18,10 @@ void testGetOutputMode() {
   test.describe("getOutputMode");
 
   // RAW
-  test.assertEqualString(wifi.getOutputMode(wifi.OUTPUT_MODE_RAW),"raw","Should have gotten 'raw' string");
+  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_RAW),"raw","Should have gotten 'raw' string");
 
   // JSON
-  test.assertEqualString(wifi.getOutputMode(wifi.OUTPUT_MODE_JSON),"json","Should have gotten 'json' string");
+  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_JSON),"json","Should have gotten 'json' string");
 }
 
 void testGetScaleFactorVoltsCyton() {
@@ -72,12 +72,88 @@ void testGetters() {
   testGetScaleFactorVoltsGanglion();
 }
 
-void testChannelDataCompute() {
-  test.describe("channelDataCompute");
+void testChannelDataComputeCyton() {
+  test.describe("channelDataComputeCyton");
 
   uint8_t numChannels = NUM_CHANNELS_CYTON;
   uint8_t packetOffset = 0;
-  uint8_t gains[24];
+  uint8_t gains[NUM_CHANNELS_CYTON];
+  uint8_t arr[BYTES_PER_SPI_PACKET];
+  double expected_channelData[numChannels];
+  uint8_t expected_sampleNumber = 20;
+  uint8_t index = 0;
+  for (int i = 0; i < 24; i++) {
+    arr[i+2] = 0;
+    if (i%3==2) {
+      arr[i+2]=index+1;
+      gains[index] = 24;
+      int32_t raww = wifi.int24To32(arr + (index*3)+2);
+      expected_channelData[index] = wifi.rawToScaled(raww, wifi.getScaleFactorVoltsCyton(gains[index]));
+      index++;
+    }
+  }
+  arr[1] = expected_sampleNumber;
+
+  // Now for cyton
+
+  wifi.sampleReset(wifi.sampleBuffer);
+  wifi.channelDataCompute(arr, gains, wifi.sampleBuffer, packetOffset, numChannels);
+  for (uint8_t i = 0; i < numChannels; i++) {
+    test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0);
+  }
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number");
+  test.assertGreaterThan((uint32_t)wifi.sampleBuffer->timestamp, 0, "should be able to set the timestamp");
+}
+
+void testChannelDataComputeDaisy() {
+  test.describe("channelDataComputeDaisy");
+
+  uint8_t numChannels = NUM_CHANNELS_CYTON_DAISY;
+  uint8_t packetOffset = 0;
+  uint8_t gains[numChannels];
+  uint8_t arr[BYTES_PER_SPI_PACKET];
+  double expected_channelData[numChannels];
+  uint8_t expected_sampleNumber = 20;
+  uint8_t index = 0;
+  for (int i = 0; i < 24; i++) {
+    arr[i+2] = 0;
+    if (i%3==2) {
+      arr[i+2]=index+1;
+      gains[index] = 24;
+      int32_t raww = wifi.int24To32(arr + (index*3)+2);
+      expected_channelData[index] = wifi.rawToScaled(raww, wifi.getScaleFactorVoltsCyton(gains[index]));
+      index++;
+    }
+  }
+  arr[1] = expected_sampleNumber;
+
+  // Now for daisy
+  wifi.sampleReset(wifi.sampleBuffer);
+  wifi.channelDataCompute(arr, gains, wifi.sampleBuffer, packetOffset, numChannels);
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number");
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp");
+
+  unsigned long long firstPacketTime = wifi.sampleBuffer->timestamp;
+  packetOffset = MAX_CHANNELS_PER_PACKET;
+  wifi.channelDataCompute(arr, gains, wifi.sampleBuffer, packetOffset, numChannels);
+  for (uint8_t i = 0; i < numChannels; i++) {
+    if (i >= packetOffset) {
+      test.assertApproximately(wifi.sampleBuffer->channelData[i + packetOffset], expected_channelData[i], 1.0);
+    } else {
+      test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0);
+    }
+  }
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should still have valid sample number");
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp");
+}
+
+void testChannelDataComputeGanglion() {
+  test.describe("channelDataComputeGanglion");
+
+  uint8_t numChannels = NUM_CHANNELS_GANGLION;
+  uint8_t packetOffset = 0;
+  uint8_t gains[NUM_CHANNELS_GANGLION];
+  uint8_t expected_sampleNumber = 20;
   uint8_t arr[MAX_CHANNELS_PER_PACKET * BYTES_PER_CHANNEL];
   double expected_channelData[numChannels];
   uint8_t index = 0;
@@ -91,14 +167,17 @@ void testChannelDataCompute() {
       index++;
     }
   }
+  arr[1] = expected_sampleNumber;
+
+  wifi.sampleReset(wifi.sampleBuffer);
 
   wifi.channelDataCompute(arr, gains, wifi.sampleBuffer, packetOffset, numChannels);
 
   for (uint8_t i = 0; i < numChannels; i++) {
-    test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should be able to get cyton channel data into sample");
+    test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0);
   }
-
-
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should be able to extract the sample number");
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (uint64_t)0, "should be able to set the timestamp");
 }
 
 void testExtractRaws() {
@@ -121,7 +200,7 @@ void testExtractRaws() {
   wifi.extractRaws(arr, actual_raws, MAX_CHANNELS_PER_PACKET);
 
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
-    test.assertEqualInt(actual_raws[i], i+1, "should match the index number");
+    test.assertEqual(actual_raws[i], (int32_t)i+1, "should match the index number");
   }
 
 }
@@ -131,16 +210,16 @@ void testInt24To32() {
 
   uint8_t arr[3];
   arr[0] = 0x00; arr[1] = 0x06; arr[2] = 0x90;
-  test.assertEqualInt(wifi.int24To32(arr), 1680, "Should convert a small positive number");
+  test.assertEqual(wifi.int24To32(arr), 1680, "Should convert a small positive number");
 
   arr[0] = 0x02; arr[1] = 0xC0; arr[2] = 0x01; // 0x02C001 === 180225
-  test.assertEqualInt(wifi.int24To32(arr), 180225, "converts a large positive number");
+  test.assertEqual(wifi.int24To32(arr), 180225, "converts a large positive number");
 
   arr[0] = 0xFF; arr[1] = 0xFF; arr[2] = 0xFF; // 0xFFFFFF === -1
-  test.assertEqualInt(wifi.int24To32(arr), -1, "converts a small negative number");
+  test.assertEqual(wifi.int24To32(arr), -1, "converts a small negative number");
 
   arr[0] = 0x81; arr[1] = 0xA1; arr[2] = 0x01; // 0x81A101 === -8281855
-  test.assertEqualInt(wifi.int24To32(arr), -8281855, "converts a large negative number");
+  test.assertEqual(wifi.int24To32(arr), -8281855, "converts a large negative number");
 }
 
 void testTransformRawsToScaledCyton() {
@@ -234,16 +313,38 @@ void testRawToScaled() {
     epsilon = 50.0;
     actual_output = wifi.rawToScaled(raw, scaleFactor);
     test.assertApproximately(actual_output, expected_output, epsilon, "should be able to convert to scaled large positive double");
+}
 
+void testSampleReset() {
+  test.describe("sampleReset");
+
+  uint8_t numChannels = NUM_CHANNELS_CYTON_DAISY;
+  wifi.sampleBuffer->timestamp = 20;
+  wifi.sampleBuffer->sampleNumber = 21;
+  for (int i = 0; i < numChannels; i++) {
+    wifi.sampleBuffer->channelData[i] = 1099.0;
+  }
+  wifi.sampleReset(wifi.sampleBuffer);
+
+  test.assertEqual(wifi.sampleBuffer->timestamp, (uint64_t)0, String("should set timestamp to zero but got " + String((unsigned long)wifi.sampleBuffer->timestamp, DEC)).c_str());
+  test.assertEqualHex(wifi.sampleBuffer->sampleNumber, 0, "should clear the sample number");
+  boolean isAllClear = true;
+  for (int i = 0; i < numChannels; i++) {
+    if (wifi.sampleBuffer->channelData[i] > 0.001 || wifi.sampleBuffer->channelData[i] < -0.001) {
+      isAllClear = false;
+    }
+  }
+  test.assertBoolean(isAllClear, true, "should have cleared all values to 0.0");
 }
 
 void testUtils() {
+  testChannelDataComputeCyton();
   testExtractRaws();
   testInt24To32();
   testTransformRawsToScaledCyton();
   testTransformRawsToScaledGanglion();
+  testSampleReset();
   testRawToScaled();
-  testChannelDataCompute();
 }
 
 void go() {

@@ -66,14 +66,15 @@ public:
 
   // STRUCTS
   typedef struct {
-      double *channelData;
+      double channelData[NUM_CHANNELS_CYTON];
       unsigned long long timestamp;
+      uint8_t sampleNumber;
   } Sample;
 
   // Functions and Methods
   OpenBCI_Wifi_Class();
   void begin(void);
-  void channelDataCompute(uint8_t *arr, uint8_t *gains, Sample *sample, uint8_t packetOffset, uint8_t numChannels);
+  void channelDataCompute(uint8_t *, uint8_t *, Sample *, uint8_t, uint8_t);
   void extractRaws(uint8_t *, int32_t *, uint8_t);
   String getOutputMode(OUTPUT_MODE);
   double getScaleFactorVoltsCyton(uint8_t);
@@ -84,6 +85,8 @@ public:
   unsigned long long ntpGetTime(void);
   int32_t int24To32(uint8_t *);
   double rawToScaled(int32_t, double);
+  void sampleReset(Sample *);
+  void sampleReset(Sample *, uint8_t);
   void transformRawsToScaledCyton(int32_t *, uint8_t *, uint8_t, double *);
   void transformRawsToScaledGanglion(int32_t *, double *);
 

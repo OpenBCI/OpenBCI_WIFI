@@ -61,6 +61,12 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   _ntpOffset = 0;
 }
 
+////////////////////////////
+////////////////////////////
+// GETTERS /////////////////
+////////////////////////////
+////////////////////////////
+
 String OpenBCI_Wifi_Class::getOutputMode(OUTPUT_MODE outputMode) {
   switch(outputMode) {
     case OUTPUT_MODE_JSON:
@@ -69,23 +75,6 @@ String OpenBCI_Wifi_Class::getOutputMode(OUTPUT_MODE outputMode) {
     default:
       return "raw";
   }
-}
-
-/**
- * Convert an int24 into int32
- * @param  arr {uint8_t *} - 3-byte array of signed 24 bit number
- * @return     int32 - The converted number
- */
-int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
-  uint32_t raw = 0;
-  raw = arr[0] << 16 | arr[1] << 8 | arr[2];
-  // carry through the sign
-  if(bitRead(raw,23) == 1){
-    raw |= 0xFF000000;
-  } else{
-    raw &= 0x00FFFFFF;
-  }
-  return (int32_t)raw;
 }
 
 double OpenBCI_Wifi_Class::getScaleFactorVoltsGanglion() {
@@ -111,6 +100,71 @@ double OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
     default:
       return 1.0;
   }
+}
+
+/**
+ * Safely get the time, defaults to micros() if ntp is not active.
+ */
+unsigned long long OpenBCI_Wifi_Class::getTime() {
+  if (ntpActive()) {
+    return ntpGetTime() + ntpGetPreciseAdjustment(_ntpOffset);
+  } else {
+    return micros();
+  }
+}
+
+////////////////////////////
+////////////////////////////
+// UTILITIES ///////////////
+////////////////////////////
+////////////////////////////
+
+/**
+ * Return true if the channel data array is full
+ * @param arr           {uint8_t *] - 32 byte array from Cyton or Ganglion
+ * @param gains         {uint8_t *} - 32 byte array from Cyton or Ganglion
+ * @param sample        {Sample *} - Sample struct to hold data before conversion to float
+ * @param packetOffset  {uint8_t} - The offset to shift loading channel data into.
+ *                      i.e. should be 1 on second packet for daisy
+ * @param numChannels   {uint8_t} - The number of channels of the system, either 4, 8, or 16
+ */
+void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, uint8_t *gains, Sample *sample, uint8_t packetOffset, uint8_t numChannels) {
+  const uint8_t byteOffset = 2;
+  if (packetOffset == 0) {
+    sample->timestamp = getTime();
+    for (uint8_t i = 0; i < numChannels; i++) {
+      sample->channelData[i] = 0.0;
+    }
+    sample->sampleNumber = arr[1];
+  }
+  Serial.println();
+
+  if (numChannels == NUM_CHANNELS_GANGLION) {
+    int32_t temp_raw[NUM_CHANNELS_GANGLION];
+    extractRaws(arr + 2, temp_raw, NUM_CHANNELS_GANGLION);
+    transformRawsToScaledGanglion(temp_raw, sample->channelData);
+  } else {
+    int32_t temp_raw[MAX_CHANNELS_PER_PACKET];
+    extractRaws(arr + 2, temp_raw, MAX_CHANNELS_PER_PACKET);
+    transformRawsToScaledCyton(temp_raw, gains, packetOffset, sample->channelData);
+  }
+}
+
+/**
+ * Convert an int24 into int32
+ * @param  arr {uint8_t *} - 3-byte array of signed 24 bit number
+ * @return     int32 - The converted number
+ */
+int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
+  uint32_t raw = 0;
+  raw = arr[0] << 16 | arr[1] << 8 | arr[2];
+  // carry through the sign
+  if(bitRead(raw,23) == 1){
+    raw |= 0xFF000000;
+  } else{
+    raw &= 0x00FFFFFF;
+  }
+  return (int32_t)raw;
 }
 
 /**
@@ -159,14 +213,36 @@ unsigned long long OpenBCI_Wifi_Class::ntpGetTime(void) {
 }
 
 /**
- * Safely get the time, defaults to micros() if ntp is not active.
+ * Used to convert the raw int32_t into a scaled double
+ * @param  raw         {int32_t} - The raw value
+ * @param  scaleFactor {double} - The scale factor to multiply by
+ * @return             {double} - The raw value scaled by `scaleFactor`
+ *                                converted into nano volts.
  */
-unsigned long long OpenBCI_Wifi_Class::getTime() {
-  if (ntpActive()) {
-    return ntpGetTime() + ntpGetPreciseAdjustment(_ntpOffset);
-  } else {
-    return micros();
-  }
+double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
+  // Convert the three byte signed integer and convert it
+  return scaleFactor * raw * NANO_VOLTS_IN_VOLTS;
+}
+
+/**
+ * Resets the sample assuming 16 channels
+ * @param sample {Sample} - The sample struct
+ */
+void OpenBCI_Wifi_Class::sampleReset(Sample *sample) {
+  sampleReset(sample, NUM_CHANNELS_CYTON_DAISY);
+}
+
+/**
+ * Resets the sample
+ * @param sample      {Sample} - The sample struct
+ * @param numChannels {uint8_t} - The number of channels to clear to zero
+ */
+void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
+  // for (size_t i = 0; i < numChannels; i++) {
+  //   sample->channelData[i] = 0.0;
+  // }
+  // sample->sampleNumber = 0;
+  // sample->timestamp = 0;
 }
 
 /**
@@ -181,9 +257,7 @@ unsigned long long OpenBCI_Wifi_Class::getTime() {
  */
 void OpenBCI_Wifi_Class::transformRawsToScaledCyton(int32_t *raw, uint8_t *gains, uint8_t packetOffset, double *scaledOutput) {
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
-
     scaledOutput[i + packetOffset] = wifi.rawToScaled(raw[i + packetOffset], wifi.getScaleFactorVoltsCyton(gains[i + packetOffset]));
-    Serial.printf("%d %0.10f\n", i + packetOffset, scaledOutput[i + packetOffset]);
   }
 }
 
@@ -196,40 +270,6 @@ void OpenBCI_Wifi_Class::transformRawsToScaledCyton(int32_t *raw, uint8_t *gains
 void OpenBCI_Wifi_Class::transformRawsToScaledGanglion(int32_t *raw, double *scaledOutput) {
   for (uint8_t i = 0; i < NUM_CHANNELS_GANGLION; i++) {
     scaledOutput[i] = wifi.rawToScaled(raw[i], wifi.getScaleFactorVoltsGanglion());
-  }
-}
-
-double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
-  // Convert the three byte signed integer and convert it
-  return scaleFactor * raw * NANO_VOLTS_IN_VOLTS;
-}
-
-/**
- * Return true if the channel data array is full
- * @param arr [uint8_t *] - 32 byte array from Cyton or Ganglion
- * @param sample [Sample *] - Sample struct to hold data before conversion to float
- * @param packetOffset [uint8_t] - The offset to shift loading channel data into.
- *   i.e. should be 1 on second packet for daisy
- */
-void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, uint8_t *gains, Sample *sample, uint8_t packetOffset, uint8_t numChannels) {
-  const uint8_t byteOffset = 2;
-  if (packetOffset == 0) {
-    sample->timestamp = getTime();
-    double temp_channelData[numChannels];
-    sample->channelData = temp_channelData;
-    for (uint8_t i = 0; i < numChannels; i++) {
-      sample->channelData[i] = 0;
-    }
-  }
-
-  if (numChannels == NUM_CHANNELS_GANGLION) {
-    int32_t temp_raw[NUM_CHANNELS_GANGLION];
-    extractRaws(arr + 2, temp_raw, NUM_CHANNELS_GANGLION);
-    transformRawsToScaledGanglion(temp_raw, sample->channelData);
-  } else {
-    int32_t temp_raw[MAX_CHANNELS_PER_PACKET];
-    extractRaws(arr + 2, temp_raw, MAX_CHANNELS_PER_PACKET);
-    transformRawsToScaledCyton(temp_raw, gains, packetOffset, sample->channelData);
   }
 }
 
