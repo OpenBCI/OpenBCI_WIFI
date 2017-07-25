@@ -19,6 +19,7 @@ OpenBCI_Wifi_Class OpenBCI_Wifi;
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
+  _counter = 0;
   _jsonBufferSize = 0;
   _ntpOffset = 0;
   _numChannels = 0;
@@ -61,6 +62,7 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initVariables(void) {
+  _counter = 0;
   _ntpOffset = 0;
   _numChannels = 0;
   setNumChannels(NUM_CHANNELS_CYTON);
@@ -179,7 +181,7 @@ size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
   return _jsonBufferSize;
 }
 
-String OpenBCI_Wifi_Class::getJSONFromSample(Sample *sample, uint8_t numChannels, uint8_t numPackets) {
+String OpenBCI_Wifi_Class::getJSONFromSamples(Sample *sample, uint8_t numChannels, uint8_t numPackets) {
 
   DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize);
 
@@ -188,25 +190,24 @@ String OpenBCI_Wifi_Class::getJSONFromSample(Sample *sample, uint8_t numChannels
 
   root["count"] = _counter++;
 
-  for (uint8_t i = 0; i < packetsToSend; i++) {
+  for (uint8_t i = 0; i < numPackets; i++) {
     if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
       tail = 0;
     }
     JsonObject& sample = chunk.createNestedObject();
-    // sample["timestamp"] = (sampleBuffer + tail)->timestamp;
+    Serial.printf("timestamp: %lu\n", (sampleBuffer + tail)->timestamp);
     sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
 
     JsonArray& data = sample.createNestedArray("data");
     for (uint8_t j = 0; j < numChannels; j++) {
-      if ((sampleBuffer + tail)->channelData[j] == 0) {
-        Serial.printf("\nrawd %4.0f \tnv %4.10f", (sampleBuffer + tail)->raw[j], (sampleBuffer + tail)->nano_volts[j]);
-      }
       data.add((sampleBuffer + tail)->channelData[j]);
     }
     tail++;
   }
 
-  return "";
+  String returnStr = "";
+  root.printTo(returnStr);
+  return returnStr;
 }
 
 /**

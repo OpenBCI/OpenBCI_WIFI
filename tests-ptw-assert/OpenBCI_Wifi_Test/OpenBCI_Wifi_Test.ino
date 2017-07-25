@@ -46,7 +46,7 @@ void testGetJSONBufferSize() {
 
   wifi.reset();
   size_t intialSize = wifi.getJSONBufferSize();
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2008, "should initialize json buffer size to zero", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2024, "should initialize json buffer size to zero", __LINE__);
   wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
   test.assertGreaterThan(wifi.getJSONBufferSize(), intialSize, "should set the json buffer greater than zero or inital", __LINE__);
   test.assertLessThan(wifi.getJSONBufferSize(), (size_t)3000, "should be less than 3000bytes per chunk", __LINE__);
@@ -56,8 +56,8 @@ void testGetJSONBufferSize() {
 // #define ARDUINOJSON_USE_DOUBLE 1
 // #define ARDUINOJSON_USE_LONG_LONG 1
 
-void testGetJSONFromSampleCyton() {
-  test.describe("getJSONFromSampleCyton");
+void testGetJSONFromSamplesCyton() {
+  test.describe("getJSONFromSamplesCyton");
 
   wifi.sampleReset(wifi.sampleBuffer);
   uint8_t numChannels = NUM_CHANNELS_CYTON;
@@ -77,8 +77,8 @@ void testGetJSONFromSampleCyton() {
   wifi.sampleBuffer->timestamp = expected_timestamp;
   memcpy(wifi.sampleBuffer->channelData, expected_channelData, numChannels);
 
-  String actual_serializedOutput = wifi.getJSONFromSample(wifi.sampleBuffer, numChannels, numSamples);
-
+  String actual_serializedOutput = wifi.getJSONFromSamples(wifi.sampleBuffer, numChannels, numSamples);
+  Serial.println(actual_serializedOutput);
   // const char* json = "{\"chunk\":[{\"timestamp\":1500916934017000,\"sampleNumber\":255,\"data\":[8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000]}]}";
   const size_t bufferSize = JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3) + 220;
   DynamicJsonBuffer jsonBuffer(bufferSize);
@@ -99,8 +99,8 @@ void testGetJSONFromSampleCyton() {
   }
 }
 
-void testGetJSONFromSample() {
-  testGetJSONFromSampleCyton();
+void testGetJSONFromSamples() {
+  testGetJSONFromSamplesCyton();
   // testGetJSONFromSampleDaisy();
   // testGetJSONFromSampleGanglion();
 }
@@ -171,7 +171,7 @@ void testGetters() {
   testGetGainGanglion();
   testGetJSONAdditionalBytes();
   testGetJSONBufferSize();
-  testGetJSONFromSample();
+  testGetJSONFromSamples();
   testGetJSONMaxPackets();
   testGetOutputMode();
   testGetScaleFactorVoltsCyton();
@@ -234,7 +234,7 @@ void testReset() {
 
   wifi.reset();
 
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2008, "should reset jsonBufferSize to 0", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2024, "should reset jsonBufferSize to 0", __LINE__);
   test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
   test.assertEqual(wifi.getNumChannels(), 8, "should reset numChannels to 8", __LINE__);
 }
