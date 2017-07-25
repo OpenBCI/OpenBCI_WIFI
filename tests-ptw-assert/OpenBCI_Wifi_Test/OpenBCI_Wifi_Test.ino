@@ -14,6 +14,30 @@
 
 int ledPin = 0;
 
+void printLLNumber(unsigned long long n, uint8_t base) {
+  unsigned char buf[16 * sizeof(long)]; // Assumes 8-bit chars.
+  unsigned long long i = 0;
+
+  if (n == 0) {
+    Serial.print('0');
+    return;
+  }
+
+  while (n > 0) {
+    buf[i++] = n % base;
+    n /= base;
+  }
+
+  for (; i > 0; i--)
+    Serial.print((char) (buf[i - 1] < 10 ?
+      '0' + buf[i - 1] :
+      'A' + buf[i - 1] - 10));
+}
+
+void printLLNumber(unsigned long long n) {
+  printLLNumber(n, DEC);
+}
+
 void testGetGainCyton() {
   test.describe("getGainCyton");
 
@@ -76,7 +100,7 @@ void testGetJSONFromSamplesCyton() {
   wifi.sampleBuffer->sampleNumber = expected_sampleNumber;
   wifi.sampleBuffer->timestamp = expected_timestamp;
   memcpy(wifi.sampleBuffer->channelData, expected_channelData, numChannels);
-
+  // Serial.print("wifi.sampleBuffer->timestamp: "); printLLNumber(wifi.sampleBuffer->timestamp);
   String actual_serializedOutput = wifi.getJSONFromSamples(wifi.sampleBuffer, numChannels, numSamples);
   Serial.println(actual_serializedOutput);
   // const char* json = "{\"chunk\":[{\"timestamp\":1500916934017000,\"sampleNumber\":255,\"data\":[8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000,8388607000000000]}]}";

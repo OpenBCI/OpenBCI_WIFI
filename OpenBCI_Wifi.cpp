@@ -182,21 +182,24 @@ size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
 }
 
 String OpenBCI_Wifi_Class::getJSONFromSamples(Sample *sample, uint8_t numChannels, uint8_t numPackets) {
+  String output = "{\"chunk\":[";
+  // DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize+1000);
 
-  DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize);
+  // JsonObject& root = jsonSampleBuffer.createObject();
+  // JsonArray& chunk = root.createNestedArray("chunk");
 
-  JsonObject& root = jsonSampleBuffer.createObject();
-  JsonArray& chunk = root.createNestedArray("chunk");
-
-  root["count"] = _counter++;
+  // root["count"] = _counter++;
 
   for (uint8_t i = 0; i < numPackets; i++) {
     if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
       tail = 0;
     }
     JsonObject& sample = chunk.createNestedObject();
-    Serial.printf("timestamp: %lu\n", (sampleBuffer + tail)->timestamp);
+    Serial.printf("timestamp: "); debugPrintLLNumber((sampleBuffer + tail)->timestamp); Serial.println();
     sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
+    unsigned long long timestamp = sample.get<unsigned long long>("timestamp");
+    printLLNumber(timestamp); Serial.println();
+    // Serial.printf("timestamp: %.0f\n", timestamp);
 
     JsonArray& data = sample.createNestedArray("data");
     for (uint8_t j = 0; j < numChannels; j++) {
@@ -205,9 +208,11 @@ String OpenBCI_Wifi_Class::getJSONFromSamples(Sample *sample, uint8_t numChannel
     tail++;
   }
 
-  String returnStr = "";
-  root.printTo(returnStr);
-  return returnStr;
+  output = output + "],\"count\":" + String(_counter++) + "}";
+  return output;
+  // String returnStr = "";
+  // root.printTo(returnStr);
+  // return returnStr;
 }
 
 /**
@@ -403,6 +408,65 @@ unsigned long long OpenBCI_Wifi_Class::ntpGetTime(void) {
 double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
   // Convert the three byte signed integer and convert it
   return scaleFactor * raw * NANO_VOLTS_IN_VOLTS;
+}
+
+/**
+ * Used to print out a long long number
+ * @param n    {uint64_t} The unsigned number
+ * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN
+ */
+void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n, uint8_t base) {
+  unsigned char buf[16 * sizeof(long)]; // Assumes 8-bit chars.
+  unsigned long long i = 0;
+
+  if (n == 0) {
+    Serial.print('0');
+    return;
+  }
+
+  while (n > 0) {
+    buf[i++] = n % base;
+    n /= base;
+  }
+
+  for (; i > 0; i--)
+    Serial.print((char) (buf[i - 1] < 10 ?
+      '0' + buf[i - 1] :
+      'A' + buf[i - 1] - 10));
+}
+
+/**
+ * Used to print out a long long number
+ * @param n    {uint64_t} The unsigned number
+ * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN
+ */
+String OpenBCI_Wifi_Class::getStringLLNumber(unsigned long long n, uint8_t base) {
+  unsigned char buf[16 * sizeof(long)]; // Assumes 8-bit chars.
+  unsigned long long i = 0;
+
+  if (n == 0) {
+    return "0";
+  }
+  String output;
+  while (n > 0) {
+    buf[i++] = n % base;
+    n /= base;
+  }
+
+  for (; i > 0; i--) {
+    output = output + String((char) (buf[i - 1] < 10 ?
+      '0' + buf[i - 1] :
+      'A' + buf[i - 1] - 10));
+  }
+  return output;
+}
+
+/**
+ * Used to print out a long long number. Forces the base to be DEC
+ * @param n    {uint64_t} The unsigned number
+ */
+void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n) {
+  debugPrintLLNumber(n, DEC);
 }
 
 /**

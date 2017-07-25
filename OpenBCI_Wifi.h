@@ -85,14 +85,17 @@ public:
   uint8_t getJSONMaxPackets(uint8_t);
   uint8_t getNumChannels(void);
   unsigned long getNTPOffset(void);
+  String getStringLLNumber(unsigned long long n, uint8_t base);
   String getOutputMode(OUTPUT_MODE);
   double getScaleFactorVoltsCyton(uint8_t);
   double getScaleFactorVoltsGanglion(void);
   unsigned long long getTime(void);
+  int32_t int24To32(uint8_t *);
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
-  int32_t int24To32(uint8_t *);
+  void debugPrintLLNumber(unsigned long long);
+  void debugPrintLLNumber(unsigned long long, uint8_t);
   void reset(void);
   double rawToScaled(int32_t, double);
   void sampleReset(Sample *);
