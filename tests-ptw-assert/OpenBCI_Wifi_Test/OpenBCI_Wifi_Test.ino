@@ -92,7 +92,7 @@ void testGetJSONFromSamplesCyton() {
   JsonArray& chunk0_data = chunk0["data"];
   for (int i = 0; i < numChannels; i++) {
     double chunk0_tempData = chunk0_data[i];
-    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0);
+    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
   }
 
   // Cyton with three packets
@@ -106,22 +106,22 @@ void testGetJSONFromSamplesCyton() {
       (wifi.sampleBuffer + j)->channelData[j] = expected_channelData[j] - i;
     }
   }
-  String actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
-  const size_t bufferSize = JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3) + 220;
-  DynamicJsonBuffer jsonBuffer(bufferSize);
-  JsonObject& root = jsonBuffer.parseObject(actual_serializedOutput);
+  actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
+  const size_t bufferSize3 = JSON_ARRAY_SIZE(2) + 3*(JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3)) + 220;
+  DynamicJsonBuffer jsonBuffer1(bufferSize);
+  JsonObject& root3 = jsonBuffer1.parseObject(actual_serializedOutput);
   for (uint8_t i = 0; i < numSamples; i++) {
-    JsonObject& chunk = root["chunk"][i];
+    JsonObject& chunk = root3["chunk"][i];
     double actual_timestamp = chunk["timestamp"]; // 1500916934017000
-    test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
+    test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
 
     uint8_t actual_sampleNumber = chunk["sampleNumber"]; // 255
-    test.assertEqual(actual_sampleNumber, expected_sampleNumber, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
+    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
 
-    JsonArray& chunk_data = chunk0["data"];
+    JsonArray& chunk_data = chunk["data"];
     for (uint8_t j = 0; j < numChannels; j++) {
       double chunk_tempData = chunk_data[j];
-      test.assertApproximately(chunk_data[j], expected_channelData[j]-i, 1.0);
+      test.assertApproximately(chunk_data[j], expected_channelData[j]-i, 1.0, String("should be able to code large numbers for sample " + String(i)).c_str(), __LINE__);
     }
   }
 }
@@ -175,7 +175,6 @@ void testGetStringLLNumber() {
   temp_d = -1* ADC_24BIT_MAX_VAL_NANO_VOLT;
   actualString = wifi.getStringLLNumber((long long)temp_d);
   test.assertEqual(actualString, "-8388607000000000", "should be able to convert a negative double again", __LINE__);
-
 }
 
 void testGetScaleFactorVoltsCyton() {
@@ -288,7 +287,8 @@ void testReset() {
   wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
 
   wifi.reset();
-
+  test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
+  test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
   test.assertEqual(wifi.getJSONBufferSize(), (size_t)2024, "should reset jsonBufferSize to 0", __LINE__);
   test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
   test.assertEqual(wifi.getNumChannels(), 8, "should reset numChannels to 8", __LINE__);

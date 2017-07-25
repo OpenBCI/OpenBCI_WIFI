@@ -17,6 +17,8 @@ OpenBCI_Wifi_Class OpenBCI_Wifi;
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
+  head = 0;
+  tail = 0;
   _counter = 0;
   _jsonBufferSize = 0;
   _ntpOffset = 0;
@@ -60,6 +62,8 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initVariables(void) {
+  head = 0;
+  tail = 0;
   _counter = 0;
   _ntpOffset = 0;
   _numChannels = 0;
@@ -112,6 +116,14 @@ uint8_t OpenBCI_Wifi_Class::getGainGanglion() {
   return 51;
 }
 
+/**
+ * Returns the current head of the buffer
+ * @return  [description]
+ */
+uint8_t OpenBCI_Wifi_Class::getHead(void) {
+  return head;
+}
+
 String OpenBCI_Wifi_Class::getOutputMode(OUTPUT_MODE outputMode) {
   switch(outputMode) {
     case OUTPUT_MODE_JSON:
@@ -146,6 +158,15 @@ double OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
       return 1.0;
   }
 }
+
+/**
+ * Returns the current of the buffer
+ * @return  [description]
+ */
+uint8_t OpenBCI_Wifi_Class::getTail(void) {
+  return tail;
+}
+
 
 /**
  * Safely get the time, defaults to micros() if ntp is not active.
