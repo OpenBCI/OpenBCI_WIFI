@@ -67,16 +67,16 @@ public:
 
   // STRUCTS
   typedef struct {
-      double channelData[NUM_CHANNELS_CYTON_DAISY];
-      unsigned long long timestamp;
-      uint8_t sampleNumber;
+    double channelData[NUM_CHANNELS_CYTON_DAISY];
+    unsigned long long timestamp;
+    uint8_t sampleNumber;
   } Sample;
 
   typedef struct {
-      boolean flushing;
-      boolean gotAllPackets;
-      uint8_t data[OPENBCI_BUFFER_LENGTH_MULTI];
-      int     positionWrite;
+    boolean flushing;
+    boolean gotAllPackets;
+    uint8_t data[BYTES_PER_RAW_BUFFER];
+    int     positionWrite;
   } RawBuffer;
 
   // Functions and Methods
@@ -111,7 +111,8 @@ public:
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
-  boolean rawBufferAddData(RawBuffer *, uint8_t *, int, boolean);
+  String perfectPrintByteHex(uint8_t);
+  boolean rawBufferAddData(RawBuffer *, uint8_t *, int);
   void rawBufferClean(RawBuffer *);
   boolean rawBufferHasData(RawBuffer *);
   void rawBufferFlush(RawBuffer *);
@@ -133,12 +134,22 @@ public:
   void transformRawsToScaledGanglion(int32_t *, double *);
 
   // Variables
-  Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
-  RawBuffer rawBuffer[NUM_RAW_BUFFERS];
-  RawBuffer *curRawBuffer;
-
   boolean tcpDelimiter;
 
+  ESP8266HTTPUpdateServer httpUpdater;
+  ESP8266WebServer server(int port = 80);
+
+  OUTPUT_MODE curOutputMode;
+  OUTPUT_PROTOCOL curOutputProtocol;
+
+  RawBuffer *curRawBuffer;
+  RawBuffer rawBuffer[NUM_RAW_BUFFERS];
+
+  Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
+
+  WiFiClient clientTCP;
+  WiFiClient espClient;
+  PubSubClient clientMQTT;
 
 private:
   // Functions

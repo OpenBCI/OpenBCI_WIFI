@@ -38,7 +38,7 @@ void OpenBCI_Wifi_Class::begin(void) {
 }
 
 void OpenBCI_Wifi_Class::initArduino(void) {
-
+  clientMQTT.setClient(espClient);
 }
 
 /**
@@ -77,10 +77,13 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   _ntpOffset = 0;
   _numChannels = 0;
   setNumChannels(NUM_CHANNELS_CYTON);
+
+  curOutputMode = OUTPUT_MODE_RAW;
+  curOutputProtocol = OUTPUT_PROTOCOL_NONE;
 }
 
 void OpenBCI_Wifi_Class::reset(void) {
-  initArduino();
+  // initArduino();
   initVariables();
   initArrays();
   initObjects();
@@ -498,6 +501,14 @@ int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
   return (int32_t)raw;
 }
 
+String OpenBCI_Wifi_Class::perfectPrintByteHex(uint8_t b) {
+  if (b <= 0x0F) {
+    return "0" + String(b, HEX);
+  } else {
+    return String(b, HEX);
+  }
+}
+
 /**
  * Check to see if SNTP is active
  * @type {Number}
@@ -554,7 +565,7 @@ double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
 * @author AJ Keller (@pushtheworldllc)
 */
 boolean OpenBCI_Wifi_Class::rawBufferAddData(RawBuffer *buf, uint8_t *data, int len) {
-  // Serial.print("Pos write "); Serial.println(currentRadioBuffer->positionWrite);
+  // Serial.print("Pos write "); Serial.println(curRawBuffer->positionWrite);
   for (int i = 0; i < len; i++) {
     if (buf->positionWrite < BYTES_PER_RAW_BUFFER) { // Check for to prevent overflow
       buf->data[buf->positionWrite] = data[i];
@@ -574,7 +585,7 @@ boolean OpenBCI_Wifi_Class::rawBufferAddData(RawBuffer *buf, uint8_t *data, int 
 * @description Used to fill the buffer with all zeros. Should be used as
 *      frequently as possible. This is very useful if you need to ensure that
 *      no bad data is sent over the serial port.
-* @param `buf` {BufferRadio *} - The buffer to clean.
+* @param `buf` {RawBuffer *} - The buffer to clean.
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::rawBufferClean(RawBuffer *buf) {
@@ -619,11 +630,11 @@ void OpenBCI_Wifi_Class::rawBufferFlushBuffers(void) {
 /**
 * @description Used to determine if there is data in the radio buffer. Most
 *  likely this data needs to be cleared.
-* @param `buf` {BufferRadio *} - The buffer to examine.
+* @param `buf` {RawBuffer *} - The buffer to examine.
 * @returns {boolean} - `true` if the radio buffer has data, `false` if not...
 * @author AJ Keller (@pushtheworldllc)
 */
-boolean OpenBCI_Radios_Class::rawBufferHasData(RawBuffer *buf) {
+boolean OpenBCI_Wifi_Class::rawBufferHasData(RawBuffer *buf) {
   return buf->positionWrite > 0;
 }
 
@@ -643,7 +654,7 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data, int len) {
   // Current buffer has data
   } else {
     // Current buffer has all packets, is in a locked state
-    if (curRawBuffer->gotAllPackets || currentRawBuffer->flushing) {
+    if (curRawBuffer->gotAllPackets || curRawBuffer->flushing) {
       // Can switch to other buffer
       if (rawBufferSwitchToOtherBuffer()) {
         // Take it! Not last
@@ -682,7 +693,7 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data, int len) {
 *  make sure we don't flush a buffer unless it's really ready!
 * @author AJ Keller (@pushtheworldllc)
 */
-void OpenBCI_Wifi_Class::rawBufferProcessSingle(BufferRadio *buf) {
+void OpenBCI_Wifi_Class::rawBufferProcessSingle(RawBuffer *buf) {
   if (rawBufferHasData(buf) && buf->gotAllPackets) {
     // Flush radio buffer to the driver
     rawBufferFlush(buf);
@@ -694,7 +705,7 @@ void OpenBCI_Wifi_Class::rawBufferProcessSingle(BufferRadio *buf) {
 
 /**
 * @description Used to determing if the output buffer `buf` is in a locked state.
-* @param `buf` {BufferRadio *} - The buffer to examine.
+* @param `buf` {RawBuffer *} - The buffer to examine.
 * @returns {boolen} - `true` if there is no lock on `buf`
 * @author AJ Keller (@pushtheworldllc)
 */
