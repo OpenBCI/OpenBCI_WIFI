@@ -17,6 +17,7 @@ OpenBCI_Wifi_Class OpenBCI_Wifi;
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
+  curRawBuffer = 0;
   head = 0;
   tail = 0;
   _counter = 0;
@@ -54,8 +55,13 @@ void OpenBCI_Wifi_Class::initArrays(void) {
 */
 void OpenBCI_Wifi_Class::initObjects(void) {
   for (size_t i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
-    wifi.sampleReset(wifi.sampleBuffer + i);
+    wifi.sampleReset(sampleBuffer + i);
   }
+  for (size_t i = 0; i < NUM_RAW_BUFFERS; i++) {
+    wifi.rawBufferReset(rawBuffer + i);
+  }
+
+  curRawBuffer = rawBuffer;
 }
 
 /**
@@ -63,6 +69,8 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initVariables(void) {
+  tcpDelimiter = false;
+
   head = 0;
   tail = 0;
   _counter = 0;
@@ -180,6 +188,11 @@ unsigned long long OpenBCI_Wifi_Class::getTime() {
   }
 }
 
+/////////////////////////
+/////////////////////////
+//// JSON ///////////////
+/////////////////////////
+/////////////////////////
 /**
  * The additional bytes needed for input duplication, follows max packets
  */
@@ -394,7 +407,7 @@ void OpenBCI_Wifi_Class::setNTPOffset(unsigned long ntpOffset) {
 /**
  * Return true if the channel data array is full
  * @param arr           {uint8_t *] - 32 byte array from Cyton or Ganglion
- * @param gains         {uint8_t *} - 32 byte array from Cyton or Ganglion
+ * @param gains         {uint8_t *} - Gain array
  * @param sample        {Sample *} - Sample struct to hold data before conversion to float
  * @param packetOffset  {uint8_t} - The offset to shift loading channel data into.
  *                      i.e. should be 1 on second packet for daisy
@@ -422,6 +435,53 @@ void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, uint8_t *gains, Sample
 }
 
 /**
+ * Used to print out a long long number
+ * @param n    {uint64_t} The signed number
+ * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN
+ */
+void OpenBCI_Wifi_Class::debugPrintLLNumber(long long n, uint8_t base) {
+  Serial.print(getStringLLNumber(n, base));
+}
+
+/**
+ * Used to print out a long long number. Forces the base to be DEC
+ * @param n    {uint64_t} The unsigned number
+ */
+void OpenBCI_Wifi_Class::debugPrintLLNumber(long long n) {
+  debugPrintLLNumber(n, DEC);
+}
+
+/**
+ * Used to print out a long long number
+ * @param n    {uint64_t} The unsigned number
+ * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN
+ */
+void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n, uint8_t base) {
+  Serial.print(getStringLLNumber(n, base));
+}
+
+/**
+ * Used to print out a long long number. Forces the base to be DEC
+ * @param n    {uint64_t} The unsigned number
+ */
+void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n) {
+  debugPrintLLNumber(n, DEC);
+}
+
+/**
+ * Should extract raw int32_t array of length number of channels to get
+ * @param arr         {uint8_t *} The array of 3byte signed 2's complement numbers
+ * @param numChannels {uint8_t} The number of channels to pull out of `arr`
+ * @param output      {int32_t *} An array of length `numChannels` to store
+ *                    the extracted values
+ */
+void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output, uint8_t numChannels) {
+  for (uint8_t i = 0; i < numChannels; i++) {
+    output[i] = int24To32(arr + (i*3));
+  }
+}
+
+/**
  * Convert an int24 into int32
  * @param  arr {uint8_t *} - 3-byte array of signed 24 bit number
  * @return     int32 - The converted number
@@ -436,19 +496,6 @@ int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
     raw &= 0x00FFFFFF;
   }
   return (int32_t)raw;
-}
-
-/**
- * Should extract raw int32_t array of length number of channels to get
- * @param arr         {uint8_t *} The array of 3byte signed 2's complement numbers
- * @param numChannels {uint8_t} The number of channels to pull out of `arr`
- * @param output      {int32_t *} An array of length `numChannels` to store
- *                    the extracted values
- */
-void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output, uint8_t numChannels) {
-  for (uint8_t i = 0; i < numChannels; i++) {
-    output[i] = int24To32(arr + (i*3));
-  }
 }
 
 /**
@@ -496,37 +543,199 @@ double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
 }
 
 /**
- * Used to print out a long long number
- * @param n    {uint64_t} The signed number
- * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN
- */
-void OpenBCI_Wifi_Class::debugPrintLLNumber(long long n, uint8_t base) {
-  Serial.print(getStringLLNumber(n, base));
+* @description Used to add a char data array to the the radio buffer. Always
+*      skips the fist
+* @param data {char *} - An array from RFduinoGZLL_onReceive
+* @param len {int} - Length of array from RFduinoGZLL_onReceive
+* @param clearBuffer {boolean} - If true then will reset the flags on the radio
+*      buffer.
+* @return {boolean} - True if the data was added to the buffer, false if the
+*      buffer was overflowed.
+* @author AJ Keller (@pushtheworldllc)
+*/
+boolean OpenBCI_Wifi_Class::rawBufferAddData(RawBuffer *buf, uint8_t *data, int len) {
+  // Serial.print("Pos write "); Serial.println(currentRadioBuffer->positionWrite);
+  for (int i = 0; i < len; i++) {
+    if (buf->positionWrite < BYTES_PER_RAW_BUFFER) { // Check for to prevent overflow
+      buf->data[buf->positionWrite] = data[i];
+      buf->positionWrite++;
+    } else { // We overflowed, need to return false.
+      buf->gotAllPackets = true;
+      return false;
+    }
+  }
+  if (buf->positionWrite >= (BYTES_PER_RAW_BUFFER - len)) {
+    buf->gotAllPackets = true;
+  }
+  return true;
 }
 
 /**
- * Used to print out a long long number. Forces the base to be DEC
- * @param n    {uint64_t} The unsigned number
- */
-void OpenBCI_Wifi_Class::debugPrintLLNumber(long long n) {
-  debugPrintLLNumber(n, DEC);
+* @description Used to fill the buffer with all zeros. Should be used as
+*      frequently as possible. This is very useful if you need to ensure that
+*      no bad data is sent over the serial port.
+* @param `buf` {BufferRadio *} - The buffer to clean.
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::rawBufferClean(RawBuffer *buf) {
+  for (int i = 0; i < BYTES_PER_RAW_BUFFER; i++) {
+    buf->data[i] = 0;
+  }
 }
 
 /**
- * Used to print out a long long number
- * @param n    {uint64_t} The unsigned number
- * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN
- */
-void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n, uint8_t base) {
-  Serial.print(getStringLLNumber(n, base));
+* @description Called when all the packets have been recieved to flush the
+*       contents of the buffer to the currently selected protocol pipeline.
+* @param `buf` {RawBuffer *} - The buffer to flush.
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::rawBufferFlush(RawBuffer *buf) {
+  // Lock this buffer down!
+  buf->flushing = true;
+  if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
+    clientTCP.write(buf->data, buf->positionWrite);
+    if (tcpDelimiter) {
+      clientTCP.write("\r\n");
+    }
+  } else if (curOutputProtocol == OUTPUT_PROTOCOL_MQTT) {
+    clientMQTT.publish("openbci",(const char*)buf->data);
+  } else {
+    Serial.println((const char*)buf->data);
+  }
+  buf->flushing = false;
 }
 
 /**
- * Used to print out a long long number. Forces the base to be DEC
- * @param n    {uint64_t} The unsigned number
+* @description Used to flush any raw output buffer that is ready to be flushed to
+*  the serial port.
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::rawBufferFlushBuffers(void) {
+  for (int i = 0; i < NUM_RAW_BUFFERS; i++) {
+    rawBufferProcessSingle(rawBuffer + i);
+  }
+}
+
+/**
+* @description Used to determine if there is data in the radio buffer. Most
+*  likely this data needs to be cleared.
+* @param `buf` {BufferRadio *} - The buffer to examine.
+* @returns {boolean} - `true` if the radio buffer has data, `false` if not...
+* @author AJ Keller (@pushtheworldllc)
+*/
+boolean OpenBCI_Radios_Class::rawBufferHasData(RawBuffer *buf) {
+  return buf->positionWrite > 0;
+}
+
+byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data, int len) {
+  // Current buffer has no data
+  if (rawBufferReadyForNewPage(curRawBuffer)) {
+    // Serial.println("Not last packet / Current buffer has no data");
+    // Take it, not last
+    if (rawBufferAddData(curRawBuffer,data,len)) {
+      // Return that a packet that was not last was added
+      return PROCESS_RAW_PASS_FIRST;
+    } else {
+      // Return that packet failed to be added on teh first time, i.e. length
+      //  `len` was greater than the length of the whole rawBuffer->buf
+      return PROCESS_RAW_FAIL_OVERFLOW_FIRST;
+    }
+  // Current buffer has data
+  } else {
+    // Current buffer has all packets, is in a locked state
+    if (curRawBuffer->gotAllPackets || currentRawBuffer->flushing) {
+      // Can switch to other buffer
+      if (rawBufferSwitchToOtherBuffer()) {
+        // Take it! Not last
+        if (rawBufferAddData(curRawBuffer,data,len)) {
+          // Return that a packet was added
+          return PROCESS_RAW_PASS_SWITCH;
+        } else {
+          // Return that packet failed to be added on the first time, i.e. length
+          //  `len` was greater than the length of the whole rawBuffer->buf
+          //  also this was after a switch
+          return PROCESS_RAW_FAIL_OVERFLOW_FIRST_AFTER_SWITCH;
+        }
+      // Cannot switch to other buffer
+      } else {
+        // Reject it!
+        return PROCESS_RAW_FAIL_SWITCH;
+      }
+      // Current buffer does not have all packets
+    } else {
+      // Take it! Not last.
+      if (rawBufferAddData(curRawBuffer,data,len)) {
+        // Return that a packet that was not first was added
+        return PROCESS_RAW_PASS_MIDDLE;
+      } else {
+        // Return that a packet was not able to be added
+        return PROCESS_RAW_FAIL_OVERFLOW_MIDDLE;
+      }
+
+    }
+  }
+}
+
+/**
+* @description Should only flush a buffer if it has data in it and has gotten all
+*  of it's packets. This function will be called every loop so it's important to
+*  make sure we don't flush a buffer unless it's really ready!
+* @author AJ Keller (@pushtheworldllc)
+*/
+void OpenBCI_Wifi_Class::rawBufferProcessSingle(BufferRadio *buf) {
+  if (rawBufferHasData(buf) && buf->gotAllPackets) {
+    // Flush radio buffer to the driver
+    rawBufferFlush(buf);
+    // Reset the radio buffer flags
+    rawBufferReset(buf);
+  }
+}
+
+
+/**
+* @description Used to determing if the output buffer `buf` is in a locked state.
+* @param `buf` {BufferRadio *} - The buffer to examine.
+* @returns {boolen} - `true` if there is no lock on `buf`
+* @author AJ Keller (@pushtheworldllc)
+*/
+boolean OpenBCI_Wifi_Class::rawBufferReadyForNewPage(RawBuffer *buf) {
+  return !buf->flushing && !rawBufferHasData(buf);
+}
+
+
+/**
+* @description Used to safely swap the global buffers!
+* @returns {boolean} - `true` if the current buffer has been swapped,
+*  `false` if the swap was not able to occur.
+* @author AJ Keller (@pushtheworldllc)
+*/
+boolean OpenBCI_Wifi_Class::rawBufferSwitchToOtherBuffer(void) {
+  if (NUM_RAW_BUFFERS == 2) {
+    // current radio buffer is set to the first one
+    if (curRawBuffer == rawBuffer) {
+      if (rawBufferReadyForNewPage(rawBuffer + 1)) {
+        curRawBuffer++;
+        return true;
+      }
+      // current radio buffer is set to the second one
+    } else {
+      if (rawBufferReadyForNewPage(rawBuffer)) {
+        curRawBuffer--;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Resets the raw buffer
+ * @param buf      {RawBuffer} - the buffer struct
  */
-void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n) {
-  debugPrintLLNumber(n, DEC);
+void OpenBCI_Wifi_Class::rawBufferReset(RawBuffer *buf) {
+  buf->flushing = false;
+  buf->gotAllPackets = false;
+  buf->positionWrite = 0;
 }
 
 /**

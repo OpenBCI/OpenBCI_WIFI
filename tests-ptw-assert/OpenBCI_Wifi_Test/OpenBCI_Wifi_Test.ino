@@ -444,6 +444,8 @@ void testReset() {
   wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
 
   wifi.reset();
+  test.assertFalse(wifi.tcpDelimiter, "should set tcpDelimiter to false", __LINE__);
+  test.assertEqual((int)&wifi.curRawBuffer, (int)&wifi.rawBuffer, "should point cur raw buffer to head of buffer", __LINE__);
   test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
   test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
   test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should reset jsonBufferSize to 0", __LINE__);
@@ -724,14 +726,606 @@ void testSampleReset() {
   test.assertBoolean(isAllClear, true, "should have cleared all values to 0.0", __LINE__);
 }
 
-void testUtils() {
+void testUtilisForJSON() {
   testChannelDataComputeCyton();
+  testChannelDataComputeDaisy();
+  testChannelDataComputeGanglion();
   testExtractRaws();
   testInt24To32();
   testTransformRawsToScaledCyton();
   testTransformRawsToScaledGanglion();
   testSampleReset();
   testRawToScaled();
+}
+
+void testUtilisForRaw() {
+    testRawBufferSetup();
+    testRawBufferAddData();
+    testRawBufferClean();
+    testRawBufferHasData();
+    testRawBufferProcessPacket();
+    testRawBufferReadyForNewPage();
+    testRawBufferReset();
+    testRawBufferSwitchToOtherBuffer();
+}
+
+void testRawBufferSetup() {
+    wifi.curRawBuffer = wifi.rawBuffer;
+}
+
+void testRawBufferAddData() {
+    test.describe("bufferRadioAddData");
+
+    char buffer[] = "AJ Keller is the best programmer";
+    int expectedLength = 32; // Then length of the above buffer
+
+    test.assertBoolean(wifi.rawBufferAddData(wifi.curRawBuffer, (char *)buffer, expectedLength, false),true,"should be able to add buffer to radioBuf", __LINE__);
+    test.assertBoolean(wifi.curRawBuffer->gotAllPackets,false,"should not have all the packets", __LINE__);
+    test.assertEqual(wifi.curRawBuffer->positionWrite,expectedLength,"should move positionWrite by 32", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,buffer,expectedLength,"should add the whole buffer", __LINE__);
+
+    // Reset buffer
+    wifi.curRawBuffer->positionWrite = 0;
+
+    // Test how this will work in normal operations, i.e. ignoring the byte id
+    test.assertBoolean(wifi.rawBufferAddData(wifi.curRawBuffer, buffer + 1, expectedLength - 1, true),true,"should be able to add buffer to radioBuf", __LINE__);
+    test.assertBoolean(wifi.curRawBuffer->gotAllPackets,true,"should be able to set gotAllPackets to true", __LINE__);
+    test.assertEqual(wifi.curRawBuffer->positionWrite,expectedLength - 1,"should set the positionWrite to 31", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,buffer + 1,expectedLength - 1,"should add the whole buffer", __LINE__);
+}
+
+void testRawBufferClean() {
+    test.describe("bufferRadioClean");
+
+    for (int i = 0; i < OPENBCI_BUFFER_LENGTH_MULTI; i++) {
+        wifi.curRawBuffer->data[i] = 1;
+    }
+
+    // Call the function under test
+    wifi.rawBufferClean(wifi.curRawBuffer);
+
+    // Should fill the array with all zeros
+    boolean allZeros = true;
+    for (int j = 0; j < OPENBCI_BUFFER_LENGTH_MULTI; j++) {
+        if (wifi.curRawBuffer->data[j] != 0) {
+            allZeros = false;
+        }
+    }
+    test.assertBoolean(true,allZeros,"should set all values to zero", __LINE__);
+}
+
+void testRawBufferHasData() {
+    test.describe("bufferRadioHasData");
+
+    wifi.curRawBuffer->positionWrite = 0;
+
+    // Don't add any data
+    test.assertBoolean(wifi.rawBufferHasData(wifi.curRawBuffer),false,"should have no data at first", __LINE__);
+    // Add some data
+    wifi.curRawBuffer->positionWrite = 69;
+    // Verify!
+    test.assertBoolean(wifi.rawBufferHasData(wifi.curRawBuffer),true,"should have data after moving positionWrite", __LINE__);
+}
+
+void testRawBufferProcessPacket() {
+
+    test.describe("bufferRadioProcessPacket");
+
+    testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE();
+
+    testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_LAST_MULTI();
+
+    // Commented out test below because using only one radio buffer as of now
+    //  and as such, will never be able to switch to the other radio buffer
+    testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST();
+
+    testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_SWITCH_LAST();
+
+    testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_SWITCH_NOT_LAST();
+
+    // Commented out test below because using only one radio buffer as of now
+    //  and as such, will never be able to switch to the other radio buffer
+    testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_SWITCH_NOT_LAST();
+
+    testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_MISSED_LAST();
+
+    testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_MIDDLE();
+
+    testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_MISSED_NOT_LAST();
+
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE() {
+
+    char bufferTaco[] = " taco";
+    int bufferTacoLength = 5;
+
+    testRawBufferCleanUp();
+    test.detail("OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE");
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    // Last packet
+    //      Current buffer has no data
+    //          Take it! Mark Last
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE,"should add to radio buffer 1", __LINE__);
+    test.assertBoolean(wifi.curRawBuffer->gotAllPackets,true,"should be able to set gotAllPackets to true", __LINE__);
+    test.assertEqual(wifi.curRawBuffer->positionWrite,bufferTacoLength - 1,"should set the positionWrite to 4", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferTaco + 1, bufferTacoLength - 1, "should have the taco buffer loaded into the first buffer", __LINE__);
+
+    // Also verify that the buffer was loaded into the correct buffer
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,true,"should be able to set gotAllPackets to true", __LINE__);
+    test.assertEqual(wifi.rawBuffer->positionWrite,bufferTacoLength - 1,"should set the positionWrite to 4", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data,bufferTaco + 1, bufferTacoLength - 1, "currentRadioBuffer should have the taco buffer loaded into it", __LINE__);
+
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_LAST_MULTI() {
+    char buffer32[] = " AJ Keller is da best programmer";
+    char bufferTaco[] = " taco";
+
+    int buffer32Length = 32;
+    int bufferTacoLength = 5;
+    testRawBufferCleanUp();
+    test.detail("OPENBCI_PROCESS_RADIO_PASS_LAST_MULTI");
+    test.it("should be able to add a multi page packet");
+    buffer32[0] = radio.byteIdMake(false,1,(char *)buffer32 + 1, buffer32Length - 1);
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32, buffer32Length),OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_FIRST,"should add not the last packet", __LINE__);
+    // Not last packet
+    //      Current buffer has data
+    //          Current buffer does not have all packets
+    //              Previous packet number == packetNumber + 1
+    //                  Take it! Mark last.
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_LAST_MULTI,"should add the last packet", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,true,"should set gotAllPackets to true on first buffer", __LINE__);
+    test.assertEqual(wifi.rawBuffer->positionWrite,(bufferTacoLength + buffer32Length) - 2,"should set the positionWrite to size of both packets", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data,buffer32 + 1, buffer32Length - 1, "buffer32 loaded into the correct postion in first buffer", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data + (buffer32Length - 1),bufferTaco + 1, bufferTacoLength - 1, "taco buffer loaded into correct position in first buffer", __LINE__);
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST() {
+    char buffer32[] = " AJ Keller is da best programmer";
+    char bufferCali[] = " caliLucyMaggie";
+    char bufferTaco[] = " taco";
+
+    int buffer32Length = 32;
+    int bufferCaliLength = 15;
+    int bufferTacoLength = 5;
+    testRawBufferCleanUp();
+    test.detail("OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST");
+    // Need the first buffer to be full
+    test.it("should switch to second buffer when first buffer is full and id last packet");
+    buffer32[0] = radio.byteIdMake(false,1,(char *)buffer32 + 1, buffer32Length - 1);
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32, buffer32Length),OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_FIRST,"should add not the last packet", __LINE__);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_LAST_MULTI,"should add the last packet", __LINE__);
+
+    bufferCali[0] = radio.byteIdMake(false,0,(char *)bufferCali + 1, bufferCaliLength - 1);
+    // Last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Can swtich to other buffer
+    //                  Take it! Mark Last
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferCali, bufferCaliLength),OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST,"should switch and add the last packet", __LINE__);
+    test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets,true,"should set gotAllPackets to true for second buffer", __LINE__);
+    test.assertEqual((wifi.rawBuffer + 1)->positionWrite,bufferCaliLength - 1,"should set the positionWrite to size of cali buffer", __LINE__);
+    test.assertEqualBuffer((wifi.rawBuffer + 1)->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer in the second buffer correctly", __LINE__);
+
+    // Verify that both of the buffers are full
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,true,"should still have a full first buffer after switch", __LINE__);
+    test.assertEqual(wifi.rawBuffer->positionWrite,(bufferTacoLength + buffer32Length) - 2,"first buffer should still have correct size", __LINE__);
+
+    test.assertBoolean(wifi.curRawBuffer->gotAllPackets,true,"should set got all packets full on currentRadioBuffer", __LINE__);
+    test.assertEqual(wifi.curRawBuffer->positionWrite,bufferCaliLength - 1,"should set positionWrite of currentRadioBuffer to that of the second buffer", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer into the buffer currentRadioBuffer points to", __LINE__);
+
+
+    // Do it again in reverse, where the second buffer is full
+    // So clear the first buffer and point to the second
+    test.it("should switch to first buffer when second buffer is full and id last packet");
+    testRawBufferCleanUp();
+    wifi.curRawBuffer = wifi.rawBuffer + 1;
+    bufferCali[0] = radio.byteIdMake(false,0,(char *)bufferCali + 1, bufferCaliLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferCali, bufferCaliLength),OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE,"should add the last packet", __LINE__);
+    test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets,true,"should set gotAllPackets to true for second buffer", __LINE__);
+    test.assertEqualBuffer((wifi.rawBuffer + 1)->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer in the second buffer correctly", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer into the buffer currentRadioBuffer points to", __LINE__);
+
+    // point to the second buffer
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    // Last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Can swtich to other buffer
+    //                  Take it! Mark Last
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST,"should add the last packet", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,true,"should mark the first buffer full after switch", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data,bufferTaco + 1, bufferTacoLength - 1, "should have the taco buffer loaded into the first buffer", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferTaco + 1, bufferTacoLength - 1, "should have the taco buffer loaded into currentRadioBuffer", __LINE__);
+    // Verify the first buffer is still loaded with the cali buffer
+    test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets,true,"should set gotAllPackets to true for second buffer", __LINE__);
+    test.assertEqual((wifi.rawBuffer + 1)->positionWrite,bufferCaliLength - 1,"should set the positionWrite to size of cali buffer", __LINE__);
+    test.assertEqualBuffer((wifi.rawBuffer + 1)->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer in the second buffer correctly", __LINE__);
+
+    test.it("should switch to second buffer when first is flushing and id last packet");
+    // First buffer flushing, second empty
+    testRawBufferCleanUp();
+    // Load the cali buffer into the first buffer
+    bufferCali[0] = radio.byteIdMake(false,0,(char *)bufferCali + 1, bufferCaliLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferCali, bufferCaliLength),OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE,"should add the last packet", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,true,"should set gotAllPackets to true for first buffer", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer in the first buffer correctly", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer into the buffer currentRadioBuffer points to", __LINE__);
+    // Test is to simulate the first one is being flushed as this new packet comes in
+    // Set the first buffer to flushing
+    wifi.rawBuffer->flushing = true;
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    // Last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Can swtich to other buffer
+    //                  Take it! Mark Last
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST,"should switch and add the last packet when first is flushing", __LINE__);
+    test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets,true,"should mark the second buffer full", __LINE__);
+    test.assertEqualBuffer((wifi.rawBuffer + 1)->data,bufferTaco + 1, bufferTacoLength - 1, "should have the taco buffer loaded into the second buffer", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferTaco + 1, bufferTacoLength - 1, "should have the taco buffer loaded into currentRadioBuffer", __LINE__);
+    // Verify the first buffer is still loaded with the cali buffer
+    test.assertBoolean(wifi.rawBuffer->flushing,true,"should have flushing true for first buffer", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,true,"should still have gotAllPackets true for first buffer", __LINE__);
+    test.assertEqual(wifi.rawBuffer->positionWrite,bufferCaliLength - 1,"should still have positionWrite to size of cali buffer in buffer 1", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data,bufferCali + 1, bufferCaliLength - 1, "should still have loaded cali buffer in the first buffer correctly", __LINE__);
+
+    test.it("should switch to first buffer when second is flushing and id last packet");
+    // Second buffer flushing, first empty
+    testRawBufferCleanUp();
+    // Load the cali buffer into the second buffer
+    wifi.curRawBuffer = wifi.rawBuffer + 1;
+    bufferCali[0] = radio.byteIdMake(false,0,(char *)bufferCali + 1, bufferCaliLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferCali, bufferCaliLength),OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE,"should add the last packet", __LINE__);
+    test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets,true,"should set gotAllPackets to true for second buffer", __LINE__);
+    test.assertEqualBuffer((wifi.rawBuffer + 1)->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer in the second buffer correctly", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferCali + 1, bufferCaliLength - 1, "should have loaded cali buffer into the buffer currentRadioBuffer points to", __LINE__);
+    // Test is to simulate the second one is being flushed as this new packet comes in
+    // Set the second buffer to flushing
+    (wifi.rawBuffer + 1)->flushing = true;
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    // Last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Can swtich to other buffer
+    //                  Take it! Mark Last
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST,"should switch and add the last packet when second is flushing", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,true,"should mark the first buffer full", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data,bufferTaco + 1, bufferTacoLength - 1, "should have the taco buffer loaded into the first buffer", __LINE__);
+    test.assertEqualBuffer(wifi.curRawBuffer->data,bufferTaco + 1, bufferTacoLength - 1, "should have the taco buffer loaded into currentRadioBuffer", __LINE__);
+    // Verify the first buffer is still loaded with the cali buffer
+    test.assertBoolean((wifi.rawBuffer + 1)->flushing,true,"should have flushing true for second buffer", __LINE__);
+    test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets,true,"should still have gotAllPackets true for second buffer", __LINE__);
+    test.assertEqual((wifi.rawBuffer + 1)->positionWrite,bufferCaliLength - 1,"should still have positionWrite to size of cali buffer in buffer 2", __LINE__);
+    test.assertEqualBuffer((wifi.rawBuffer + 1)->data,bufferCali + 1, bufferCaliLength - 1, "should still have loaded cali buffer in the first buffer correctly", __LINE__);
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_SWITCH_LAST() {
+    char bufferCali[] = " caliLucyMaggie";
+    char bufferTaco[] = " taco";
+    char bufferTomatoPotato[] = " tomatoPotato";
+
+    int bufferCaliLength = 15;
+    int bufferTacoLength = 5;
+    int bufferTomatoPotatoLength = 13;
+    test.detail("OPENBCI_PROCESS_RADIO_FAIL_SWITCH_LAST");
+    test.it("should not be able to switch to other buffer when both are full");
+    testRawBufferCleanUp();
+    // Fill the two buffers
+    bufferCali[0] = radio.byteIdMake(false,0,(char *)bufferCali + 1, bufferCaliLength - 1);
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferCali, bufferCaliLength),OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE,"should add the last packet to buffer 1", __LINE__);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST,"should add the last packet to buffer 2", __LINE__);
+
+    bufferTomatoPotato[0] = radio.byteIdMake(false,0,(char *)bufferTomatoPotato + 1, bufferTomatoPotatoLength - 1);
+    // Last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Cannot switch to other buffer
+    //                  Reject it!
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTomatoPotato, bufferTomatoPotatoLength),OPENBCI_PROCESS_RADIO_FAIL_SWITCH_LAST,"should reject the addition of this buffer", __LINE__);
+
+    test.it("should not be able to switch to other buffer when the buffers are flushing");
+    testRawBufferCleanUp();
+    wifi.rawBuffer->flushing = true;
+    (wifi.rawBuffer+1)->flushing = true;
+    bufferTomatoPotato[0] = radio.byteIdMake(false,0,(char *)bufferTomatoPotato + 1, bufferTomatoPotatoLength - 1);
+    // Last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Cannot switch to other buffer
+    //                  Reject it!
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTomatoPotato, bufferTomatoPotatoLength),OPENBCI_PROCESS_RADIO_FAIL_SWITCH_LAST,"should reject the addition of this buffer", __LINE__);
+
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_SWITCH_NOT_LAST() {
+    char buffer32Hey[] = " hey there, my name is AJ Keller";
+    char bufferCali[] = " caliLucyMaggie";
+    char bufferTaco[] = " taco";
+
+    int buffer32Length = 32;
+    int bufferCaliLength = 15;
+    int bufferTacoLength = 5;
+    int bufferTomatoPotatoLength = 13;
+    testRawBufferCleanUp();
+    test.detail("OPENBCI_PROCESS_RADIO_FAIL_SWITCH_NOT_LAST");
+    // Fill both buffers
+    bufferCali[0] = radio.byteIdMake(false,0,(char *)bufferCali + 1, bufferCaliLength - 1);
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferCali, bufferCaliLength),OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE,"should add the last packet to buffer 1", __LINE__);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_PASS_SWITCH_LAST,"should add the last packet to buffer 2", __LINE__);
+
+    buffer32Hey[0] = radio.byteIdMake(false,1,(char *)buffer32Hey + 1, buffer32Length - 1);
+    // Not last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Cannot switch to other buffer
+    //                  Reject it!
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32Hey, buffer32Length),OPENBCI_PROCESS_RADIO_FAIL_SWITCH_NOT_LAST,"should reject the addition of this multi page buffer", __LINE__);
+    test.assertEqualBuffer(wifi.rawBuffer->data,bufferCali + 1, bufferCaliLength - 1, "should still have loaded cali buffer in the first buffer correctly", __LINE__);
+    test.assertEqualBuffer((wifi.rawBuffer + 1)->data,bufferTaco + 1, bufferTacoLength - 1, "should still have loaded taco buffer in the second buffer correctly", __LINE__);
+
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_SWITCH_NOT_LAST() {
+    char bufferCali[] = " caliLucyMaggie";
+    char buffer32Hey[] = " hey there, my name is AJ Keller";
+    int bufferCaliLength = 15;
+    int buffer32Length = 32;
+
+    test.detail("OPENBCI_PROCESS_RADIO_PASS_SWITCH_NOT_LAST");
+    testRawBufferCleanUp();
+    // Clear the first buffer, second buffer still has stuff in it
+    wifi.rawBufferReset(wifi.rawBuffer);
+    // Make sure currentRadioBuffer pointer it on the second buffer
+    wifi.curRawBuffer = wifi.rawBuffer + 1;
+    bufferCali[0] = radio.byteIdMake(false,0,(char *)bufferCali + 1, bufferCaliLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferCali, bufferCaliLength),OPENBCI_PROCESS_RADIO_PASS_LAST_SINGLE,"should add the last packet to buffer 1", __LINE__);
+
+    // Load it
+    buffer32Hey[0] = radio.byteIdMake(false,2,(char *)buffer32Hey + 1, buffer32Length - 1);
+    // Not last packet
+    //      Current buffer has data
+    //          Current buffer has all packets
+    //              Can switch to other buffer
+    //                  Take it! Not last
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32Hey, buffer32Length),OPENBCI_PROCESS_RADIO_PASS_SWITCH_NOT_LAST,"should reject the addition of this multi page buffer", __LINE__);
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_MISSED_LAST() {
+    char buffer32[] = " AJ Keller is da best programmer";
+    char bufferTaco[] = " taco";
+
+    int buffer32Length = 32;
+    int bufferTacoLength = 5;
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.detail("OPENBCI_PROCESS_RADIO_FAIL_MISSED_LAST");
+    buffer32[0] = radio.byteIdMake(false,2,(char *)buffer32 + 1, buffer32Length - 1);
+    bufferTaco[0] = radio.byteIdMake(false,0,(char *)bufferTaco + 1, bufferTacoLength - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32, buffer32Length),OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_FIRST,"should add not the last packet", __LINE__);
+    // Last packet
+    //      Current buffer has data
+    //          Current buffer does not have all packets
+    //              Missed a packet
+    //                  Reject it! Reset current buffer
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)bufferTaco, bufferTacoLength),OPENBCI_PROCESS_RADIO_FAIL_MISSED_LAST,"should not add the last packet because missed packet 1", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,false,"should not have gotAllPackets", __LINE__);
+    test.assertEqual(wifi.rawBuffer->positionWrite,buffer32Length - 1,"should set the positionWrite to size of first packet", __LINE__);
+
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_MIDDLE() {
+    char buffer32[] = " AJ Keller is da best programmer";
+    char buffer32Hey[] = " hey there, my name is AJ Keller";
+    int buffer32Length = 32;
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+    test.detail("OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_MIDDLE");
+    buffer32[0] = radio.byteIdMake(false,2,(char *)buffer32 + 1, buffer32Length - 1);
+    buffer32Hey[0] = radio.byteIdMake(false,1,(char *)buffer32Hey + 1, buffer32Length - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32, buffer32Length),OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_FIRST,"should add first packet of several", __LINE__);
+    // Not last packet
+    //      Current buffer has data
+    //          Current buffer does not have all packets
+    //              Previous packet number == packetNumber + 1
+    //                  Take it! Not last.
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32Hey, buffer32Length),OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_MIDDLE,"should add middle packet", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,false,"should not have gotAllPackets", __LINE__);
+    test.assertEqual(wifi.rawBuffer->positionWrite,buffer32Length - 1 + buffer32Length - 1,"should set the positionWrite to size of first packet", __LINE__);
+
+}
+
+void testRawBuffer_OPENBCI_PROCESS_RADIO_FAIL_MISSED_NOT_LAST() {
+    char buffer32[] = " AJ Keller is da best programmer";
+    char buffer32Hey[] = " hey there, my name is AJ Keller";
+    int buffer32Length = 32;
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+    test.detail("OPENBCI_PROCESS_RADIO_FAIL_MISSED_NOT_LAST");
+    buffer32[0] = radio.byteIdMake(false,3,(char *)buffer32 + 1, buffer32Length - 1);
+    buffer32Hey[0] = radio.byteIdMake(false,1,(char *)buffer32Hey + 1, buffer32Length - 1);
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32, buffer32Length),OPENBCI_PROCESS_RADIO_PASS_NOT_LAST_FIRST,"should add first packet of several", __LINE__);
+    // Not last packet
+    //      Current buffer has data
+    //          Current buffer does not have all packets
+    //              Missed a packet
+    //                  Reject it! Reset current buffer
+    test.assertEqualHex(wifi.rawBufferProcessPacket((char *)buffer32Hey, buffer32Length),OPENBCI_PROCESS_RADIO_FAIL_MISSED_NOT_LAST,"should not be able to add middle packet because not last", __LINE__);
+    test.assertBoolean(wifi.rawBuffer->gotAllPackets,false,"should not have gotAllPackets", __LINE__);
+    test.assertEqual(wifi.rawBuffer->positionWrite,buffer32Length - 1,"should set the positionWrite to size of first packet", __LINE__);
+
+}
+
+void testRawBufferReadyForNewPage() {
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.describe("bufferRadioReadyForNewPage");
+
+    char bufferTomatoPotato[] = " tomatoPotato";
+    int bufferTomatoPotatoLength = 13;
+    bufferTomatoPotato[0] = radio.byteIdMake(false,0,(char *)bufferTomatoPotato + 1, bufferTomatoPotatoLength - 1);
+
+
+    test.it("works with clean state");
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer),true,"should be ready to add new page in the first buffer", __LINE__);
+    // test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),true,"should be ready to add new page in the second buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer),true,"should be ready to add new page in the currentRadioBuffer", __LINE__);
+
+    // Add data to buffer 1
+    test.it("cannot add a page to first buffer but can the second when filled");
+    wifi.rawBufferAddData(wifi.curRawBuffer, (char *)bufferTomatoPotato, bufferTomatoPotatoLength, true);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer),false,"should not be ready to add new page in the first buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),true,"should be ready to add new page in the second buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer),false,"should not be ready to add new page in the currentRadioBuffer", __LINE__);
+
+    // Increment the currentRadioBuffer pointer
+    // wifi.curRawBuffer++;
+    // Clear the buffers
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    // Add data to buffer 2
+    test.it("cannot add a page to either the first buffer when filled");
+    // test.it("cannot add a page to either the first or second buffer when both are filled");
+    wifi.rawBufferAddData(wifi.curRawBuffer, (char *)bufferTomatoPotato, bufferTomatoPotatoLength, true);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer),false,"should not be ready to add new page in the first buffer", __LINE__);
+    // test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),false,"should not be ready to add new page in the second buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer),false,"should not be ready to add new page in the currentRadioBuffer", __LINE__);
+
+    // Clear the buffers
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    // Mark first buffer as flushing
+    test.it("cannot add a page to first buffer when when flushing");
+    // test.it("cannot add a page to first buffer but can the second when flushing");
+    wifi.rawBuffer->flushing = true;
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer),false,"should not be ready to add new page in the first buffer", __LINE__);
+    // test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),true,"should be ready to add new page in the second buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer),false,"should not be ready to add new page in the currentRadioBuffer", __LINE__);
+    wifi.rawBuffer->flushing = false;
+    // Mark second buffer as flushing
+    test.it("cannot add a page to second buffer but can the first when flushing");
+    (wifi.rawBuffer + 1)->flushing = true;
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer),true,"should be ready to add new page in the first buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),false,"should not be ready to add new page in the second buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer),true,"should be ready to add new page in the currentRadioBuffer", __LINE__);
+    (wifi.rawBuffer + 1)->flushing = true;
+
+    // Both flushing
+    test.it("cannot add a page to either when both flushing");
+    wifi.rawBuffer->flushing = true;
+    (wifi.rawBuffer + 1)->flushing = true;
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer),false,"should not be ready to add new page in the first buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),false,"should not be ready to add new page in the second buffer", __LINE__);
+    test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer),false,"should not be ready to add new page in the currentRadioBuffer", __LINE__);
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+}
+
+void testRawBufferReset() {
+    // Test the reset functions
+    test.describe("bufferRadioReset");
+
+    wifi.curRawBuffer->flushing = true;
+    wifi.curRawBuffer->gotAllPackets = true;
+    wifi.curRawBuffer->positionWrite = 60;
+    wifi.curRawBuffer->previousPacketNumber = 3;
+
+    // Reset the flags
+    wifi.rawBufferReset(wifi.curRawBuffer);
+
+    // Verify they got Reset
+    test.assertBoolean(wifi.curRawBuffer->flushing,false,"should set flushing to false");
+    test.assertBoolean(wifi.curRawBuffer->gotAllPackets,false,"should set got all packets to false");
+    test.assertEqual(wifi.curRawBuffer->positionWrite,0,"should set positionWrite to 0");
+    test.assertEqual(wifi.curRawBuffer->previousPacketNumber,0,"should set previousPacketNumber to 0");
+}
+
+void testRawBufferSwitchToOtherBuffer() {
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.describe("bufferRadioSwitchToOtherBuffer");
+
+    char bufferTomatoPotato[] = " tomatoPotato";
+    int bufferTomatoPotatoLength = 13;
+
+    test.it("should return true if buffer 2 does not have data and should move the pointer");
+    wifi.curRawBuffer = wifi.rawBuffer;
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),true,"can switch to other empty buffer", __LINE__);
+    test.assertBoolean(wifi.curRawBuffer == (wifi.rawBuffer + 1), true, "currentRadioBuffer points to second buffer", __LINE__);
+
+    test.it("should return true if buffer 1 does not have data and should move the pointer");
+    wifi.curRawBuffer = wifi.rawBuffer + 1;
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),true,"can switch to other empty buffer", __LINE__);
+    test.assertBoolean(wifi.curRawBuffer == wifi.rawBuffer, true, "currentRadioBuffer points to first buffer", __LINE__);
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.it("should return false when currently pointed at buf 1 and buf 2 has data");
+    wifi.curRawBuffer = wifi.rawBuffer;
+    wifi.rawBufferAddData(wifi.rawBuffer + 1, (char *)bufferTomatoPotato, bufferTomatoPotatoLength, true);
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),false,"cannot switch to buffer with data", __LINE__);
+    test.assertBoolean(wifi.curRawBuffer == wifi.rawBuffer, true, "currentRadioBuffer still points to first buffer", __LINE__);
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.it("should return false when currently pointed at buf 2 and buf 1 has data");
+    wifi.curRawBuffer = wifi.rawBuffer + 1;
+    wifi.rawBufferAddData(wifi.rawBuffer, (char *)bufferTomatoPotato, bufferTomatoPotatoLength, true);
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),false,"cannot switch to buffer with data", __LINE__);
+    test.assertBoolean(wifi.curRawBuffer == wifi.rawBuffer + 1, true, "currentRadioBuffer still points to second buffer", __LINE__);
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.it("should return false when both buffers have data");
+    wifi.rawBufferAddData(wifi.rawBuffer, (char *)bufferTomatoPotato, bufferTomatoPotatoLength, true);
+    wifi.rawBufferAddData(wifi.rawBuffer + 1, (char *)bufferTomatoPotato, bufferTomatoPotatoLength, true);
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),false,"can't switch to second", __LINE__);
+    wifi.curRawBuffer++;
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),false,"can't switch back to first", __LINE__);
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.it("should return false when other buffer is flushing");
+    wifi.rawBufferAddData(wifi.rawBuffer, (char *)bufferTomatoPotato, bufferTomatoPotatoLength, true);
+    (wifi.rawBuffer + 1)->flushing = true; // don't add data, just set it to flushing
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),false,"can't switch to second because it's flushing", __LINE__);
+
+    // # CLEANUP
+    testRawBufferCleanUp();
+
+    test.it("should not switch when buffers are flushing");
+    wifi.rawBuffer->flushing = true; // don't add data, just set it to flushing
+    (wifi.rawBuffer + 1)->flushing = true; // don't add data, just set it to flushing
+    test.assertBoolean(wifi.rawBufferSwitchToOtherBuffer(),false,"can't switch to any buffer", __LINE__);
+}
+
+void testRawBufferCleanUp() {
+    wifi.rawBufferReset(wifi.rawBuffer);
+    // wifi.rawBufferReset(wifi.rawBuffer + 1);
+    wifi.curRawBuffer = wifi.rawBuffer;
+}
+
+void testUtils() {
+  // testUtilisForJSON();
+  testUtilisForRaw();
 }
 
 void go() {

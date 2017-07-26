@@ -72,6 +72,13 @@ public:
       uint8_t sampleNumber;
   } Sample;
 
+  typedef struct {
+      boolean flushing;
+      boolean gotAllPackets;
+      uint8_t data[OPENBCI_BUFFER_LENGTH_MULTI];
+      int     positionWrite;
+  } RawBuffer;
+
   // Functions and Methods
   OpenBCI_Wifi_Class();
   void begin(void);
@@ -104,8 +111,19 @@ public:
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
-  void reset(void);
+  boolean rawBufferAddData(RawBuffer *, uint8_t *, int, boolean);
+  void rawBufferClean(RawBuffer *);
+  boolean rawBufferHasData(RawBuffer *);
+  void rawBufferFlush(RawBuffer *);
+  void rawBufferFlushBuffers(void);
+  boolean rawBufferLoadingMultiPacket(RawBuffer *);
+  byte rawBufferProcessPacket(uint8_t *, int);
+  void rawBufferProcessSingle(RawBuffer *);
+  boolean rawBufferReadyForNewPage(RawBuffer *);
+  void rawBufferReset(RawBuffer *);
+  boolean rawBufferSwitchToOtherBuffer(void);
   double rawToScaled(int32_t, double);
+  void reset(void);
   void sampleReset(Sample *);
   void sampleReset(Sample *, uint8_t);
   void setGains(uint8_t *, uint8_t *);
@@ -116,6 +134,11 @@ public:
 
   // Variables
   Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
+  RawBuffer rawBuffer[NUM_RAW_BUFFERS];
+  RawBuffer *curRawBuffer;
+
+  boolean tcpDelimiter;
+
 
 private:
   // Functions
