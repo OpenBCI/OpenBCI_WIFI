@@ -204,43 +204,11 @@ size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
 /**
  * Used to pack Samples into a single JSON chunk to be sent out to client. The
  *
- * @param  numChannels [description]
- * @param  numSamples  [description]
- * @return             [description]
+ * @param  numChannels {uint8_t} - The number of channels per sample
+ * @param  numSamples  {uint8_t} - The number of samples to pack , should not
+ *                      exceed the `::getJSONMaxPackets()` for `numChannels`.
+ * @return             {String} - Strinigified version of the "chunk"
  */
-// String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numSamples) {
-//   String outputString = "{\"chunk\":[";
-//   // Serial.println("1" + outputString);
-//   for (uint8_t i = 0; i < numSamples; i++) {
-//     if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
-//       tail = 0;
-//     }
-//     Serial.printf("i %d\n",i);
-//     String sampleStr = "";
-//     if (i > 0) sampleStr += ",";
-//     sampleStr = sampleStr + "{\"timestamp\":" + getStringLLNumber((sampleBuffer + tail)->timestamp) + ",\"data\":[";
-//     for (uint8_t j = 0; j < numChannels; j++) {
-//       if (j > 0) sampleStr += ",";
-//       // Serial.printf("%d: %.0f\n%d: ", j, (sampleBuffer + tail)->channelData[j], j);
-//
-//       if ((sampleBuffer + tail)->channelData[j] < 0) {
-//         debugPrintLLNumber((long long)(sampleBuffer + tail)->channelData[j]);Serial.println();
-//         sampleStr = sampleStr + getStringLLNumber((long long)(sampleBuffer + tail)->channelData[j]);
-//       } else {
-//         debugPrintLLNumber((unsigned long long)(sampleBuffer + tail)->channelData[j]);Serial.println();
-//         sampleStr = sampleStr + getStringLLNumber((unsigned long long)(sampleBuffer + tail)->channelData[j]);
-//       }
-//     }
-//     sampleStr += "],\"sampleNumber\":" + String((sampleBuffer + tail)->sampleNumber) + "}";
-//     outputString += sampleStr;
-//     tail++;
-//   }
-//
-//   outputString = outputString + "],\"count\":" + String(_counter++) + "}";
-//   return outputString;
-// }
-
-// NON-WORKING JSON
 String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numPackets) {
   DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize + 500);
 

@@ -94,7 +94,8 @@ void testGetJSONFromSamplesCyton() {
 
   // Cyton with three packets
   wifi.reset(); // Clear everything
-  numSamples = 3;
+  wifi.setNumChannels(numChannels);
+  numSamples = wifi.getJSONMaxPackets(numChannels);
   for (uint8_t i = 0; i < numSamples; i++) {
     wifi.sampleReset(wifi.sampleBuffer + i);
     (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
@@ -133,6 +134,7 @@ void testGetJSONFromSamplesCytonDaisy() {
 
   wifi.reset(); // Clear everything
   uint8_t numChannels = NUM_CHANNELS_CYTON_DAISY;
+  wifi.setNumChannels(numChannels);
   uint8_t numSamples = 1;
   uint8_t expected_sampleNumber = 29;
   unsigned long long expected_timestamp = 1500916934017000;
@@ -156,20 +158,21 @@ void testGetJSONFromSamplesCytonDaisy() {
   JsonObject& root = jsonBuffer.parseObject(actual_serializedOutput);
   JsonObject& chunk0 = root["chunk"][0];
   double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
-  test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "should be able to set timestamp", __LINE__);
+  test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "daisy should be able to set timestamp", __LINE__);
 
   uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
-  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
+  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "daisy should be able to set sampleNumber", __LINE__);
 
   JsonArray& chunk0_data = chunk0["data"];
   for (int i = 0; i < numChannels; i++) {
     double chunk0_tempData = chunk0_data[i];
-    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
+    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "daisy should be able to code large numbers", __LINE__);
   }
 
-  // Cyton with three packets
+  // Cyton Daisy with three packets
   wifi.reset(); // Clear everything
-  numSamples = 3;
+  wifi.setNumChannels(numChannels);
+  numSamples = wifi.getJSONMaxPackets(numChannels);
   for (uint8_t i = 0; i < numSamples; i++) {
     wifi.sampleReset(wifi.sampleBuffer + i);
     (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
@@ -208,6 +211,7 @@ void testGetJSONFromSamplesGanglion() {
 
   wifi.reset(); // Clear everything
   uint8_t numChannels = NUM_CHANNELS_GANGLION;
+  wifi.setNumChannels(numChannels);
   uint8_t numSamples = 1;
   uint8_t expected_sampleNumber = 29;
   unsigned long long expected_timestamp = 1500916934017000;
@@ -226,25 +230,26 @@ void testGetJSONFromSamplesGanglion() {
     wifi.sampleBuffer->channelData[i] = expected_channelData[i];
   }
   String actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
-  const size_t bufferSize = JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3) + 220;
+  const size_t bufferSize = JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(4) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3) + 220;
   DynamicJsonBuffer jsonBuffer(bufferSize);
   JsonObject& root = jsonBuffer.parseObject(actual_serializedOutput);
   JsonObject& chunk0 = root["chunk"][0];
   double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
-  test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "should be able to set timestamp", __LINE__);
+  test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "ganglion should be able to set timestamp", __LINE__);
 
   uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
-  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
+  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "ganglion should be able to set sampleNumber", __LINE__);
 
   JsonArray& chunk0_data = chunk0["data"];
   for (int i = 0; i < numChannels; i++) {
     double chunk0_tempData = chunk0_data[i];
-    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
+    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "ganglion should be able to code large numbers", __LINE__);
   }
 
-  // Cyton with three packets
+  // Ganglion with eight packets
   wifi.reset(); // Clear everything
-  numSamples = 3;
+  wifi.setNumChannels(numChannels);
+  numSamples = wifi.getJSONMaxPackets(numChannels);
   for (uint8_t i = 0; i < numSamples; i++) {
     wifi.sampleReset(wifi.sampleBuffer + i);
     (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
@@ -264,16 +269,16 @@ void testGetJSONFromSamplesGanglion() {
   for (uint8_t i = 0; i < numSamples; i++) {
     JsonObject& sample = chunk[i];
     unsigned long long actual_timestamp = sample["timestamp"]; // 1500916934017000
-    test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
+    test.assertEqual(actual_timestamp, expected_timestamp + i, String("ganglion multi packet should be able to set timestamp for " + String(i)).c_str(), __LINE__);
 
     uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
-    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
+    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("ganglion multi packet should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
 
     JsonArray& sample_data = sample["data"];
     for (uint8_t j = 0; j < numChannels; j++) {
       double temp_d = sample_data[j];
       // Serial.printf("\nj[%d]: td:%0.0f e_cD:%.0f\n", j, temp_d, expected_channelData[j]-i);
-      test.assertApproximately(temp_d, expected_channelData[j], 1.0, String("should be able to code large numbers "+String(j)+" for sample " + String(i)).c_str(), __LINE__);
+      test.assertApproximately(temp_d, expected_channelData[j], 1.0, String("ganglion multi packet should be able to code large numbers "+String(j)+" for sample " + String(i)).c_str(), __LINE__);
     }
   }
 }
