@@ -46,20 +46,17 @@ void testGetJSONBufferSize() {
 
   wifi.reset();
   size_t intialSize = wifi.getJSONBufferSize();
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2024, "should initialize json buffer size to zero", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should initialize json buffer size to zero", __LINE__);
   wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
   test.assertGreaterThan(wifi.getJSONBufferSize(), intialSize, "should set the json buffer greater than zero or inital", __LINE__);
   test.assertLessThan(wifi.getJSONBufferSize(), (size_t)3000, "should be less than 3000bytes per chunk", __LINE__);
 
 }
 
-// #define ARDUINOJSON_USE_DOUBLE 1
-// #define ARDUINOJSON_USE_LONG_LONG 1
-
 void testGetJSONFromSamplesCyton() {
   test.describe("getJSONFromSamplesCyton");
 
-  wifi.sampleReset(wifi.sampleBuffer);
+  wifi.reset(); // Clear everything
   uint8_t numChannels = NUM_CHANNELS_CYTON;
   uint8_t numSamples = 1;
   uint8_t expected_sampleNumber = 29;
@@ -103,33 +100,188 @@ void testGetJSONFromSamplesCyton() {
     (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
     (wifi.sampleBuffer + i)->timestamp = expected_timestamp + i;
     for (uint8_t j = 0; j < numChannels; j++) {
-      (wifi.sampleBuffer + j)->channelData[j] = expected_channelData[j] - i;
+      (wifi.sampleBuffer + i)->channelData[j] = expected_channelData[j];
+      // Serial.printf("j:%d: i:%d %.0f\n", j, i, (wifi.sampleBuffer + i)->channelData[j]);
     }
   }
   actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
-  const size_t bufferSize3 = JSON_ARRAY_SIZE(2) + 3*(JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3)) + 220;
-  DynamicJsonBuffer jsonBuffer1(bufferSize);
-  JsonObject& root3 = jsonBuffer1.parseObject(actual_serializedOutput);
-  for (uint8_t i = 0; i < numSamples; i++) {
-    JsonObject& chunk = root3["chunk"][i];
-    double actual_timestamp = chunk["timestamp"]; // 1500916934017000
-    test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
+  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 650;
+  DynamicJsonBuffer jsonBuffer1(bufferSize1);
 
-    uint8_t actual_sampleNumber = chunk["sampleNumber"]; // 255
+  JsonObject& root1 = jsonBuffer1.parseObject(actual_serializedOutput.c_str());
+  JsonArray& chunk = root1["chunk"];
+
+  for (uint8_t i = 0; i < numSamples; i++) {
+    JsonObject& sample = chunk[i];
+    unsigned long long actual_timestamp = sample["timestamp"]; // 1500916934017000
+    test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
+
+    uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
     test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
 
-    JsonArray& chunk_data = chunk["data"];
+    JsonArray& sample_data = sample["data"];
     for (uint8_t j = 0; j < numChannels; j++) {
-      double chunk_tempData = chunk_data[j];
-      test.assertApproximately(chunk_data[j], expected_channelData[j]-i, 1.0, String("should be able to code large numbers for sample " + String(i)).c_str(), __LINE__);
+      double temp_d = sample_data[j];
+      // Serial.printf("\nj[%d]: td:%0.0f e_cD:%.0f\n", j, temp_d, expected_channelData[j]-i);
+      test.assertApproximately(temp_d, expected_channelData[j], 1.0, String("should be able to code large numbers "+String(j)+" for sample " + String(i)).c_str(), __LINE__);
+    }
+  }
+}
+
+void testGetJSONFromSamplesCytonDaisy() {
+  test.describe("getJSONFromSamplesCytonDaisy");
+
+  wifi.reset(); // Clear everything
+  uint8_t numChannels = NUM_CHANNELS_CYTON_DAISY;
+  uint8_t numSamples = 1;
+  uint8_t expected_sampleNumber = 29;
+  unsigned long long expected_timestamp = 1500916934017000;
+  double expected_channelData[MAX_CHANNELS];
+  for (int i = 0; i < MAX_CHANNELS; i++) {
+    if (i%2 == 0) {
+      expected_channelData[i] = ADC_24BIT_MAX_VAL_NANO_VOLT;
+    } else {
+      expected_channelData[i] = -1 * ADC_24BIT_MAX_VAL_NANO_VOLT;
+    }
+  }
+
+  wifi.sampleBuffer->sampleNumber = expected_sampleNumber;
+  wifi.sampleBuffer->timestamp = expected_timestamp;
+  for (int i = 0; i < numChannels; i++) {
+    wifi.sampleBuffer->channelData[i] = expected_channelData[i];
+  }
+  String actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
+  const size_t bufferSize = JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3) + 220;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  JsonObject& root = jsonBuffer.parseObject(actual_serializedOutput);
+  JsonObject& chunk0 = root["chunk"][0];
+  double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
+  test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "should be able to set timestamp", __LINE__);
+
+  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
+  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
+
+  JsonArray& chunk0_data = chunk0["data"];
+  for (int i = 0; i < numChannels; i++) {
+    double chunk0_tempData = chunk0_data[i];
+    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
+  }
+
+  // Cyton with three packets
+  wifi.reset(); // Clear everything
+  numSamples = 3;
+  for (uint8_t i = 0; i < numSamples; i++) {
+    wifi.sampleReset(wifi.sampleBuffer + i);
+    (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
+    (wifi.sampleBuffer + i)->timestamp = expected_timestamp + i;
+    for (uint8_t j = 0; j < numChannels; j++) {
+      (wifi.sampleBuffer + i)->channelData[j] = expected_channelData[j];
+      // Serial.printf("j:%d: i:%d %.0f\n", j, i, (wifi.sampleBuffer + i)->channelData[j]);
+    }
+  }
+  actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
+  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 650;
+  DynamicJsonBuffer jsonBuffer1(bufferSize1);
+
+  JsonObject& root1 = jsonBuffer1.parseObject(actual_serializedOutput.c_str());
+  JsonArray& chunk = root1["chunk"];
+
+  for (uint8_t i = 0; i < numSamples; i++) {
+    JsonObject& sample = chunk[i];
+    unsigned long long actual_timestamp = sample["timestamp"]; // 1500916934017000
+    test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
+
+    uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
+    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
+
+    JsonArray& sample_data = sample["data"];
+    for (uint8_t j = 0; j < numChannels; j++) {
+      double temp_d = sample_data[j];
+      // Serial.printf("\nj[%d]: td:%0.0f e_cD:%.0f\n", j, temp_d, expected_channelData[j]-i);
+      test.assertApproximately(temp_d, expected_channelData[j], 1.0, String("should be able to code large numbers "+String(j)+" for sample " + String(i)).c_str(), __LINE__);
+    }
+  }
+}
+
+void testGetJSONFromSamplesGanglion() {
+  test.describe("getJSONFromSamplesGanglion");
+
+  wifi.reset(); // Clear everything
+  uint8_t numChannels = NUM_CHANNELS_GANGLION;
+  uint8_t numSamples = 1;
+  uint8_t expected_sampleNumber = 29;
+  unsigned long long expected_timestamp = 1500916934017000;
+  double expected_channelData[MAX_CHANNELS];
+  for (int i = 0; i < MAX_CHANNELS; i++) {
+    if (i%2 == 0) {
+      expected_channelData[i] = ADC_24BIT_MAX_VAL_NANO_VOLT;
+    } else {
+      expected_channelData[i] = -1 * ADC_24BIT_MAX_VAL_NANO_VOLT;
+    }
+  }
+
+  wifi.sampleBuffer->sampleNumber = expected_sampleNumber;
+  wifi.sampleBuffer->timestamp = expected_timestamp;
+  for (int i = 0; i < numChannels; i++) {
+    wifi.sampleBuffer->channelData[i] = expected_channelData[i];
+  }
+  String actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
+  const size_t bufferSize = JSON_ARRAY_SIZE(2) + JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(3) + 220;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  JsonObject& root = jsonBuffer.parseObject(actual_serializedOutput);
+  JsonObject& chunk0 = root["chunk"][0];
+  double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
+  test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "should be able to set timestamp", __LINE__);
+
+  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
+  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
+
+  JsonArray& chunk0_data = chunk0["data"];
+  for (int i = 0; i < numChannels; i++) {
+    double chunk0_tempData = chunk0_data[i];
+    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
+  }
+
+  // Cyton with three packets
+  wifi.reset(); // Clear everything
+  numSamples = 3;
+  for (uint8_t i = 0; i < numSamples; i++) {
+    wifi.sampleReset(wifi.sampleBuffer + i);
+    (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
+    (wifi.sampleBuffer + i)->timestamp = expected_timestamp + i;
+    for (uint8_t j = 0; j < numChannels; j++) {
+      (wifi.sampleBuffer + i)->channelData[j] = expected_channelData[j];
+      // Serial.printf("j:%d: i:%d %.0f\n", j, i, (wifi.sampleBuffer + i)->channelData[j]);
+    }
+  }
+  actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
+  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 650;
+  DynamicJsonBuffer jsonBuffer1(bufferSize1);
+
+  JsonObject& root1 = jsonBuffer1.parseObject(actual_serializedOutput.c_str());
+  JsonArray& chunk = root1["chunk"];
+
+  for (uint8_t i = 0; i < numSamples; i++) {
+    JsonObject& sample = chunk[i];
+    unsigned long long actual_timestamp = sample["timestamp"]; // 1500916934017000
+    test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
+
+    uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
+    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
+
+    JsonArray& sample_data = sample["data"];
+    for (uint8_t j = 0; j < numChannels; j++) {
+      double temp_d = sample_data[j];
+      // Serial.printf("\nj[%d]: td:%0.0f e_cD:%.0f\n", j, temp_d, expected_channelData[j]-i);
+      test.assertApproximately(temp_d, expected_channelData[j], 1.0, String("should be able to code large numbers "+String(j)+" for sample " + String(i)).c_str(), __LINE__);
     }
   }
 }
 
 void testGetJSONFromSamples() {
   testGetJSONFromSamplesCyton();
-  // testGetJSONFromSampleDaisy();
-  // testGetJSONFromSampleGanglion();
+  testGetJSONFromSamplesCytonDaisy();
+  testGetJSONFromSamplesGanglion();
 }
 
 void testGetJSONMaxPackets() {
@@ -289,7 +441,7 @@ void testReset() {
   wifi.reset();
   test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
   test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2024, "should reset jsonBufferSize to 0", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should reset jsonBufferSize to 0", __LINE__);
   test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
   test.assertEqual(wifi.getNumChannels(), 8, "should reset numChannels to 8", __LINE__);
 }

@@ -12,7 +12,8 @@
 
 #ifndef __OpenBCI_Wifi__
 #define __OpenBCI_Wifi__
-
+#define ARDUINOJSON_USE_LONG_LONG 1
+#define ARDUINOJSON_USE_DOUBLE 1
 #include <Arduino.h>
 #include <time.h>
 #include <ESP8266WiFi.h>

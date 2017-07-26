@@ -53,8 +53,9 @@ void OpenBCI_Wifi_Class::initArrays(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initObjects(void) {
-  // SPI.begin();
-  // SPI.setHwCs(true);
+  for (size_t i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
+    wifi.sampleReset(wifi.sampleBuffer + i);
+  }
 }
 
 /**
@@ -207,68 +208,74 @@ size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
  * @param  numSamples  [description]
  * @return             [description]
  */
-String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numSamples) {
-  String outputString = "{\"chunk\":[";
-  // Serial.println("1" + outputString);
-  for (uint8_t i = 0; i < numSamples; i++) {
-    if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
-      tail = 0;
-    }
-    String sampleStr = "";
-    if (i > 0) sampleStr += ",";
-    sampleStr = sampleStr + "{\"timestamp\":" + getStringLLNumber((sampleBuffer + tail)->timestamp) + ",\"data\":[";
-    for (uint8_t j = 0; j < numChannels; j++) {
-      if (j > 0) sampleStr += ",";
-      // Serial.printf("%d: %.0f\n%d: ", j, (sampleBuffer + tail)->channelData[j], j);
-
-      if ((sampleBuffer + tail)->channelData[j] < 0) {
-        // debugPrintLLNumber((long long)(sampleBuffer + tail)->channelData[j]);Serial.println();
-        sampleStr = sampleStr + getStringLLNumber((long long)(sampleBuffer + tail)->channelData[j]);
-      } else {
-        // debugPrintLLNumber((unsigned long long)(sampleBuffer + tail)->channelData[j]);Serial.println();
-        sampleStr = sampleStr + getStringLLNumber((unsigned long long)(sampleBuffer + tail)->channelData[j]);
-      }
-    }
-    sampleStr += "],\"sampleNumber\":" + String((sampleBuffer + tail)->sampleNumber) + "}";
-    outputString += sampleStr;
-    tail++;
-  }
-
-  outputString = outputString + "],\"count\":" + String(_counter++) + "}";
-  return outputString;
-}
-
-// NON-WORKING JSON
-// String OpenBCI_Wifi_Class::getJSONFromSamples(Sample *sample, uint8_t numChannels, uint8_t numPackets) {
-//   DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize + 500);
-//
-//   JsonObject& root = jsonSampleBuffer.createObject();
-//   JsonArray& chunk = root.createNestedArray("chunk");
-//
-//   root["count"] = _counter++;
+// String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numSamples) {
+//   String outputString = "{\"chunk\":[";
 //   // Serial.println("1" + outputString);
-//   for (uint8_t i = 0; i < numPackets; i++) {
+//   for (uint8_t i = 0; i < numSamples; i++) {
 //     if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
 //       tail = 0;
 //     }
-//     JsonObject& sample = chunk.createNestedObject();
-//     Serial.printf("timestamp: "); debugPrintLLNumber((sampleBuffer + tail)->timestamp); Serial.println();
-//     sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
-//     // unsigned long long timestamp = sample.get<unsigned long long>("timestamp");
-//     // printLLNumber(timestamp); Serial.println();
-//     // Serial.printf("timestamp: %.0f\n", timestamp);
-//
-//     JsonArray& data = sample.createNestedArray("data");
+//     Serial.printf("i %d\n",i);
+//     String sampleStr = "";
+//     if (i > 0) sampleStr += ",";
+//     sampleStr = sampleStr + "{\"timestamp\":" + getStringLLNumber((sampleBuffer + tail)->timestamp) + ",\"data\":[";
 //     for (uint8_t j = 0; j < numChannels; j++) {
-//       data.add((sampleBuffer + tail)->channelData[j]);
+//       if (j > 0) sampleStr += ",";
+//       // Serial.printf("%d: %.0f\n%d: ", j, (sampleBuffer + tail)->channelData[j], j);
+//
+//       if ((sampleBuffer + tail)->channelData[j] < 0) {
+//         debugPrintLLNumber((long long)(sampleBuffer + tail)->channelData[j]);Serial.println();
+//         sampleStr = sampleStr + getStringLLNumber((long long)(sampleBuffer + tail)->channelData[j]);
+//       } else {
+//         debugPrintLLNumber((unsigned long long)(sampleBuffer + tail)->channelData[j]);Serial.println();
+//         sampleStr = sampleStr + getStringLLNumber((unsigned long long)(sampleBuffer + tail)->channelData[j]);
+//       }
 //     }
+//     sampleStr += "],\"sampleNumber\":" + String((sampleBuffer + tail)->sampleNumber) + "}";
+//     outputString += sampleStr;
 //     tail++;
 //   }
 //
-//   String returnStr = "";
-//   root.printTo(returnStr);
-//   return returnStr;
+//   outputString = outputString + "],\"count\":" + String(_counter++) + "}";
+//   return outputString;
 // }
+
+// NON-WORKING JSON
+String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numPackets) {
+  DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize + 500);
+
+  JsonObject& root = jsonSampleBuffer.createObject();
+  JsonArray& chunk = root.createNestedArray("chunk");
+
+  root["count"] = _counter++;
+  // Serial.println("1" + outputString);
+  for (uint8_t i = 0; i < numPackets; i++) {
+    if (tail >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
+      tail = 0;
+    }
+    JsonObject& sample = chunk.createNestedObject();
+    // Serial.printf("timestamp: "); debugPrintLLNumber((sampleBuffer + tail)->timestamp); Serial.println();
+    sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
+    // unsigned long long timestamp = sample.get<unsigned long long>("timestamp");
+    // printLLNumber(timestamp); Serial.println();
+    // Serial.printf("timestamp: %.0f\n", timestamp);
+    sample["sampleNumber"] = (sampleBuffer + tail)->sampleNumber;
+    JsonArray& data = sample.createNestedArray("data");
+    for (uint8_t j = 0; j < numChannels; j++) {
+      if ((sampleBuffer + tail)->channelData[j] < 0) {
+        data.add((long long)(sampleBuffer + tail)->channelData[j]);
+      } else {
+        data.add((unsigned long long)(sampleBuffer + tail)->channelData[j]);
+      }
+      // data.add((long long));
+    }
+    tail++;
+  }
+
+  String returnStr = "";
+  root.printTo(returnStr);
+  return returnStr;
+}
 
 /**
  * We want to max the size out to < 2000bytes per json chunk
@@ -291,7 +298,11 @@ uint8_t OpenBCI_Wifi_Class::getJSONMaxPackets(uint8_t numChannels) {
  * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN
  */
 String OpenBCI_Wifi_Class::getStringLLNumber(long long n, uint8_t base) {
- return String(n < 0 ? "-" : "") + getStringLLNumber((unsigned long long)(-1*n), base);
+  if (n < 0) {
+    return "-" + getStringLLNumber((unsigned long long)(-1*n), base);
+  } else {
+    return getStringLLNumber((unsigned long long)n, base);
+  }
 }
 
 /**
@@ -299,7 +310,7 @@ String OpenBCI_Wifi_Class::getStringLLNumber(long long n, uint8_t base) {
 * @param n    {int64_t} The signed number
 */
 String OpenBCI_Wifi_Class::getStringLLNumber(long long n) {
-return getStringLLNumber(n, DEC);
+  return getStringLLNumber(n, DEC);
 }
 
 /**
