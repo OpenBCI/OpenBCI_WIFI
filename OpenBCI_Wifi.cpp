@@ -17,13 +17,13 @@ OpenBCI_Wifi_Class OpenBCI_Wifi;
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
+  curNumChannels = 0;
   curRawBuffer = 0;
   head = 0;
   tail = 0;
   _counter = 0;
   _jsonBufferSize = 0;
   _ntpOffset = 0;
-  curNumChannels = 0;
 }
 
 /**
