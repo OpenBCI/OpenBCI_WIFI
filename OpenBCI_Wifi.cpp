@@ -170,6 +170,33 @@ uint8_t OpenBCI_Wifi_Class::getHead(void) {
   return head;
 }
 
+String OpenBCI_Wifi_Class::getInfoMqtt(void) {
+  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 225;
+  StaticJsonBuffer<bufferSize> jsonBuffer;
+  String json;
+  JsonObject& root = jsonBuffer.createObject();
+  root[JSON_MQTT_BROKER_ADDR] = String(mqttBrokerAddress);
+  root[JSON_CONNECTED] = clientMQTT.connected() ? true : false;
+  root[JSON_MQTT_USERNAME] = String(mqttUsername);
+  root[JSON_TCP_OUTPUT] = getCurOutputMode();
+  root.printTo(json);
+  return json;
+}
+
+String OpenBCI_Wifi_Class::getInfoTcp(void) {
+  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 100;
+  StaticJsonBuffer<bufferSize> jsonBuffer;
+  String json;
+  JsonObject& root = jsonBuffer.createObject();
+  root[JSON_CONNECTED] = clientTCP.connected() ? true : false;
+  root[JSON_TCP_DELIMITER] = tcpDelimiter ? true : false;
+  root[JSON_TCP_IP] = tcpAddress.toString();
+  root[JSON_TCP_OUTPUT] = getCurOutputMode();
+  root[JSON_TCP_PORT] = tcpPort;
+  root.printTo(json);
+  return json;
+}
+
 /////////////////////////
 //// JSON ///////////////
 /////////////////////////

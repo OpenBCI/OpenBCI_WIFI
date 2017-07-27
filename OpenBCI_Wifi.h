@@ -96,6 +96,8 @@ public:
   uint8_t getGainCyton(uint8_t b);
   uint8_t getGainGanglion(void);
   uint8_t getHead(void);
+  String getInfoMqtt(void);
+  String getInfoTcp(void);
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
   String getJSONFromSamples(uint8_t, uint8_t);
@@ -140,7 +142,7 @@ public:
   void setNumChannels(uint8_t);
   void setNTPOffset(unsigned long);
   void setOutputMode(OUTPUT_MODE);
-  void setOutputProtocol(OUTPUT_PROTOCOL);  
+  void setOutputProtocol(OUTPUT_PROTOCOL);
   void transformRawsToScaledCyton(int32_t *, uint8_t *, uint8_t, double *);
   void transformRawsToScaledGanglion(int32_t *, double *);
 

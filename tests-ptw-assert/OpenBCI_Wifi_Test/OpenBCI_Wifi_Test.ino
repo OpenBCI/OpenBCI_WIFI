@@ -120,6 +120,37 @@ void testGetGain() {
   testGetGainGanglion();
 }
 
+void testGetInfoMqtt() {
+  test.detail("Mqtt");
+
+
+  String actual_infoMqtt = wifi.getInfoMqtt();
+
+  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 230;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+
+  // const char* json = "{\"broker_address\":\"mock.getcloudbrain.com\",\"connected\":false,\"username\":\"/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573\",\"password\":\"\"}";
+  JsonObject& root = jsonBuffer.parseObject(actual_infoMqtt);
+  String broker_address = root["broker_address"]; // "mock.getcloudbrain.com"
+  test.assertEqual(broker_address, "", "should be an empty string");
+  bool connected = root["connected"]; // false
+  test.assertFalse(connected, "should not be connected");
+  String username = root["username"]; // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
+  test.assertEqual(username, "", "should be an empty username", __LINE__);
+  String password = root["password"]; // ""
+  test.assertEqual(password, "", "should be an empty password", __LINE__);
+}
+
+void testGetInfoTcp() {
+  test.detail("Tcp");
+}
+
+void testGetInfo() {
+  test.describe("getInfo");
+  testGetInfoMqtt();
+  testGetInfoTcp();
+}
+
 void testGetJSONAdditionalBytes() {
   test.detail("getJSONAdditionalBytes");
 
