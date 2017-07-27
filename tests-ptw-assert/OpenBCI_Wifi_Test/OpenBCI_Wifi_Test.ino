@@ -14,8 +14,89 @@
 
 int ledPin = 0;
 
+void testGetBoardTypeString() {
+  test.describe("getBoardTypeString");
+
+  test.it("needs to get the right string name for the board given the number of channels inputed to the function.");
+
+  wifi.reset();
+
+  test.assertEqual(wifi.getBoardTypeString(NUM_CHANNELS_GANGLION), BOARD_TYPE_GANGLION, "should be able to get 'ganglion' for 4 channels", __LINE__);
+  test.assertEqual(wifi.getBoardTypeString(NUM_CHANNELS_CYTON), BOARD_TYPE_CYTON, "should be able to get 'cyton' for 8 channels", __LINE__);
+  test.assertEqual(wifi.getBoardTypeString(NUM_CHANNELS_CYTON_DAISY), BOARD_TYPE_CYTON_DAISY, "should be able to get 'daisy' for 16 channels", __LINE__);
+  test.assertEqual(wifi.getBoardTypeString(NUM_CHANNELS_CYTON_DAISY * 2), BOARD_TYPE_NONE, "should be able to get 'none' for 32 channels", __LINE__);
+  test.assertEqual(wifi.getBoardTypeString(0), BOARD_TYPE_NONE, "should be able to get 'none' for 0 channels", __LINE__);
+}
+
+void testGetCurBoardTypeString() {
+  test.describe("getCurBoardTypeString");
+
+  wifi.reset();
+  test.it("needs to get the right string name for the board given the number of channels in the system.");
+  test.assertEqual(wifi.getCurBoardTypeString(), BOARD_TYPE_CYTON, "should get 'cyton' for 8 channels", __LINE__);
+
+  test.it("should get 'daisy' after setting the channels to 16");
+  wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
+  test.assertEqual(wifi.getCurBoardTypeString(), BOARD_TYPE_CYTON_DAISY, "should get 'daisy' for 16 channels", __LINE__);
+
+  test.it("should get 'ganglion' after setting the channels to 4");
+  wifi.setNumChannels(NUM_CHANNELS_GANGLION);
+  test.assertEqual(wifi.getCurBoardTypeString(), BOARD_TYPE_GANGLION, "should get 'ganglion' for 4 channels", __LINE__);
+
+  test.it("should get 'cyton' after setting the channels to 8");
+  wifi.setNumChannels(NUM_CHANNELS_CYTON);
+  test.assertEqual(wifi.getCurBoardTypeString(), BOARD_TYPE_CYTON, "should get 'cyton' for 8 channels", __LINE__);
+}
+
+void testGetCurOutputModeString() {
+  test.describe("getCurOutputModeString");
+
+  wifi.reset();
+
+  test.it("should get raw output mode at startup");
+  test.assertEqual(wifi.getCurOutputModeString(), OUTPUT_RAW, "should have output mode of 'raw'", __LINE__);
+
+  test.it("should be able to switch to 'json' mode");
+  wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+  test.assertEqual(wifi.getCurOutputModeString(), OUTPUT_JSON, "should have output mode of 'json'", __LINE__);
+
+  test.it("should be able to switch back to 'raw' after 'json'");
+  wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
+  test.assertEqual(wifi.getCurOutputModeString(), OUTPUT_RAW, "should have output mode of 'raw'", __LINE__);
+}
+
+void testGetCurOutputProtocolString() {
+  test.describe("getCurOutputProtocolString");
+
+  wifi.reset();
+
+  test.it("should get none output protocol at startup");
+  test.assertEqual(wifi.getCurOutputProtocolString(), OUTPUT_NONE, "should have output protocol of 'none'", __LINE__);
+
+  test.it("should be able to switch to 'tcp' protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_TCP);
+  test.assertEqual(wifi.getCurOutputProtocolString(), OUTPUT_TCP, "should have output protocol of 'tcp'", __LINE__);
+
+  test.it("should be able to switch to 'mqtt' protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_MQTT);
+  test.assertEqual(wifi.getCurOutputProtocolString(), OUTPUT_MQTT, "should have output protocol of 'mqtt'", __LINE__);
+
+  test.it("should be able to switch to 'serial' protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_WEB_SOCKETS);
+  test.assertEqual(wifi.getCurOutputProtocolString(), OUTPUT_WEB_SOCKETS, "should have output protocol of 'ws'", __LINE__);
+
+  test.it("should be able to switch to 'serial' protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_SERIAL);
+  test.assertEqual(wifi.getCurOutputProtocolString(), OUTPUT_SERIAL, "should have output protocol of 'serial'", __LINE__);
+
+  test.it("should be able to switch to 'none' protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_NONE);
+  test.assertEqual(wifi.getCurOutputProtocolString(), OUTPUT_NONE, "should have output protocol of 'none'", __LINE__);
+
+}
+
 void testGetGainCyton() {
-  test.describe("getGainCyton");
+  test.detail("Cyton");
 
   test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_1), 1, "should be able to get cyton gain of 1");
   test.assertEqual(wifi.getGainCyton(wifi.CYTON_GAIN_2), 2, "should be able to get cyton gain of 2");
@@ -28,9 +109,15 @@ void testGetGainCyton() {
 }
 
 void testGetGainGanglion() {
-  test.detail("getGainGanglion");
+  test.detail("Ganglion");
 
   test.assertEqual(wifi.getGainGanglion(), 51, "should get the gain of 51 for ganglion");
+}
+
+void testGetGain() {
+  test.describe("getGain");
+  testGetGainCyton();
+  testGetGainGanglion();
 }
 
 void testGetJSONAdditionalBytes() {
@@ -325,14 +412,34 @@ void testGetName() {
 }
 
 
-void testGetOutputMode() {
-  test.describe("getOutputMode");
-
+void testGetOutputModeString() {
+  test.describe("getOutputModeString");
+  wifi.reset();
   // RAW
-  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_RAW),"raw","Should have gotten 'raw' string",__LINE__);
+  test.assertEqual(wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW), "raw", "Should have gotten 'raw' string",__LINE__);
 
   // JSON
-  test.assertEqual(wifi.getOutputMode(wifi.OUTPUT_MODE_JSON),"json","Should have gotten 'json' string",__LINE__);
+  test.assertEqual(wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON), "json", "Should have gotten 'json' string",__LINE__);
+}
+
+void testGetOutputProtocolString() {
+  test.describe("getOutputProtocolString");
+  wifi.reset();
+
+  // NONE
+  test.assertEqual(wifi.getOutputProtocolString(wifi.OUTPUT_PROTOCOL_NONE), "none", "Should have gotten 'none' string",__LINE__);
+
+  // TCP
+  test.assertEqual(wifi.getOutputProtocolString(wifi.OUTPUT_PROTOCOL_TCP), "tcp", "Should have gotten 'tcp' string",__LINE__);
+
+  // MQTT
+  test.assertEqual(wifi.getOutputProtocolString(wifi.OUTPUT_PROTOCOL_MQTT), "mqtt", "Should have gotten 'mqtt' string",__LINE__);
+
+  // Serial
+  test.assertEqual(wifi.getOutputProtocolString(wifi.OUTPUT_PROTOCOL_SERIAL), "serial", "Should have gotten 'serial' string",__LINE__);
+
+  // Web sockets
+  test.assertEqual(wifi.getOutputProtocolString(wifi.OUTPUT_PROTOCOL_WEB_SOCKETS), "ws", "Should have gotten 'ws' string",__LINE__);
 }
 
 void testGetStringLLNumber() {
@@ -412,17 +519,39 @@ void testGetJSON() {
 }
 
 void testGetters() {
-  testGetGainCyton();
-  testGetGainGanglion();
+  testGetBoardTypeString();
+  testGetCurBoardTypeString();
+  testGetCurOutputModeString();
+  testGetCurOutputProtocolString();
+  testGetGain();
   testGetJSON();
   testGetMacLastFourBytes();
   testGetMac();
   testGetModelNumber();
   testGetName();
-  testGetOutputMode();
+  testGetOutputModeString();
+  testGetOutputProtocolString();
   testGetStringLLNumber();
   testGetScaleFactorVoltsCyton();
   testGetScaleFactorVoltsGanglion();
+}
+
+void testReset() {
+  test.describe("reset");
+
+  wifi.setNTPOffset(123456);
+  wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
+
+  wifi.reset();
+  test.assertFalse(wifi.tcpDelimiter, "should set tcpDelimiter to false", __LINE__);
+  test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer, "should point cur raw buffer to head of buffer", __LINE__);
+  test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should initialize to 'raw' output mode");
+  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should initialize 'none' for output protocol");
+  test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
+  test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should reset jsonBufferSize to 0", __LINE__);
+  test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
+  test.assertEqual(wifi.getNumChannels(), 8, "should reset numChannels to 8", __LINE__);
 }
 
 void testSetGain() {
@@ -473,20 +602,44 @@ void testSetNTPOffset() {
   test.assertEqual(wifi.getNTPOffset(), expected_ntpOffset, "should be able to set the ntp offset", __LINE__);
 }
 
-void testReset() {
-  test.describe("reset");
-
-  wifi.setNTPOffset(123456);
-  wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
+void testSetOutputMode() {
+  test.describe("setOutputMode");
 
   wifi.reset();
-  test.assertFalse(wifi.tcpDelimiter, "should set tcpDelimiter to false", __LINE__);
-  test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer, "should point cur raw buffer to head of buffer", __LINE__);
-  test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
-  test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should reset jsonBufferSize to 0", __LINE__);
-  test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
-  test.assertEqual(wifi.getNumChannels(), 8, "should reset numChannels to 8", __LINE__);
+
+  test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should have 'raw' mode initially", __LINE__);
+
+  test.it("should be able to switch to json output mode");
+  wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+  test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_JSON, "should have 'json' mode", __LINE__);
+
+  test.it("should be able to switch to raw output mode");
+  wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
+  test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should have 'raw' mode", __LINE__);
+}
+
+void testSetOutputProtocol() {
+  test.describe("setOutputProtocol");
+
+  wifi.reset();
+
+  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should have 'none' protocol initially", __LINE__);
+
+  test.it("should be able to switch to tcp output protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_TCP);
+  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_TCP, "should have 'tcp' protocol", __LINE__);
+
+  test.it("should be able to switch to mqtt output protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_MQTT);
+  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_MQTT, "should have 'mqtt' protocol", __LINE__);
+
+  test.it("should be able to switch to web sockets output protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_WEB_SOCKETS);
+  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_WEB_SOCKETS, "should have 'ws' protocol", __LINE__);
+
+  test.it("should be able to switch to serial output protocol");
+  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_SERIAL);
+  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_SERIAL, "should have 'serial' protocol", __LINE__);
 }
 
 void testSetters() {
@@ -494,6 +647,8 @@ void testSetters() {
   testSetGain();
   testSetNumChannels();
   testSetNTPOffset();
+  testSetOutputMode();
+  testSetOutputProtocol();
 }
 
 void testChannelDataComputeCyton() {

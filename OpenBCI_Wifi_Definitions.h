@@ -71,9 +71,17 @@
 #define MCP_SCALE_FACTOR_VOLTS 0.00000000186995
 
 #define BOARD_TYPE_CYTON "cyton"
-#define BOARD_TYPE_DAISY "daisy"
+#define BOARD_TYPE_CYTON_DAISY "daisy"
 #define BOARD_TYPE_GANGLION "ganglion"
 #define BOARD_TYPE_NONE "none"
+
+#define OUTPUT_JSON "json"
+#define OUTPUT_MQTT "mqtt"
+#define OUTPUT_NONE "none"
+#define OUTPUT_RAW "raw"
+#define OUTPUT_SERIAL "serial"
+#define OUTPUT_TCP "tcp"
+#define OUTPUT_WEB_SOCKETS "ws"
 
 #define JSON_BOARD_CONNECTED "board_connected"
 #define JSON_BOARD_TYPE "board_type"

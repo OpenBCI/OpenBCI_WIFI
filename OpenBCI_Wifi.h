@@ -89,6 +89,10 @@ public:
   void debugPrintLLNumber(unsigned long long, uint8_t);
   void extractRaws(uint8_t *, int32_t *, uint8_t);
   void gainReset(void);
+  String getBoardTypeString(uint8_t);
+  String getCurBoardTypeString();
+  String getCurOutputModeString();
+  String getCurOutputProtocolString();
   uint8_t getGainCyton(uint8_t b);
   uint8_t getGainGanglion(void);
   uint8_t getHead(void);
@@ -102,7 +106,8 @@ public:
   String getName(void);
   uint8_t getNumChannels(void);
   unsigned long getNTPOffset(void);
-  String getOutputMode(OUTPUT_MODE);
+  String getOutputModeString(OUTPUT_MODE);
+  String getOutputProtocolString(OUTPUT_PROTOCOL);
   String getStringLLNumber(long long);
   String getStringLLNumber(long long, uint8_t);
   String getStringLLNumber(unsigned long long);
@@ -134,6 +139,8 @@ public:
   void setGains(uint8_t *, uint8_t *);
   void setNumChannels(uint8_t);
   void setNTPOffset(unsigned long);
+  void setOutputMode(OUTPUT_MODE);
+  void setOutputProtocol(OUTPUT_PROTOCOL);  
   void transformRawsToScaledCyton(int32_t *, uint8_t *, uint8_t, double *);
   void transformRawsToScaledGanglion(int32_t *, double *);
 
@@ -166,7 +173,7 @@ private:
   size_t _jsonBufferSize;
 
   uint8_t _gains[MAX_CHANNELS];
-  uint8_t _numChannels;
+  uint8_t curNumChannels;
 
   unsigned long _counter;
   unsigned long _ntpOffset;

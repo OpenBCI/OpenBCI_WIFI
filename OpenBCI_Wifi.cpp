@@ -23,7 +23,7 @@ OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   _counter = 0;
   _jsonBufferSize = 0;
   _ntpOffset = 0;
-  _numChannels = 0;
+  curNumChannels = 0;
 }
 
 /**
@@ -73,7 +73,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   tail = 0;
   _counter = 0;
   _ntpOffset = 0;
-  _numChannels = 0;
+  curNumChannels = 0;
   setNumChannels(NUM_CHANNELS_CYTON);
 
   curOutputMode = OUTPUT_MODE_RAW;
@@ -93,6 +93,41 @@ void OpenBCI_Wifi_Class::reset(void) {
 // GETTERS /////////////////
 ////////////////////////////
 ////////////////////////////
+
+/**
+ * Used to get a pretty description of the board connected to the shield
+ * @param  numChannels  {uint8_t} - The number of channels
+ * @return              {String} - The string representation of given `numChannels`
+ */
+String OpenBCI_Wifi_Class::getBoardTypeString(uint8_t numChannels) {
+  switch(numChannels) {
+    case NUM_CHANNELS_CYTON_DAISY:
+      return BOARD_TYPE_CYTON_DAISY;
+    case NUM_CHANNELS_CYTON:
+      return BOARD_TYPE_CYTON;
+    case NUM_CHANNELS_GANGLION:
+      return BOARD_TYPE_GANGLION;
+    default:
+      return BOARD_TYPE_NONE;
+  }
+}
+
+/**
+ * Use the internal `curNumChannels` value to get current board type.
+ * @return {String} - A stringified version of the number of the board
+ *                  type based on number of channels.
+ */
+String OpenBCI_Wifi_Class::getCurBoardTypeString() {
+  return getBoardTypeString(curNumChannels);
+}
+
+String OpenBCI_Wifi_Class::getCurOutputModeString() {
+  return getOutputModeString(curOutputMode);
+}
+
+String OpenBCI_Wifi_Class::getCurOutputProtocolString() {
+  return getOutputProtocolString(curOutputProtocol);
+}
 
 /**
  * Used to decode coded gain value from Cyton into actual gain
@@ -135,65 +170,8 @@ uint8_t OpenBCI_Wifi_Class::getHead(void) {
   return head;
 }
 
-String OpenBCI_Wifi_Class::getOutputMode(OUTPUT_MODE outputMode) {
-  switch(outputMode) {
-    case OUTPUT_MODE_JSON:
-      return "json";
-    case OUTPUT_MODE_RAW:
-    default:
-      return "raw";
-  }
-}
-
-double OpenBCI_Wifi_Class::getScaleFactorVoltsGanglion() {
-  return MCP_SCALE_FACTOR_VOLTS;
-}
-
-double OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
-  switch (gain) {
-    case ADS_GAIN_1:
-      return ADS_SCALE_FACTOR_VOLTS_1;
-    case ADS_GAIN_2:
-      return ADS_SCALE_FACTOR_VOLTS_2;
-    case ADS_GAIN_4:
-      return ADS_SCALE_FACTOR_VOLTS_4;
-    case ADS_GAIN_6:
-      return ADS_SCALE_FACTOR_VOLTS_6;
-    case ADS_GAIN_8:
-      return ADS_SCALE_FACTOR_VOLTS_8;
-    case ADS_GAIN_12:
-      return ADS_SCALE_FACTOR_VOLTS_12;
-    case ADS_GAIN_24:
-      return ADS_SCALE_FACTOR_VOLTS_24;
-    default:
-      return 1.0;
-  }
-}
-
-/**
- * Returns the current of the buffer
- * @return  [description]
- */
-uint8_t OpenBCI_Wifi_Class::getTail(void) {
-  return tail;
-}
-
-
-/**
- * Safely get the time, defaults to micros() if ntp is not active.
- */
-unsigned long long OpenBCI_Wifi_Class::getTime() {
-  if (ntpActive()) {
-    return ntpGetTime() + ntpGetPreciseAdjustment(_ntpOffset);
-  } else {
-    return micros();
-  }
-}
-
-/////////////////////////
 /////////////////////////
 //// JSON ///////////////
-/////////////////////////
 /////////////////////////
 /**
  * The additional bytes needed for input duplication, follows max packets
@@ -338,6 +316,83 @@ String OpenBCI_Wifi_Class::getName(void) {
   return AP_NameString;
 }
 
+unsigned long OpenBCI_Wifi_Class::getNTPOffset(void) {
+  return _ntpOffset;
+}
+
+uint8_t OpenBCI_Wifi_Class::getNumChannels(void) {
+  return curNumChannels;
+}
+
+/**
+ * Get a string version of the output mode
+ * @param  outputMode {OUTPUT_MODE} The output mode is either 'raw' or 'json'
+ * @return            {String} String version of the output mode
+ */
+String OpenBCI_Wifi_Class::getOutputModeString(OUTPUT_MODE outputMode) {
+  switch(outputMode) {
+    case OUTPUT_MODE_JSON:
+      return OUTPUT_JSON;
+    case OUTPUT_MODE_RAW:
+    default:
+      return OUTPUT_RAW;
+  }
+}
+
+/**
+ * Get a string version of the output protocol
+ * @param  outputProtocol {OUTPUT_PROTOCOL} The output protocol is either 'tcp',
+ *                        'mqtt', 'serial', or 'none'
+ * @return            {String} String version of the output protoocol
+ */
+String OpenBCI_Wifi_Class::getOutputProtocolString(OUTPUT_PROTOCOL outputProtocol) {
+  switch(outputProtocol) {
+    case OUTPUT_PROTOCOL_TCP:
+      return OUTPUT_TCP;
+    case OUTPUT_PROTOCOL_MQTT:
+      return OUTPUT_MQTT;
+    case OUTPUT_PROTOCOL_SERIAL:
+      return OUTPUT_SERIAL;
+    case OUTPUT_PROTOCOL_WEB_SOCKETS:
+      return OUTPUT_WEB_SOCKETS;
+    case OUTPUT_PROTOCOL_NONE:
+    default:
+      return OUTPUT_NONE;
+  }
+}
+
+double OpenBCI_Wifi_Class::getScaleFactorVoltsGanglion() {
+  return MCP_SCALE_FACTOR_VOLTS;
+}
+
+/**
+ * Used to get a scale factor given a gain. Scale factors are hardcoded in
+ *  file `OpenBCI_Wifi_Definitions.h`
+ * @param  gain {uint8_t} - A gain value from cyton, so either 1, 2, 4, 6, 8,
+ *              12, or 24
+ * @return      {double} - The scale factor in volts
+ */
+double OpenBCI_Wifi_Class::getScaleFactorVoltsCyton(uint8_t gain) {
+  switch (gain) {
+    case ADS_GAIN_1:
+      return ADS_SCALE_FACTOR_VOLTS_1;
+    case ADS_GAIN_2:
+      return ADS_SCALE_FACTOR_VOLTS_2;
+    case ADS_GAIN_4:
+      return ADS_SCALE_FACTOR_VOLTS_4;
+    case ADS_GAIN_6:
+      return ADS_SCALE_FACTOR_VOLTS_6;
+    case ADS_GAIN_8:
+      return ADS_SCALE_FACTOR_VOLTS_8;
+    case ADS_GAIN_12:
+      return ADS_SCALE_FACTOR_VOLTS_12;
+    case ADS_GAIN_24:
+      return ADS_SCALE_FACTOR_VOLTS_24;
+    default:
+      return 1.0;
+  }
+}
+
 /**
  * Used to print out a long long number
  * @param n    {int64_t} The signed number
@@ -399,12 +454,23 @@ void OpenBCI_Wifi_Class::gainReset(void) {
   }
 }
 
-uint8_t OpenBCI_Wifi_Class::getNumChannels(void) {
-  return _numChannels;
+/**
+ * Returns the current of the buffer
+ * @return  [description]
+ */
+uint8_t OpenBCI_Wifi_Class::getTail(void) {
+  return tail;
 }
 
-unsigned long OpenBCI_Wifi_Class::getNTPOffset(void) {
-  return _ntpOffset;
+/**
+ * Safely get the time, defaults to micros() if ntp is not active.
+ */
+unsigned long long OpenBCI_Wifi_Class::getTime() {
+  if (ntpActive()) {
+    return ntpGetTime() + ntpGetPreciseAdjustment(_ntpOffset);
+  } else {
+    return micros();
+  }
 }
 
 ////////////////////////////
@@ -445,7 +511,7 @@ void OpenBCI_Wifi_Class::setGains(uint8_t *raw, uint8_t *gains) {
  * @param numChannels {uint8_t} - The number of channels to set the system to
  */
 void OpenBCI_Wifi_Class::setNumChannels(uint8_t numChannels) {
-  _numChannels = numChannels;
+  curNumChannels = numChannels;
   // Used for JSON output mode
   _jsonBufferSize = 0; // Reset to 0
   _jsonBufferSize += JSON_OBJECT_SIZE(2); // For {"chunk":[...], "count":0}
@@ -461,6 +527,22 @@ void OpenBCI_Wifi_Class::setNumChannels(uint8_t numChannels) {
  */
 void OpenBCI_Wifi_Class::setNTPOffset(unsigned long ntpOffset) {
   _ntpOffset = ntpOffset;
+}
+
+/**
+ * Used to set the current output mode
+ * @param newOutputMode {OUTPUT_MODE} The output mode you want to switch to
+ */
+void OpenBCI_Wifi_Class::setOutputMode(OUTPUT_MODE newOutputMode) {
+  curOutputMode = newOutputMode;
+}
+
+/**
+ * Used to set the current output protocl
+ * @param newOutputProtocol {OUTPUT_PROTOCOL} The output protocol you want to switch to
+ */
+void OpenBCI_Wifi_Class::setOutputProtocol(OUTPUT_PROTOCOL newOutputProtocol) {
+  curOutputProtocol = newOutputProtocol;
 }
 
 ////////////////////////////
