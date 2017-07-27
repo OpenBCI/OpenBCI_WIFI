@@ -60,8 +60,6 @@ void OpenBCI_Wifi_Class::initObjects(void) {
   for (size_t i = 0; i < NUM_RAW_BUFFERS; i++) {
     wifi.rawBufferReset(rawBuffer + i);
   }
-
-  curRawBuffer = rawBuffer;
 }
 
 /**
@@ -80,6 +78,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
 
   curOutputMode = OUTPUT_MODE_RAW;
   curOutputProtocol = OUTPUT_PROTOCOL_NONE;
+  curRawBuffer = rawBuffer;
 }
 
 void OpenBCI_Wifi_Class::reset(void) {
@@ -427,7 +426,10 @@ void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, uint8_t *gains, Sample
   }
 
   if (numChannels == NUM_CHANNELS_GANGLION) {
-    int32_t temp_raw[NUM_CHANNELS_GANGLION];
+    int32_t temp_raw[MAX_CHANNELS_PER_PACKET];
+    // for (int i = 0; i < 24; i++) {
+    //   Serial.printf("arr[%d]: %d\n", i+2, arr[i+2]);
+    // }
     extractRaws(arr + 2, temp_raw, NUM_CHANNELS_GANGLION);
     transformRawsToScaledGanglion(temp_raw, sample->channelData);
   } else {
@@ -481,6 +483,7 @@ void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n) {
 void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output, uint8_t numChannels) {
   for (uint8_t i = 0; i < numChannels; i++) {
     output[i] = int24To32(arr + (i*3));
+    // Serial.printf("%d\n", output[i]);
   }
 }
 
@@ -575,7 +578,7 @@ boolean OpenBCI_Wifi_Class::rawBufferAddData(RawBuffer *buf, uint8_t *data, int 
       return false;
     }
   }
-  if (buf->positionWrite >= (BYTES_PER_RAW_BUFFER - len)) {
+  if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - len)) {
     buf->gotAllPackets = true;
   }
   return true;
@@ -782,7 +785,8 @@ void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
  */
 void OpenBCI_Wifi_Class::transformRawsToScaledCyton(int32_t *raw, uint8_t *gains, uint8_t packetOffset, double *scaledOutput) {
   for (uint8_t i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
-    scaledOutput[i + packetOffset] = wifi.rawToScaled(raw[i + packetOffset], wifi.getScaleFactorVoltsCyton(gains[i + packetOffset]));
+    scaledOutput[i + packetOffset] = wifi.rawToScaled(raw[i], wifi.getScaleFactorVoltsCyton(gains[i + packetOffset]));
+    // Serial.printf("[%d] raw: %d | gain: %d | scale: %.10f | output: %.0f\n", i + packetOffset, raw[i], gains[i + packetOffset], wifi.getScaleFactorVoltsCyton(gains[i + packetOffset]), scaledOutput[i + packetOffset]);
   }
 }
 
@@ -795,6 +799,7 @@ void OpenBCI_Wifi_Class::transformRawsToScaledCyton(int32_t *raw, uint8_t *gains
 void OpenBCI_Wifi_Class::transformRawsToScaledGanglion(int32_t *raw, double *scaledOutput) {
   for (uint8_t i = 0; i < NUM_CHANNELS_GANGLION; i++) {
     scaledOutput[i] = wifi.rawToScaled(raw[i], wifi.getScaleFactorVoltsGanglion());
+    // Serial.printf("[%d] raw: %d | scale: %.10f | output: %.0f\n", i, raw[i], wifi.getScaleFactorVoltsGanglion(), scaledOutput[i]);
   }
 }
 
