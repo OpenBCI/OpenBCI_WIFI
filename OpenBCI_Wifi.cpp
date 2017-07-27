@@ -17,13 +17,7 @@ OpenBCI_Wifi_Class OpenBCI_Wifi;
 // CONSTRUCTOR
 OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
   // Set defaults
-  curNumChannels = 0;
-  curRawBuffer = 0;
-  head = 0;
-  tail = 0;
-  _counter = 0;
-  _jsonBufferSize = 0;
-  _ntpOffset = 0;
+  initVariables();
 }
 
 /**
@@ -31,10 +25,10 @@ OpenBCI_Wifi_Class::OpenBCI_Wifi_Class() {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::begin(void) {
-  initArduino();
+  initVariables();
   initArrays();
   initObjects();
-  initVariables();
+  initArduino();
 }
 
 void OpenBCI_Wifi_Class::initArduino(void) {
@@ -54,6 +48,7 @@ void OpenBCI_Wifi_Class::initArrays(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initObjects(void) {
+  setNumChannels(NUM_CHANNELS_CYTON);
   for (size_t i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
     wifi.sampleReset(sampleBuffer + i);
   }
@@ -69,12 +64,17 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 void OpenBCI_Wifi_Class::initVariables(void) {
   tcpDelimiter = false;
 
+  curNumChannels = 0;
   head = 0;
   tail = 0;
+  tcpPort = 80;
   _counter = 0;
   _ntpOffset = 0;
-  curNumChannels = 0;
-  setNumChannels(NUM_CHANNELS_CYTON);
+
+  mqttBrokerAddress = "";
+  mqttUsername = "";
+  mqttPassword = "";
+  tcpAddress = "";
 
   curOutputMode = OUTPUT_MODE_RAW;
   curOutputProtocol = OUTPUT_PROTOCOL_NONE;
@@ -531,6 +531,30 @@ void OpenBCI_Wifi_Class::setGains(uint8_t *raw, uint8_t *gains) {
 #ifdef DEBUG
   Serial.println("Gain set");
 #endif
+}
+
+/**
+ * Used to set the information required for a succesful MQTT communication
+ * @param brokerAddress {String} - A string such as 'mock.getcloudbrain.com'
+ * @param username      {String} - The username for the MQTT broker to user
+ * @param password      {String} - The password for you to connect to
+ */
+void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, String password) {
+  mqttBrokerAddress = brokerAddress;
+  mqttUsername = username;
+  mqttPassword = password;
+}
+
+/**
+ * Used to configure the requried internal variables for TCP communication
+ * @param address   {String} - The ip address in string form: "192.168.0.1"
+ * @param port      {int} - The port number as an int
+ * @param delimiter {boolean} - Include the tcpDelimiter '\r\n'?
+ */
+void OpenBCI_Wifi_Class::setInfoTCP(String address, int port, boolean delimiter) {
+  tcpAddress = address;
+  tcpDelimiter = delimiter;
+  tcpPort = port;
 }
 
 /**

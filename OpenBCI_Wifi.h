@@ -139,6 +139,8 @@ public:
   void sampleReset(Sample *);
   void sampleReset(Sample *, uint8_t);
   void setGains(uint8_t *, uint8_t *);
+  void setInfoMQTT(String, String, String);
+  void setInfoTCP(String, int);
   void setNumChannels(uint8_t);
   void setNTPOffset(unsigned long);
   void setOutputMode(OUTPUT_MODE);

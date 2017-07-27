@@ -120,29 +120,98 @@ void testGetGain() {
   testGetGainGanglion();
 }
 
-void testGetInfoMqtt() {
-  test.detail("Mqtt");
+void testGetInfoMQTT() {
+  test.detail("MQTT");
 
 
-  String actual_infoMqtt = wifi.getInfoMqtt();
+  String actual_infoMqtt = wifi.getInfoMQTT();
 
-  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 230;
+  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 240;
   DynamicJsonBuffer jsonBuffer(bufferSize);
 
   // const char* json = "{\"broker_address\":\"mock.getcloudbrain.com\",\"connected\":false,\"username\":\"/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573\",\"password\":\"\"}";
   JsonObject& root = jsonBuffer.parseObject(actual_infoMqtt);
-  String broker_address = root["broker_address"]; // "mock.getcloudbrain.com"
-  test.assertEqual(broker_address, "", "should be an empty string");
+  String brokerAddress = root["broker_address"]; // "mock.getcloudbrain.com"
+  test.assertEqual(brokerAddress, "", "should be an empty string");
   bool connected = root["connected"]; // false
   test.assertFalse(connected, "should not be connected");
+  String output = root["output"]; // "raw"
+  test.assertEqual(output, "raw", "should be default to raw", __LINE__);
   String username = root["username"]; // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
   test.assertEqual(username, "", "should be an empty username", __LINE__);
   String password = root["password"]; // ""
   test.assertEqual(password, "", "should be an empty password", __LINE__);
+
+  String expected_brokerAddress = "mock.getcloudbrain.com";
+  String expected_username = "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573";
+  String expected_password = "";
+
+  wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password);
+  wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+  actual_infoMqtt = wifi.getInfoMQTT();
+
+  DynamicJsonBuffer jsonBuffer1(bufferSize);
+
+  JsonObject& root1 = jsonBuffer1.parseObject(actual_infoMqtt);
+  brokerAddress = root1["broker_address"]; // "mock.getcloudbrain.com"
+  test.assertEqual(brokerAddress, expected_brokerAddress, "should get brokerAddress");
+  connected = root1["connected"]; // false
+  test.assertFalse(connected, "should not be connected");
+  output = root["output"]; // "json"
+  test.assertEqual(output, "json", "should switch to json", __LINE__);
+  username = root1["username"]; // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
+  test.assertEqual(username, expected_username, "should get username", __LINE__);
+  password = root1["password"]; // ""
+  test.assertEqual(password, expected_password, "should get password", __LINE__);
 }
 
-void testGetInfoTcp() {
-  test.detail("Tcp");
+void testGetInfoTCP() {
+  test.detail("TCP");
+
+  String actual_infoTCP = wifi.getInfoTCP();
+
+  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 90;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+
+  // const char* json = "{\"connected\":false,\"delimiter\":true,\"ip\":\"255.255.255.255\",\"output\":\"json\",\"port\":12345}";
+
+  JsonObject& root = jsonBuffer.parseObject(actual_infoTCP);
+
+  bool connected = root["connected"]; // false
+  test.assertFalse(connected, "should not be connected");
+  bool delimiter = root["delimiter"]; // true
+  test.assertFalse(delimiter, "should not be using delimiter");
+  String ip = root["ip"]; // "255.255.255.255"
+  test.assertEqual(ip, "", "should be an empty ip address", __LINE__);
+  String output = root["output"]; // "raw"
+  test.assertEqual(output, "raw", "should be default to raw", __LINE__);
+  int port = root["port"]; // 12345
+  test.assertEqual(port, 80, "should be at port 80", __LINE__);
+
+  boolean expected_delimiter = true;
+  String expected_ip = "255.255.255.255";
+  int expected_port = 12345;
+
+  wifi.setInfoTCP(expected_ip, expected_port, expected_delimiter)
+  wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+
+  actual_infoTCP = wifi.getInfoTCP();
+
+  DynamicJsonBuffer jsonBuffer1(bufferSize);
+
+  JsonObject& root1 = jsonBuffer.parseObject(actual_infoTCP);
+
+  connected = root1["connected"]; // false
+  test.assertFalse(connected, "should not be connected");
+  delimiter = root1["delimiter"]; // true
+  test.assertTrue(delimiter, "should be using delimiter");
+  ip = root1["ip"]; // "255.255.255.255"
+  test.assertEqual(ip, expected_ip, "should be valid ip address", __LINE__);
+  output = root1["output"]; // "json"
+  test.assertEqual(output, "json", "should be set to json output mode", __LINE__);
+  port = root1["port"]; // 12345
+  test.assertEqual(port, expected_port, "should be at port 12345", __LINE__);
+
 }
 
 void testGetInfo() {
@@ -442,7 +511,6 @@ void testGetName() {
   test.assertEqual((int)wifi.getName().length(), 12, "length of name should be 12", __LINE__);
 }
 
-
 void testGetOutputModeString() {
   test.describe("getOutputModeString");
   wifi.reset();
@@ -567,6 +635,10 @@ void testGetters() {
   testGetScaleFactorVoltsGanglion();
 }
 
+///////////////////////////
+// SETTERS ////////////////
+///////////////////////////
+
 void testReset() {
   test.describe("reset");
 
@@ -578,6 +650,12 @@ void testReset() {
   test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer, "should point cur raw buffer to head of buffer", __LINE__);
   test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should initialize to 'raw' output mode");
   test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should initialize 'none' for output protocol");
+  test.assertEqual(wifi.mqttBrokerAddress, "", "should intialize mqttBrokerAddress to empty string", __LINE__);
+  test.assertEqual(wifi.mqttUsername, "", "should intialize mqttUsername to empty string", __LINE__);
+  test.assertEqual(wifi.mqttPassword, "", "should intialize mqttPassword to empty string", __LINE__);
+  test.assertEqual(wifi.tcpAddress, "", "should intialize tcpAddress to empty string", __LINE__);
+  test.assertFalse(wifi.tcpDelimiter, "should initialize tcpDelimiter to false", __LINE__);
+  test.assertEqual(wifi.tcpPort, 80, "should intialize tcpPort to 80", __LINE__);
   test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
   test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
   test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should reset jsonBufferSize to 0", __LINE__);
@@ -615,6 +693,35 @@ void testSetGain() {
 
   test.assertTrue(true, "should be able to set all the gains correctly", __LINE__);
 }
+
+void testSetInfoMQTT() {
+  test.detail("MQTT");
+
+  String expected_brokerAddress = "mock.getcloudbrain.com";
+  String expected_username = "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573";
+  String expected_password = "the password is not password";
+
+  wifi.setInfoMQTT();
+
+  test.assertEqual(wifi.mqttBrokerAddress, expected_brokerAddress, "should set mqttBrokerAddress", __LINE__);
+  test.assertEqual(wifi.mqttUsername, expected_username, "should be able to set mqttUsername", __LINE__);
+  test.assertEqual(wifi.mqttPassword, expected_password, "should be able to set mqttPassword", __LINE__);
+}
+
+void testSetInfoTCP() {
+  test.detail("TCP");
+
+  String expected_address = "129.0.0.23";
+  boolean expected_delimiter = true;
+  int expected_port = 99;
+
+  wifi.setInfoTCP(expected_address, expected_port, expected_delimiter);
+
+  test.assertEqual(wifi.tcpAddress, expected_address, "should have set tcpAddress", __LINE__);
+  test.assertTrue(wifi.tcpDelimiter, "should have set tcpDelimiter", __LINE__);
+  test.assertEqual(wifi.tcpPort, expected_port, "should be set tcpPort", __LINE__);
+}
+
 
 void testSetNumChannels() {
   test.describe("setNumChannels");
