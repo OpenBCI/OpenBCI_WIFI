@@ -96,6 +96,10 @@ public:
   size_t getJSONBufferSize(void);
   String getJSONFromSamples(uint8_t, uint8_t);
   uint8_t getJSONMaxPackets(uint8_t);
+  String getMacLastFourBytes(void);
+  String getMac(void);
+  String getModelNumber(void);
+  String getName(void);
   uint8_t getNumChannels(void);
   unsigned long getNTPOffset(void);
   String getOutputMode(OUTPUT_MODE);

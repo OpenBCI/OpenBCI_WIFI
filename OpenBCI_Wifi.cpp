@@ -276,6 +276,69 @@ uint8_t OpenBCI_Wifi_Class::getJSONMaxPackets(uint8_t numChannels) {
 }
 
 /**
+ * Used to get the last two bytes of the max addresses
+ * @return {String} The last two bytes, will always be four chars.
+ */
+String OpenBCI_Wifi_Class::getMacLastFourBytes(void) {
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 2]) +
+                 perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 1]);
+  macID.toUpperCase();
+  return macID;
+}
+
+/**
+ * Returns the full mac address
+ * @return  {String} Mac address with bytes separated with colons
+ */
+String OpenBCI_Wifi_Class::getMac(void) {
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String fullMac = perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 6]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 5]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 4]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 3]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 2]) + ":" +
+                   perfectPrintByteHex(mac[WL_MAC_ADDR_LENGTH - 1]);
+  fullMac.toUpperCase();
+  return fullMac;
+}
+
+/**
+ * Model number has Push The World and their product number encoded with unqiue
+ *  last four bytes of mac address.
+ * @return  {String} The model number
+ */
+String OpenBCI_Wifi_Class::getModelNumber(void) {
+  String AP_NameString = "PTW-0001-" + getMacLastFourBytes();
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  return AP_NameString;
+}
+
+/**
+ * Each OpenBCI Wifi shield has a unique name
+ * @return {String} - The name of the device.
+ */
+String OpenBCI_Wifi_Class::getName(void) {
+  String AP_NameString = "OpenBCI-" + getMacLastFourBytes();
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  return AP_NameString;
+}
+
+/**
  * Used to print out a long long number
  * @param n    {int64_t} The signed number
  * @param base {uint8_t} The base you want to print in. DEC, HEX, BIN

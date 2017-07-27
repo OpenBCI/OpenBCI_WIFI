@@ -298,6 +298,33 @@ void testGetJSONMaxPackets() {
   test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON_DAISY), 3, "should get the correct number for packets for cyton", __LINE__);
 }
 
+void testGetMacLastFourBytes() {
+  test.describe("getMacLastFourBytes");
+
+  test.assertEqual((int)wifi.getMacLastFourBytes().length(), 4, "mac should be of length of 4", __LINE__);
+}
+
+void testGetMac() {
+  test.describe("getMac");
+
+  test.assertEqual((int)wifi.getMac().length(), 17, "length of mac address should be 14", __LINE__);
+}
+
+void testGetModelNumber() {
+  test.describe("getModelNumber");
+
+  test.assertTrue(wifi.getModelNumber().startsWith("PTW-0001-"), "should be able to get model number", __LINE__);
+  test.assertEqual((int)wifi.getModelNumber().length(), 13, "length of model number should be 14", __LINE__);
+}
+
+void testGetName() {
+  test.describe("getName");
+
+  test.assertTrue(wifi.getName().startsWith("OpenBCI-"), "should be able to get name", __LINE__);
+  test.assertEqual((int)wifi.getName().length(), 12, "length of name should be 12", __LINE__);
+}
+
+
 void testGetOutputMode() {
   test.describe("getOutputMode");
 
@@ -388,6 +415,10 @@ void testGetters() {
   testGetGainCyton();
   testGetGainGanglion();
   testGetJSON();
+  testGetMacLastFourBytes();
+  testGetMac();
+  testGetModelNumber();
+  testGetName();
   testGetOutputMode();
   testGetStringLLNumber();
   testGetScaleFactorVoltsCyton();
