@@ -98,6 +98,8 @@ public:
   uint8_t getGainCyton(uint8_t b);
   uint8_t getGainGanglion(void);
   uint8_t getHead(void);
+  String getInfoAll(void);
+  String getInfoBoard(void);
   String getInfoMQTT(void);
   String getInfoTCP(void);
   int getJSONAdditionalBytes(uint8_t);
@@ -144,11 +146,12 @@ public:
   void setGains(uint8_t *);
   void setGains(uint8_t *, uint8_t *);
   void setInfoMQTT(String, String, String);
-  void setInfoTCP(IPAddress, int, boolean);
+  void setInfoTCP(String, int, boolean);
   void setNumChannels(uint8_t);
   void setNTPOffset(unsigned long);
   void setOutputMode(OUTPUT_MODE);
   void setOutputProtocol(OUTPUT_PROTOCOL);
+  boolean spiHasMaster(void);
   void spiProcessPacket(uint8_t *);
   void spiProcessPacketGain(uint8_t *);
   void spiProcessPacketStream(uint8_t *);
@@ -184,6 +187,8 @@ public:
   String mqttUsername;
   String mqttPassword;
   String outputString;
+
+  unsigned long lastTimeWasPolled;
 
   WiFiClient clientTCP;
   WiFiClient espClient;

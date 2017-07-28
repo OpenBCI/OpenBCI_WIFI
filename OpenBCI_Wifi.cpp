@@ -48,7 +48,7 @@ void OpenBCI_Wifi_Class::initArrays(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initObjects(void) {
-  setNumChannels(NUM_CHANNELS_CYTON);
+  setNumChannels(0);
   for (size_t i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
     wifi.sampleReset(sampleBuffer + i);
   }
@@ -67,6 +67,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   curNumChannels = 0;
   head = 0;
   lastSampleNumber = 0;
+  lastTimeWasPolled = 0;
   tail = 0;
   tcpPort = 80;
   _counter = 0;
@@ -174,6 +175,39 @@ uint8_t OpenBCI_Wifi_Class::getGainGanglion() {
  */
 uint8_t OpenBCI_Wifi_Class::getHead(void) {
   return head;
+}
+
+String OpenBCI_Wifi_Class::getInfoAll(void) {
+  const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 115;
+  DynamicJsonBuffer jsonBuffer(argBufferSize);
+  JsonObject& root = jsonBuffer.createObject();
+  root.set(JSON_BOARD_CONNECTED, (bool)spiHasMaster());
+  // Serial.println("spiHasMaster: "); Serial.println(spiHasMaster() ? "true" : "false");
+  root[JSON_HEAP] = ESP.getFreeHeap();
+  root[JSON_TCP_IP] = WiFi.localIP().toString();
+  root[JSON_MAC] = getMac();
+  root[JSON_NAME] = getName();
+  root[JSON_NUM_CHANNELS] = getNumChannels();
+  String output;
+  root.printTo(output);
+  return output;
+}
+
+String OpenBCI_Wifi_Class::getInfoBoard(void) {
+  const size_t argBufferSize = JSON_OBJECT_SIZE(4) + 150 + JSON_ARRAY_SIZE(getNumChannels());
+  DynamicJsonBuffer jsonBuffer(argBufferSize);
+  JsonObject& root = jsonBuffer.createObject();
+  root.set(JSON_BOARD_CONNECTED, (bool)spiHasMaster());
+  // Serial.println("spiHasMaster: "); Serial.println(spiHasMaster() ? "true" : "false");
+  root[JSON_BOARD_TYPE] = getCurBoardTypeString();
+  root[JSON_NUM_CHANNELS] = getNumChannels();
+  JsonArray& gainsArr = root.createNestedArray(JSON_GAINS);
+  for (uint8_t i = 0; i < getNumChannels(); i++) {
+    gainsArr.add(_gains[i]);
+  }
+  String output;
+  root.printTo(output);
+  return output;
 }
 
 String OpenBCI_Wifi_Class::getInfoMQTT(void) {
@@ -565,8 +599,8 @@ void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, Stri
  * @param port      {int} - The port number as an int
  * @param delimiter {boolean} - Include the tcpDelimiter '\r\n'?
  */
-void OpenBCI_Wifi_Class::setInfoTCP(IPAddress address, int port, boolean delimiter) {
-  tcpAddress = address;
+void OpenBCI_Wifi_Class::setInfoTCP(String address, int port, boolean delimiter) {
+  tcpAddress.fromString(address);
   tcpDelimiter = delimiter;
   tcpPort = port;
 }
@@ -990,6 +1024,16 @@ void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
   sample->timestamp = 0;
 }
 
+/**
+ * Has the SPI Master polled this device in the past SPI_MASTER_POLL_TIMEOUT_MS
+ * @returns [boolean] True if SPI Master has polled within timeout.
+ */
+boolean OpenBCI_Wifi_Class::spiHasMaster(void) {
+  if (lastTimeWasPolled > 0) return millis() < lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
+  return false;
+}
+
+
 void OpenBCI_Wifi_Class::spiProcessPacket(uint8_t *data) {
   if (isAStreamByte(data[0])) {
     spiProcessPacketStream(data);
@@ -1043,7 +1087,7 @@ void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStreamRaw(uint8_t *data) {
-  Serial.print("Raw Buffer Process: 0x"); Serial.print(perfectPrintByteHex(rawBufferProcessPacket(data))); Serial.println();
+  rawBufferProcessPacket(data);
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {

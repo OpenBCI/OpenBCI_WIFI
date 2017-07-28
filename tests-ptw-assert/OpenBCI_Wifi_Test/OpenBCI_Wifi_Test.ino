@@ -70,7 +70,7 @@ void testGetCurBoardTypeString() {
 
   wifi.reset();
   test.it("needs to get the right string name for the board given the number of channels in the system.");
-  test.assertEqual(wifi.getCurBoardTypeString(), BOARD_TYPE_CYTON, "should get 'cyton' for 8 channels", __LINE__);
+  test.assertEqual(wifi.getCurBoardTypeString(), BOARD_TYPE_NONE, "should get 'none' for 0 channels", __LINE__);
 
   test.it("should get 'daisy' after setting the channels to 16");
   wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
@@ -157,8 +157,119 @@ void testGetGain() {
   testGetGainGanglion();
 }
 
+void testGetInfoAll() {
+  test.detail("GET /all");
+  wifi.reset();
+
+  // Serial.print("spi has master: "); Serial.println(wifi.spiHasMaster() ?)
+
+  String actual_infoAll = wifi.getInfoAll();
+
+  // Serial.println(actual_infoAll);
+  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 120 + 200;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+
+  JsonObject& root = jsonBuffer.parseObject(actual_infoAll);
+  if (!root.success()) {
+    Serial.println("unable to parse /all root");
+  }
+  boolean board_connected = root.get<boolean>("board_connected"); // false
+  test.assertBoolean(board_connected, false, "should not have board connected");
+  int heap = root["heap"]; // 1234
+  test.assertGreaterThan(heap, 0, "should get heap greater than 0", __LINE__);
+  String ip = root["ip"]; // "255.255.255.255"
+  test.assertEqual(ip, WiFi.localIP().toString(), "should be local ip", __LINE__);
+  String mac = root["mac"]; //
+  test.assertEqual(mac, wifi.getMac(), "should get the full mac address", __LINE__);
+  String name = root["name"]; //
+  test.assertEqual(name, wifi.getName(), "should get the full name", __LINE__);
+  uint8_t numChannels = root["num_channels"];
+  test.assertEqual(numChannels, 0, "should get 0 channels", __LINE__);
+
+  uint8_t expected_numChannels = NUM_CHANNELS_CYTON;
+  uint8_t gainPacket[BYTES_PER_SPI_PACKET];
+  giveMeASPIPacketGainSet(gainPacket, expected_numChannels);
+  wifi.setGains(gainPacket);
+  wifi.lastTimeWasPolled = millis();
+
+  actual_infoAll = wifi.getInfoAll();
+  // Serial.println(actual_infoAll);
+
+  DynamicJsonBuffer jsonBuffer1(bufferSize);
+
+  JsonObject& root1 = jsonBuffer1.parseObject(actual_infoAll);
+  if (!root1.success()) {
+    Serial.println("unable to parse /all root1");
+  }
+  board_connected = root1.get<boolean>("board_connected"); // true
+  test.assertTrue(board_connected, "should think a board is attached");
+  heap = root1.get<int>("heap"); // 1234
+  test.assertGreaterThan(heap, 0, "should get heap more than 0");
+  ip = root1.get<String>("ip"); // "255.255.255.255"
+  test.assertEqual(ip, WiFi.localIP().toString(), "should be local ip", __LINE__);
+  mac = root1.get<String>("mac"); //
+  test.assertEqual(mac, wifi.getMac(), "should get the full mac address", __LINE__);
+  name = root1.get<String>("name"); //
+  test.assertEqual(name, wifi.getName(), "should get the full name", __LINE__);
+  numChannels = root1.get<uint8_t>("num_channels");
+  test.assertEqual(numChannels, expected_numChannels, "should get 8 channels", __LINE__);
+}
+
+void testGetInfoBoard() {
+  test.detail("GET /board");
+  wifi.reset();
+
+  String actual_infoBoard = wifi.getInfoBoard();
+  Serial.println(actual_infoBoard);
+
+  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 350 + JSON_ARRAY_SIZE(16);
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+
+  JsonObject& root = jsonBuffer.parseObject(actual_infoBoard);
+  if (!root.success()) {
+    Serial.println("unable to parse /board root");
+  }
+  boolean board_connected = root.get<boolean>("board_connected"); // false
+  test.assertBoolean(board_connected, false, "should not have board connected");
+  String board_type = root["board_type"]; // "255.255.255.255"
+  test.assertEqual(board_type, "none", "should get none for board type", __LINE__);
+  uint8_t numChannels = root["num_channels"];
+  test.assertEqual(numChannels, 0, "should get 0 channels", __LINE__);
+  JsonArray& gains = root["gains"];
+  test.assertEqual(gains.size(), (size_t)0, "should have zero elemenets inside the array");
+
+  uint8_t expected_numChannels = NUM_CHANNELS_CYTON_DAISY;
+  uint8_t gainPacket[BYTES_PER_SPI_PACKET];
+  giveMeASPIPacketGainSet(gainPacket, expected_numChannels);
+  wifi.setGains(gainPacket);
+  wifi.lastTimeWasPolled = millis();
+
+  actual_infoBoard = wifi.getInfoBoard();
+  Serial.println(actual_infoBoard);
+  const size_t bufferSize1 = JSON_ARRAY_SIZE(16) + JSON_OBJECT_SIZE(4) + 120;
+  DynamicJsonBuffer jsonBuffer1(bufferSize1);
+
+  JsonObject& root1 = jsonBuffer1.parseObject(actual_infoBoard);
+  if (!root1.success()) {
+    Serial.println("unable to parse /board root1");
+  }
+  board_connected = root1.get<boolean>("board_connected"); // true
+  test.assertBoolean(board_connected, true, "should think a board is attached");
+  board_type = root1.get<String>("board_type"); // "255.255.255.255"
+  test.assertEqual(board_type, "daisy", "should be daisy", __LINE__);
+  numChannels = root1.get<uint8_t>("num_channels");
+  test.assertEqual(numChannels, expected_numChannels, "should get 16 channels", __LINE__);
+  JsonArray& gains1 = root1["gains"];
+  // boolean all24 = true;
+  for (int i = 0; i < numChannels; i++) {
+    int gain1 = gains1[i];
+    test.assertEqual(gain1, (int)24, String("should be able get gain for channel " + String(i+1)).c_str(), __LINE__);
+  }
+}
+
 void testGetInfoMQTT() {
   test.detail("MQTT");
+  wifi.reset();
 
 
   String actual_infoMqtt = wifi.getInfoMQTT();
@@ -170,8 +281,8 @@ void testGetInfoMQTT() {
   JsonObject& root = jsonBuffer.parseObject(actual_infoMqtt);
   String brokerAddress = root["broker_address"]; // "mock.getcloudbrain.com"
   test.assertEqual(brokerAddress, "", "should be an empty string");
-  bool connected = root["connected"]; // false
-  test.assertFalse(connected, "should not be connected");
+  boolean connected = root["connected"]; // false
+  test.assertBoolean(connected, false, "should not be connected");
   String output = root["output"]; // "raw"
   test.assertEqual(output, "raw", "should be default to raw", __LINE__);
   String username = root["username"]; // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
@@ -192,8 +303,8 @@ void testGetInfoMQTT() {
   JsonObject& root1 = jsonBuffer1.parseObject(actual_infoMqtt);
   brokerAddress = root1.get<String>("broker_address"); // "mock.getcloudbrain.com"
   test.assertEqual(brokerAddress, expected_brokerAddress, "should get brokerAddress");
-  connected = root1["connected"]; // false
-  test.assertFalse(connected, "should not be connected");
+  connected = root1.get<boolean>("connected"); // false
+  test.assertBoolean(connected, false, "should not be connected");
   output = root1.get<String>("output"); // "json"
   test.assertEqual(output, "json", "should switch to json", __LINE__);
   username = root1.get<String>("username"); // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
@@ -204,6 +315,7 @@ void testGetInfoMQTT() {
 
 void testGetInfoTCP() {
   test.detail("TCP");
+  wifi.reset();
 
   String actual_infoTCP = wifi.getInfoTCP();
 
@@ -213,24 +325,24 @@ void testGetInfoTCP() {
   // const char* json = "{\"connected\":false,\"delimiter\":true,\"ip\":\"255.255.255.255\",\"output\":\"json\",\"port\":12345}";
 
   JsonObject& root = jsonBuffer.parseObject(actual_infoTCP);
+  IPAddress tempIPAddr;
 
-  bool connected = root["connected"]; // false
-  test.assertFalse(connected, "should not be connected");
-  bool delimiter = root["delimiter"]; // true
-  test.assertFalse(delimiter, "should not be using delimiter");
+  boolean connected = root["connected"]; // false
+  test.assertBoolean(connected, false, "should not be connected");
+  boolean delimiter = root["delimiter"]; // false
+  test.assertBoolean(delimiter, false, "should not be using delimiter");
   String ip = root["ip"]; // "255.255.255.255"
-  test.assertEqual(ip, "", "should be an empty ip address", __LINE__);
+  test.assertEqual(ip, tempIPAddr.toString(), "should be an empty ip address", __LINE__);
   String output = root["output"]; // "raw"
   test.assertEqual(output, "raw", "should be default to raw", __LINE__);
   int port = root["port"]; // 12345
   test.assertEqual(port, 80, "should be at port 80", __LINE__);
 
   boolean expected_delimiter = true;
-  String expected_ip = "255.255.255.255";
+  String expected_ip = "192.168.0.1";
   int expected_port = 12345;
 
-  IPAddress tempIPAddr;
-  wifi.setInfoTCP(tempIPAddr.fromString(expected_ip), expected_port, expected_delimiter);
+  wifi.setInfoTCP(expected_ip, expected_port, expected_delimiter);
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
 
   actual_infoTCP = wifi.getInfoTCP();
@@ -239,10 +351,10 @@ void testGetInfoTCP() {
 
   JsonObject& root1 = jsonBuffer.parseObject(actual_infoTCP);
 
-  connected = root1["connected"]; // false
-  test.assertFalse(connected, "should not be connected");
-  delimiter = root1["delimiter"]; // true
-  test.assertTrue(delimiter, "should be using delimiter");
+  connected = root1.get<boolean>("connected"); // false
+  test.assertBoolean(connected, false, "should not be connected");
+  delimiter = root1.get<boolean>("delimiter"); // true
+  test.assertBoolean(delimiter, true, "should be using delimiter");
   ip = root1.get<String>("ip"); // "255.255.255.255"
   test.assertEqual(ip, expected_ip, "should be valid ip address", __LINE__);
   output = root1.get<String>("output"); // "json"
@@ -254,6 +366,8 @@ void testGetInfoTCP() {
 
 void testGetInfo() {
   test.describe("getInfo");
+  testGetInfoAll();
+  testGetInfoBoard();
   testGetInfoMQTT();
   testGetInfoTCP();
 }
@@ -271,7 +385,7 @@ void testGetJSONBufferSize() {
 
   wifi.reset();
   size_t intialSize = wifi.getJSONBufferSize();
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should initialize json buffer size to zero", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)1876, "should initialize json buffer size to zero", __LINE__);
   wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
   test.assertGreaterThan(wifi.getJSONBufferSize(), intialSize, "should set the json buffer greater than zero or inital", __LINE__);
   test.assertLessThan(wifi.getJSONBufferSize(), (size_t)3000, "should be less than 3000bytes per chunk", __LINE__);
@@ -426,7 +540,8 @@ void testGetJSONFromSamplesCytonDaisy() {
     }
   }
   actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
-  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 650;
+  // Serial.println(actual_serializedOutput);
+  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(16) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 1110 + 500;
   DynamicJsonBuffer jsonBuffer1(bufferSize1);
 
   JsonObject& root1 = jsonBuffer1.parseObject(actual_serializedOutput.c_str());
@@ -530,8 +645,11 @@ void testGetJSONFromSamples() {
   test.detail("getJSONFromSamples");
   testGetJSONFromSamplesCytonSingle();
   testGetJSONFromSamplesCytonMax();
+  delay(15);
   testGetJSONFromSamplesCytonDaisy();
+  delay(15);
   testGetJSONFromSamplesGanglion();
+  delay(15);
 }
 
 void testGetJSONMaxPackets() {
@@ -680,6 +798,7 @@ void testGetters() {
   testGetCurOutputModeString();
   testGetCurOutputProtocolString();
   testGetGain();
+  testGetInfo();
   testGetJSON();
   testGetMacLastFourBytes();
   testGetMac();
@@ -707,8 +826,9 @@ void testReset() {
   test.assertFalse(wifi.clientWaitingForResponse, "should set clientWaitingForResponse to false", __LINE__);
   test.assertFalse(wifi.clientWaitingForResponseFullfilled, "should set clientWaitingForResponseFullfilled to false", __LINE__);
   test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer, "should point cur raw buffer to head of buffer", __LINE__);
-  test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should initialize to 'raw' output mode");
-  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should initialize 'none' for output protocol");
+  test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should initialize to 'raw' output mode", __LINE__);
+  test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should initialize 'none' for output protocol", __LINE__);
+  test.assertEqual(wifi.lastTimeWasPolled, (unsigned long)0, "should initialize 'lastTimeWasPolled' for 0", __LINE__);
   test.assertEqual(wifi.mqttBrokerAddress, "", "should initialize mqttBrokerAddress to empty string", __LINE__);
   test.assertEqual(wifi.mqttUsername, "", "should initialize mqttUsername to empty string", __LINE__);
   test.assertEqual(wifi.mqttPassword, "", "should initialize mqttPassword to empty string", __LINE__);
@@ -718,9 +838,9 @@ void testReset() {
   test.assertEqual(wifi.tcpPort, 80, "should initialize tcpPort to 80", __LINE__);
   test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
   test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should reset jsonBufferSize to 0", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)1876, "should reset jsonBufferSize to 0", __LINE__);
   test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
-  test.assertEqual(wifi.getNumChannels(), 8, "should reset numChannels to 8", __LINE__);
+  test.assertEqual(wifi.getNumChannels(), 0, "should set numChannels to 0", __LINE__);
 }
 
 void testSetGain() {
@@ -770,13 +890,13 @@ void testSetInfoMQTT() {
 
 void testSetInfoTCP() {
   test.detail("TCP");
-
+  String addr = "129.0.0.23";
   IPAddress expected_address;
-  expected_address.fromString("129.0.0.23");
+  expected_address.fromString(addr);
   boolean expected_delimiter = true;
   int expected_port = 99;
 
-  wifi.setInfoTCP(expected_address, expected_port, expected_delimiter);
+  wifi.setInfoTCP(addr, expected_port, expected_delimiter);
 
   test.assertEqual(wifi.tcpAddress.toString(), expected_address.toString(), "should have set tcpAddress", __LINE__);
   test.assertTrue(wifi.tcpDelimiter, "should have set tcpDelimiter", __LINE__);
@@ -1631,6 +1751,29 @@ void testRawBufferSwitchToOtherBuffer() {
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to any buffer", __LINE__);
 }
 
+void testUtilisForRaw() {
+  testRawBufferCleanUp();
+  testRawBufferAddStreamPacket();
+  testRawBufferClean();
+  testRawBufferHasData();
+  testRawBufferProcessPacket();
+  testRawBufferReadyForNewPage();
+  testRawBufferReset();
+  testRawBufferSwitchToOtherBuffer();
+}
+
+void testSpiHasMaster() {
+  test.describe("spiHasMaster");
+
+  wifi.reset();
+
+  test.assertFalse(wifi.spiHasMaster(), "should not have spi master", __LINE__);
+
+  wifi.lastTimeWasPolled = millis();
+
+  test.assertTrue(wifi.spiHasMaster(), "should have spi master", __LINE__);
+}
+
 void testSPIProcessPacketStreamJSONGanglion() {
   test.detail("JSON Ganglion");
 
@@ -1834,21 +1977,15 @@ void testSPIProcessPacket() {
   testSPIProcessPacketOthers();
 }
 
-void testUtilisForRaw() {
-  testRawBufferCleanUp();
-  testRawBufferAddStreamPacket();
-  testRawBufferClean();
-  testRawBufferHasData();
-  testRawBufferProcessPacket();
-  testRawBufferReadyForNewPage();
-  testRawBufferReset();
-  testRawBufferSwitchToOtherBuffer();
+void testUtilisForSPI() {
+  testSpiHasMaster();
+  testSPIProcessPacket();
 }
 
 void testUtils() {
-  testSPIProcessPacket();
   testUtilisForJSON();
   testUtilisForRaw();
+  testUtilisForSPI();
 }
 
 void go() {
