@@ -116,6 +116,7 @@ typedef struct {
 
 boolean clientWaitingForResponse;
 boolean clientWaitingForResponseFullfilled;
+boolean isWaitingOnResetConfirm;
 boolean ntpOffsetSet;
 boolean underSelfTest;
 boolean spiTXBufferLoaded;
@@ -1079,12 +1080,27 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 			hexdump(payload, length);
 			break;
 	}
+}
 
+void removeWifiAPInfo() {
+  curClientResponse = CLIENT_RESPONSE_OUTPUT_STRING;
+  outputString = "Forgetting wifi credentials and rebooting";
+  clientWaitingForResponseFullfilled = true;
+
+#ifdef DEBUG
+  Serial.println("Forgetting wifi and restarting");
+  Serial.println(ESP.eraseConfig());
+#else
+  ESP.eraseConfig();
+#endif
+  delay(5000);
+  ESP.reset();
 }
 
 void initializeVariables() {
   clientWaitingForResponse = false;
   clientWaitingForResponseFullfilled = false;
+  isWaitingOnResetConfirm = false;
   ntpOffsetSet = false;
   underSelfTest = false;
   spiTXBufferLoaded = false;
@@ -1309,6 +1325,11 @@ void setup() {
   printWifiStatus();
   Serial.printf("Starting HTTP...\n");
 #endif
+  server.on("/", HTTP_GET, [](){
+    digitalWrite(5, HIGH);
+    server.send(200, "text/plain", "Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
+    digitalWrite(5, LOW);
+  });
   server.on("/index.html", HTTP_GET, [](){
     digitalWrite(5, HIGH);
     server.send(200, "text/plain", "Push The World - OpenBCI - Wifi bridge - is up and running woo");
@@ -1447,19 +1468,12 @@ void setup() {
   });
 
   server.on("/wifi", HTTP_DELETE, []() {
-
+    pinMode(0, INPUT);
+    isWaitingOnResetConfirm = true;
+    clientWaitingForResponseFullfilled = false;
 #ifdef DEBUG
-    Serial.println("Forgetting wifi and restarting");
+    Serial.println("waiting for button press");
 #endif
-    server.send(200, "text/plain", "Forgetting wifi credentials and rebooting");
-
-#ifdef DEBUG
-    Serial.println(ESP.eraseConfig());
-#else
-    ESP.eraseConfig();
-#endif
-    delay(5000);
-    ESP.reset();
   });
 
   httpUpdater.setup(&server);
@@ -1509,6 +1523,18 @@ void loop() {
       clientMQTT.loop();
     } else if (millis() > 5000 + lastMQTTConnectAttempt) {
       mqttConnect();
+    }
+  }
+
+  if (isWaitingOnResetConfirm) {
+    if (digitalRead(0)==0) {
+      isWaitingOnResetConfirm = false;
+      removeWifiAPInfo();
+#ifdef DEBUG
+    } else {
+      Serial.print(".");
+      delay(1);
+#endif
     }
   }
 

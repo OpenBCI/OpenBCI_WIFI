@@ -256,12 +256,16 @@ String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numPa
     sample["sampleNumber"] = (sampleBuffer + tail)->sampleNumber;
     JsonArray& data = sample.createNestedArray("data");
     for (uint8_t j = 0; j < numChannels; j++) {
+      // Serial.printf("%d %d ", i, j);
       if ((sampleBuffer + tail)->channelData[j] < 0) {
         data.add((long long)(sampleBuffer + tail)->channelData[j]);
+        // long long tmp_data = data[j];
+        // debugPrintLLNumber(tmp_data); Serial.println();
       } else {
         data.add((unsigned long long)(sampleBuffer + tail)->channelData[j]);
+        // unsigned long long tmp_data = data[j];
+        // debugPrintLLNumber(tmp_data); Serial.println();
       }
-      // data.add((long long));
     }
     tail++;
   }
@@ -773,26 +777,25 @@ double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
 /**
 * @description Used to add a char data array to the the radio buffer. Always
 *      skips the fist
-* @param data {char *} - An array from RFduinoGZLL_onReceive
-* @param len {int} - Length of array from RFduinoGZLL_onReceive
-* @param clearBuffer {boolean} - If true then will reset the flags on the radio
-*      buffer.
+* @param buf  {RawBuffer *} - A raw buffer to store into
+* @param data {uint8_t *} - An array from RFduinoGZLL_onReceive
 * @return {boolean} - True if the data was added to the buffer, false if the
 *      buffer was overflowed.
 * @author AJ Keller (@pushtheworldllc)
 */
-boolean OpenBCI_Wifi_Class::rawBufferAddData(RawBuffer *buf, uint8_t *data, int len) {
+boolean OpenBCI_Wifi_Class::rawBufferAddStreamPacket(RawBuffer *buf, uint8_t *data) {
   // Serial.print("Pos write "); Serial.println(curRawBuffer->positionWrite);
-  for (int i = 0; i < len; i++) {
-    if (buf->positionWrite < BYTES_PER_RAW_BUFFER) { // Check for to prevent overflow
-      buf->data[buf->positionWrite] = data[i];
-      buf->positionWrite++;
-    } else { // We overflowed, need to return false.
-      buf->gotAllPackets = true;
-      return false;
-    }
+  if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - BYTES_PER_OBCI_PACKET)) {
+    buf->gotAllPackets = true;
+    return false;
   }
-  if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - len)) {
+  uint8_t stopByte = data[0];
+  buf->data[buf->positionWrite++] = 0xA0;
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    buf->data[buf->positionWrite++] = data[i];
+  }
+  buf->data[buf->positionWrite++] = stopByte;
+  if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - BYTES_PER_OBCI_PACKET)) {
     buf->gotAllPackets = true;
   }
   return true;
@@ -860,7 +863,7 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data, int len) {
   if (rawBufferReadyForNewPage(curRawBuffer)) {
     // Serial.println("Not last packet / Current buffer has no data");
     // Take it, not last
-    if (rawBufferAddData(curRawBuffer,data,len)) {
+    if (rawBufferAddStreamPacket(curRawBuffer,data)) {
       // Return that a packet that was not last was added
       return PROCESS_RAW_PASS_FIRST;
     } else {
@@ -875,7 +878,7 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data, int len) {
       // Can switch to other buffer
       if (rawBufferSwitchToOtherBuffer()) {
         // Take it! Not last
-        if (rawBufferAddData(curRawBuffer,data,len)) {
+        if (rawBufferAddStreamPacket(curRawBuffer,data)) {
           // Return that a packet was added
           return PROCESS_RAW_PASS_SWITCH;
         } else {
@@ -892,7 +895,7 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data, int len) {
       // Current buffer does not have all packets
     } else {
       // Take it! Not last.
-      if (rawBufferAddData(curRawBuffer,data,len)) {
+      if (rawBufferAddStreamPacket(curRawBuffer,data)) {
         // Return that a packet that was not first was added
         return PROCESS_RAW_PASS_MIDDLE;
       } else {
@@ -1040,7 +1043,7 @@ void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStreamRaw(uint8_t *data) {
-  rawBufferProcessPacket(data, BYTES_PER_SPI_PACKET);
+  Serial.print("Raw Buffer Process: 0x"); Serial.print(perfectPrintByteHex(rawBufferProcessPacket(data, BYTES_PER_SPI_PACKET))); Serial.println();
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {
@@ -1051,6 +1054,11 @@ void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {
   }
 }
 
+/**
+ * Used to process a packet from the SPI master then the server has a client
+ *  waiting for a response. Occurs when a passthrough command occurs.
+ * @param data {uint8_t *} - An array of data of length 32.
+ */
 void OpenBCI_Wifi_Class::spiProcessPacketResponse(uint8_t *data) {
   if (clientWaitingForResponse) {
     String newString = (char *)data;

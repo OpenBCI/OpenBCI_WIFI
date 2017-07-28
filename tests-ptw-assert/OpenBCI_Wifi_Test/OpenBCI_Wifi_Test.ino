@@ -14,6 +14,46 @@
 
 int ledPin = 0;
 
+uint8_t *giveMeASPIStreamPacket(uint8_t sampleNumber) {
+  uint8_t data[BYTES_PER_SPI_PACKET];
+  data[0] = STREAM_PACKET_BYTE;
+  data[1] = sampleNumber;
+  uint8_t index = 1;
+  for (int i = 2; i < BYTES_PER_SPI_PACKET; i++) {
+    data[i] = 0;
+    if (i%3==2) {
+      data[i] = index;
+      index++;
+    }
+  }
+  return data;
+}
+
+uint8_t *giveMeASPIStreamPacket(void) {
+  return giveMeASPIStreamPacket(0);
+}
+
+uint8_t *giveMeASPIPacketGainSet(uint8_t numChannels) {
+  uint8_t byteCounter = 0;
+  uint8_t rawGainArray[numChannels];
+
+  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
+  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
+  rawGainArray[byteCounter++] = numChannels;
+
+  for (int i = byteCounter; i < BYTES_PER_SPI_PACKET; i++) {
+    if (i < numChannels + byteCounter) {
+      if (numChannels == NUM_CHANNELS_GANGLION) {
+        rawGainArray[i] = GANGLION_GAIN;
+      } else {
+        rawGainArray[i] = wifi.CYTON_GAIN_24;
+      }
+    } else {
+      rawGainArray[i] = 0;
+    }
+  }
+}
+
 void testGetBoardTypeString() {
   test.describe("getBoardTypeString");
 
@@ -241,7 +281,61 @@ void testGetJSONBufferSize() {
 
 }
 
-void testGetJSONFromSamplesCyton() {
+void testGetJSONFromSamplesCytonMax() {
+  wifi.reset(); // Clear everything
+
+  test.it("should work to get JSON from max samples Cyton. mem stress");
+  uint8_t numChannels = NUM_CHANNELS_CYTON;
+  wifi.setNumChannels(numChannels);
+  uint8_t numPackets = wifi.getJSONMaxPackets(numChannels);
+  uint8_t expected_sampleNumber = 29;
+  unsigned long long expected_timestamp = 1500916934017000;
+  double expected_channelData[MAX_CHANNELS];
+  for (int i = 0; i < MAX_CHANNELS; i++) {
+    if (i%2 == 0) {
+      expected_channelData[i] = ADC_24BIT_MAX_VAL_NANO_VOLT;
+    } else {
+      expected_channelData[i] = -1 * ADC_24BIT_MAX_VAL_NANO_VOLT;
+    }
+  }
+
+  for (uint8_t i = 0; i < numPackets; i++) {
+    wifi.sampleReset(wifi.sampleBuffer + i);
+    (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
+    (wifi.sampleBuffer + i)->timestamp = expected_timestamp + i;
+    for (uint8_t j = 0; j < numChannels; j++) {
+      (wifi.sampleBuffer + i)->channelData[j] = expected_channelData[j];
+      // Serial.printf("j:%d: i:%d %.0f\n", j, i, (wifi.sampleBuffer + i)->channelData[j]);
+    }
+  }
+  String actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numPackets);
+  Serial.println(actual_serializedOutput);
+
+  const size_t bufferSize = JSON_ARRAY_SIZE(5) + 5*JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 5*JSON_OBJECT_SIZE(3) + 1060 + 500;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+
+  JsonObject& root = jsonBuffer.parseObject(actual_serializedOutput);
+
+  JsonArray& chunk = root["chunk"];
+
+  for (uint8_t i = 0; i < numPackets; i++) {
+    JsonObject& sample = chunk[i];
+    unsigned long long actual_timestamp = sample["timestamp"]; // 1500916934017000
+    test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
+
+    uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
+    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
+
+    JsonArray& sample_data = sample["data"];
+    for (uint8_t j = 0; j < numChannels; j++) {
+      double temp_d = sample_data[j];
+      // Serial.printf("\nj[%d]: td:%0.0f e_cD:%.0f\n", j, temp_d, expected_channelData[j]-i);
+      test.assertApproximately(temp_d, expected_channelData[j], 1.0, String("should be able to code large numbers "+String(j)+" for packet " + String(i)).c_str(), __LINE__);
+    }
+  }
+}
+
+void testGetJSONFromSamplesCytonSingle() {
   test.it("should work to get JSON from samples Cyton");
 
   wifi.reset(); // Clear everything
@@ -278,42 +372,6 @@ void testGetJSONFromSamplesCyton() {
   for (int i = 0; i < numChannels; i++) {
     double chunk0_tempData = chunk0_data[i];
     test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
-  }
-
-  // Cyton with three packets
-  wifi.reset(); // Clear everything
-  wifi.setNumChannels(numChannels);
-  numSamples = wifi.getJSONMaxPackets(numChannels);
-  for (uint8_t i = 0; i < numSamples; i++) {
-    wifi.sampleReset(wifi.sampleBuffer + i);
-    (wifi.sampleBuffer + i)->sampleNumber = expected_sampleNumber + i;
-    (wifi.sampleBuffer + i)->timestamp = expected_timestamp + i;
-    for (uint8_t j = 0; j < numChannels; j++) {
-      (wifi.sampleBuffer + i)->channelData[j] = expected_channelData[j];
-      // Serial.printf("j:%d: i:%d %.0f\n", j, i, (wifi.sampleBuffer + i)->channelData[j]);
-    }
-  }
-  actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
-  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 650;
-  DynamicJsonBuffer jsonBuffer1(bufferSize1);
-
-  JsonObject& root1 = jsonBuffer1.parseObject(actual_serializedOutput.c_str());
-  JsonArray& chunk = root1["chunk"];
-
-  for (uint8_t i = 0; i < numSamples; i++) {
-    JsonObject& sample = chunk[i];
-    unsigned long long actual_timestamp = sample["timestamp"]; // 1500916934017000
-    test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
-
-    uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
-    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
-
-    JsonArray& sample_data = sample["data"];
-    for (uint8_t j = 0; j < numChannels; j++) {
-      double temp_d = sample_data[j];
-      // Serial.printf("\nj[%d]: td:%0.0f e_cD:%.0f\n", j, temp_d, expected_channelData[j]-i);
-      test.assertApproximately(temp_d, expected_channelData[j], 1.0, String("should be able to code large numbers "+String(j)+" for sample " + String(i)).c_str(), __LINE__);
-    }
   }
 }
 
@@ -473,7 +531,8 @@ void testGetJSONFromSamplesGanglion() {
 
 void testGetJSONFromSamples() {
   test.detail("getJSONFromSamples");
-  testGetJSONFromSamplesCyton();
+  testGetJSONFromSamplesCytonSingle();
+  testGetJSONFromSamplesCytonMax();
   testGetJSONFromSamplesCytonDaisy();
   testGetJSONFromSamplesGanglion();
 }
@@ -1133,25 +1192,25 @@ void testRawBufferCleanUp() {
   wifi.curRawBuffer = wifi.rawBuffer;
 }
 
-void testRawBufferAddData() {
-  test.describe("rawBufferAddData");
+void testRawBufferAddStreamPacket() {
+  test.describe("rawBufferAddStreamPacket");
   testRawBufferCleanUp();
-  uint8_t buffer[] = "AJ Keller is the best programmer";
-  int expectedLength = 32; // Then length of the above buffer
+  uint8_t *buffer = giveMeASPIStreamPacket();
+  int expectedLength = BYTES_PER_OBCI_PACKET; // Then length of the above buffer
 
-  test.assertTrue(wifi.rawBufferAddData(wifi.curRawBuffer, buffer, expectedLength), "should be able to add buffer to radioBuf", __LINE__);
+  test.assertTrue(wifi.rawBufferAddStreamPacket(wifi.curRawBuffer, buffer), "should be able to add buffer to radioBuf", __LINE__);
   test.assertFalse(wifi.curRawBuffer->gotAllPackets, "should not have all the packets", __LINE__);
-  test.assertEqual(wifi.curRawBuffer->positionWrite, expectedLength, "should move positionWrite by 32", __LINE__);
+  test.assertEqual(wifi.curRawBuffer->positionWrite, expectedLength, "should move positionWrite by 33", __LINE__);
   test.assertEqualBuffer(wifi.curRawBuffer->data, buffer, expectedLength, "should add the whole buffer", __LINE__);
 
   // Reset buffer
   wifi.curRawBuffer->positionWrite = 0;
 
   // Test how this will work in normal operations, i.e. ignoring the byte id
-  test.assertTrue(wifi.rawBufferAddData(wifi.curRawBuffer, buffer, expectedLength),"should be able to add buffer to radioBuf", __LINE__);
-  test.assertFalse(wifi.curRawBuffer->gotAllPackets,"should be still have room", __LINE__);
-  test.assertEqual(wifi.curRawBuffer->positionWrite,expectedLength,"should set the positionWrite to 31", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data,buffer,expectedLength,"should add the whole buffer", __LINE__);
+  test.assertTrue(wifi.rawBufferAddStreamPacket(wifi.curRawBuffer, buffer),"should be able to add buffer to radioBuf", __LINE__);
+  test.assertFalse(wifi.curRawBuffer->gotAllPackets, "should be still have room", __LINE__);
+  test.assertEqual(wifi.curRawBuffer->positionWrite , expectedLength,"should set the positionWrite to 33", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, buffer, expectedLength,"should add the whole buffer", __LINE__);
 }
 
 void testRawBufferClean() {
@@ -1392,26 +1451,20 @@ void testRawBufferProcessPacket() {
 }
 
 void testRawBufferReadyForNewPage() {
-  uint8_t bufferRaw[BYTES_PER_OBCI_PACKET];
-  for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
-    bufferRaw[i] = i;
-  }
+  uint8_t *bufferRaw = giveMeASPIStreamPacket(0);
   // # CLEANUP
   testRawBufferCleanUp();
 
   test.describe("rawBufferReadyForNewPage");
 
-  uint8_t bufferTomatoPotato[] = " tomatoPotato";
-  int bufferTomatoPotatoLength = 13;
-
   test.it("works with clean state");
   test.assertTrue(wifi.rawBufferReadyForNewPage(wifi.rawBuffer), "should be ready to add new page in the first buffer", __LINE__);
-  // test.assertBoolean(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),true,"should be ready to add new page in the second buffer", __LINE__);
+  test.assertTrue(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1), "should be ready to add new page in the second buffer", __LINE__);
   test.assertTrue(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer), "should be ready to add new page in the curRawBuffer", __LINE__);
 
   // Add data to buffer 1
-  test.it("cannot add a page to first buffer but can the second when filled");
-  wifi.rawBufferAddData(wifi.curRawBuffer, bufferTomatoPotato, bufferTomatoPotatoLength);
+  test.it("not ready for a new page when data is in the buffer");
+  wifi.rawBufferAddStreamPacket(wifi.curRawBuffer, bufferRaw);
   test.assertFalse(wifi.rawBufferReadyForNewPage(wifi.rawBuffer), "should not be ready to add new page in the first buffer", __LINE__);
   test.assertTrue(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1), "should be ready to add new page in the second buffer", __LINE__);
   test.assertFalse(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer), "should not be ready to add new page in the curRawBuffer", __LINE__);
@@ -1428,7 +1481,7 @@ void testRawBufferReadyForNewPage() {
     wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET);
   }
   test.it("cannot add a page to either the first or second buffer when both are filled");
-  wifi.rawBufferAddData(wifi.curRawBuffer, bufferTomatoPotato, bufferTomatoPotatoLength);
+  wifi.rawBufferAddStreamPacket(wifi.curRawBuffer, bufferRaw);
   test.assertFalse(wifi.rawBufferReadyForNewPage(wifi.rawBuffer), "should not be ready to add new page in the first buffer", __LINE__);
   test.assertFalse(wifi.rawBufferReadyForNewPage(wifi.rawBuffer + 1),"should not be ready to add new page in the second buffer", __LINE__);
   test.assertFalse(wifi.rawBufferReadyForNewPage(wifi.curRawBuffer), "should not be ready to add new page in the curRawBuffer", __LINE__);
@@ -1485,10 +1538,9 @@ void testRawBufferSwitchToOtherBuffer() {
   // # CLEANUP
   testRawBufferCleanUp();
 
-  test.describe("rawBufferSwitchToOtherBuffer");
+  uint8_t *bufferRaw = giveMeASPIStreamPacket(0);
 
-  uint8_t bufferTomatoPotato[] = " tomatoPotato";
-  int bufferTomatoPotatoLength = 13;
+  test.describe("rawBufferSwitchToOtherBuffer");
 
   test.it("should return true if buffer 2 does not have data and should move the pointer");
   wifi.curRawBuffer = wifi.rawBuffer;
@@ -1505,7 +1557,7 @@ void testRawBufferSwitchToOtherBuffer() {
 
   test.it("should return false when currently pointed at buf 1 and buf 2 has data");
   wifi.curRawBuffer = wifi.rawBuffer;
-  wifi.rawBufferAddData(wifi.rawBuffer + 1, bufferTomatoPotato, bufferTomatoPotatoLength);
+  wifi.rawBufferAddStreamPacket(wifi.rawBuffer + 1, bufferRaw);
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(), "cannot switch to buffer with data", __LINE__);
   test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer, "curRawBuffer still points to first buffer", __LINE__);
 
@@ -1514,7 +1566,7 @@ void testRawBufferSwitchToOtherBuffer() {
 
   test.it("should return false when currently pointed at buf 2 and buf 1 has data");
   wifi.curRawBuffer = wifi.rawBuffer + 1;
-  wifi.rawBufferAddData(wifi.rawBuffer, bufferTomatoPotato, bufferTomatoPotatoLength);
+  wifi.rawBufferAddStreamPacket(wifi.rawBuffer, bufferRaw);
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"cannot switch to buffer with data", __LINE__);
   test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer + 1, "curRawBuffer still points to second buffer", __LINE__);
 
@@ -1522,8 +1574,8 @@ void testRawBufferSwitchToOtherBuffer() {
   testRawBufferCleanUp();
 
   test.it("should return false when both buffers have data");
-  wifi.rawBufferAddData(wifi.rawBuffer, bufferTomatoPotato, bufferTomatoPotatoLength);
-  wifi.rawBufferAddData(wifi.rawBuffer + 1, bufferTomatoPotato, bufferTomatoPotatoLength);
+  wifi.rawBufferAddStreamPacket(wifi.rawBuffer, bufferRaw);
+  wifi.rawBufferAddStreamPacket(wifi.rawBuffer + 1, bufferRaw);
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to second", __LINE__);
   wifi.curRawBuffer++;
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch back to first", __LINE__);
@@ -1532,7 +1584,7 @@ void testRawBufferSwitchToOtherBuffer() {
   testRawBufferCleanUp();
 
   test.it("should return false when other buffer is flushing");
-  wifi.rawBufferAddData(wifi.rawBuffer, bufferTomatoPotato, bufferTomatoPotatoLength);
+  wifi.rawBufferAddStreamPacket(wifi.rawBuffer, bufferRaw);
   (wifi.rawBuffer + 1)->flushing = true; // don't add data, just set it to flushing
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to second because it's flushing", __LINE__);
 
@@ -1543,46 +1595,6 @@ void testRawBufferSwitchToOtherBuffer() {
   wifi.rawBuffer->flushing = true; // don't add data, just set it to flushing
   (wifi.rawBuffer + 1)->flushing = true; // don't add data, just set it to flushing
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to any buffer", __LINE__);
-}
-
-uint8_t *giveMeASPIStreamPacket(uint8_t sampleNumber) {
-  uint8_t data[BYTES_PER_SPI_PACKET];
-  data[0] = STREAM_PACKET_BYTE;
-  data[1] = sampleNumber;
-  uint8_t index = 1;
-  for (int i = 2; i < BYTES_PER_SPI_PACKET; i++) {
-    data[i] = 0;
-    if (i%3==2) {
-      data[i] = index;
-      index++;
-    }
-  }
-  return data;
-}
-
-uint8_t *giveMeASPIStreamPacket(void) {
-  return giveMeASPIStreamPacket(0);
-}
-
-uint8_t *giveMeASPIPacketGainSet(uint8_t numChannels) {
-  uint8_t byteCounter = 0;
-  uint8_t rawGainArray[numChannels];
-
-  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
-  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
-  rawGainArray[byteCounter++] = numChannels;
-
-  for (int i = byteCounter; i < BYTES_PER_SPI_PACKET; i++) {
-    if (i < numChannels + byteCounter) {
-      if (numChannels == NUM_CHANNELS_GANGLION) {
-        rawGainArray[i] = GANGLION_GAIN;
-      } else {
-        rawGainArray[i] = wifi.CYTON_GAIN_24;
-      }
-    } else {
-      rawGainArray[i] = 0;
-    }
-  }
 }
 
 void testSPIProcessPacketStreamJSONGanglion() {
@@ -1780,7 +1792,7 @@ void testSPIProcessPacket() {
 
 void testUtilisForRaw() {
   testRawBufferCleanUp();
-  testRawBufferAddData();
+  testRawBufferAddStreamPacket();
   testRawBufferClean();
   testRawBufferHasData();
   testRawBufferProcessPacket();
@@ -1790,22 +1802,21 @@ void testUtilisForRaw() {
 }
 
 void testUtils() {
-  testSPIProcessPacketStream();
-  delay(50);
-  testUtilisForJSON();
-  testUtilisForRaw();
+  testSPIProcessPacket();
+  // testUtilisForJSON();
+  // testUtilisForRaw();
 }
 
 void go() {
   // Start the test
   test.begin();
   digitalWrite(ledPin, HIGH);
-  testGetters();
-  delay(200);
-  digitalWrite(ledPin, LOW);
-  testSetters();
-  delay(200);
-  digitalWrite(ledPin, HIGH);
+  // testGetters();
+  // delay(200);
+  // digitalWrite(ledPin, LOW);
+  // testSetters();
+  // delay(200);
+  // digitalWrite(ledPin, HIGH);
   testUtils();
   test.end();
   digitalWrite(ledPin, LOW);

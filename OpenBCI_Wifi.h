@@ -126,7 +126,7 @@ public:
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
   String perfectPrintByteHex(uint8_t);
-  boolean rawBufferAddData(RawBuffer *, uint8_t *, int);
+  boolean rawBufferAddStreamPacket(RawBuffer *, uint8_t *);
   void rawBufferClean(RawBuffer *);
   boolean rawBufferHasData(RawBuffer *);
   void rawBufferFlush(RawBuffer *);
