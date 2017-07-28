@@ -14,9 +14,8 @@
 
 int ledPin = 0;
 
-uint8_t *giveMeASPIStreamPacket(uint8_t sampleNumber) {
-  uint8_t data[BYTES_PER_SPI_PACKET];
-  data[0] = STREAM_PACKET_BYTE;
+uint8_t *giveMeASPIStreamPacket(uint8_t *data, uint8_t sampleNumber) {
+  data[0] = STREAM_PACKET_BYTE_STOP;
   data[1] = sampleNumber;
   uint8_t index = 1;
   for (int i = 2; i < BYTES_PER_SPI_PACKET; i++) {
@@ -29,27 +28,25 @@ uint8_t *giveMeASPIStreamPacket(uint8_t sampleNumber) {
   return data;
 }
 
-uint8_t *giveMeASPIStreamPacket(void) {
-  return giveMeASPIStreamPacket(0);
+uint8_t *giveMeASPIStreamPacket(uint8_t *data) {
+  return giveMeASPIStreamPacket(data, 0);
 }
 
-uint8_t *giveMeASPIPacketGainSet(uint8_t numChannels) {
+uint8_t *giveMeASPIPacketGainSet(uint8_t *data, uint8_t numChannels) {
   uint8_t byteCounter = 0;
-  uint8_t rawGainArray[numChannels];
-
-  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
-  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
-  rawGainArray[byteCounter++] = numChannels;
+  data[byteCounter++] = WIFI_SPI_MSG_GAINS;
+  data[byteCounter++] = WIFI_SPI_MSG_GAINS;
+  data[byteCounter++] = numChannels;
 
   for (int i = byteCounter; i < BYTES_PER_SPI_PACKET; i++) {
     if (i < numChannels + byteCounter) {
       if (numChannels == NUM_CHANNELS_GANGLION) {
-        rawGainArray[i] = GANGLION_GAIN;
+        data[i] = GANGLION_GAIN;
       } else {
-        rawGainArray[i] = wifi.CYTON_GAIN_24;
+        data[i] = wifi.CYTON_GAIN_24;
       }
     } else {
-      rawGainArray[i] = 0;
+      data[i] = 0;
     }
   }
 }
@@ -1195,13 +1192,20 @@ void testRawBufferCleanUp() {
 void testRawBufferAddStreamPacket() {
   test.describe("rawBufferAddStreamPacket");
   testRawBufferCleanUp();
-  uint8_t *buffer = giveMeASPIStreamPacket();
+  uint8_t buffer[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(buffer);
   int expectedLength = BYTES_PER_OBCI_PACKET; // Then length of the above buffer
-
+  test.it("should take a 32byte spi packet, add start byte to curRawBuffer, write 31 data bytes, and add stop byte of first spi byte");
+  uint8_t expected_buffer[BYTES_PER_OBCI_PACKET];
+  expected_buffer[0] = STREAM_PACKET_BYTE_START;
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    expected_buffer[i] = buffer[i];
+  }
+  expected_buffer[BYTES_PER_SPI_PACKET] = buffer[0];
   test.assertTrue(wifi.rawBufferAddStreamPacket(wifi.curRawBuffer, buffer), "should be able to add buffer to radioBuf", __LINE__);
   test.assertFalse(wifi.curRawBuffer->gotAllPackets, "should not have all the packets", __LINE__);
   test.assertEqual(wifi.curRawBuffer->positionWrite, expectedLength, "should move positionWrite by 33", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, buffer, expectedLength, "should add the whole buffer", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, expectedLength, "should add the whole buffer", __LINE__);
 
   // Reset buffer
   wifi.curRawBuffer->positionWrite = 0;
@@ -1210,7 +1214,7 @@ void testRawBufferAddStreamPacket() {
   test.assertTrue(wifi.rawBufferAddStreamPacket(wifi.curRawBuffer, buffer),"should be able to add buffer to radioBuf", __LINE__);
   test.assertFalse(wifi.curRawBuffer->gotAllPackets, "should be still have room", __LINE__);
   test.assertEqual(wifi.curRawBuffer->positionWrite , expectedLength,"should set the positionWrite to 33", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, buffer, expectedLength,"should add the whole buffer", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, expectedLength,"should add the whole buffer", __LINE__);
 }
 
 void testRawBufferClean() {
@@ -1248,32 +1252,40 @@ void testRawBufferHasData() {
 }
 
 void testRawBuffer_PROCESS_RAW_PASS_FIRST() {
-  uint8_t bufferRaw[BYTES_PER_OBCI_PACKET];
-  for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
-    bufferRaw[i] = i;
+  uint8_t bufferRaw[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(bufferRaw);
+  uint8_t expected_buffer[BYTES_PER_OBCI_PACKET];
+  expected_buffer[0] = STREAM_PACKET_BYTE_START;
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    expected_buffer[i] = bufferRaw[i];
   }
+  expected_buffer[BYTES_PER_SPI_PACKET] = bufferRaw[0];
 
   testRawBufferCleanUp();
   test.detail("PROCESS_RAW_PASS_FIRST");
   // Last packet
   //      Current buffer has no data
   //          Take it!
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_FIRST, "should add to raw buffer 1", __LINE__);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_FIRST, "should add to raw buffer 1", __LINE__);
   test.assertFalse(wifi.curRawBuffer->gotAllPackets, "should leave gotAllPackets to false", __LINE__);
   test.assertEqual(wifi.curRawBuffer->positionWrite, BYTES_PER_OBCI_PACKET, "should set the positionWrite to 33", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into the first buffer", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have the packet loaded into the first buffer", __LINE__);
 
   // Also verify that the buffer was loaded into the correct buffer
   test.assertFalse(wifi.rawBuffer->gotAllPackets, "should be able to set gotAllPackets to true", __LINE__);
   test.assertEqual(wifi.rawBuffer->positionWrite, BYTES_PER_OBCI_PACKET, "should set the positionWrite to 4", __LINE__);
-  test.assertEqualBuffer(wifi.rawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "curRawBuffer should have the taco buffer loaded into it", __LINE__);
+  test.assertEqualBuffer(wifi.rawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "curRawBuffer should have the taco buffer loaded into it", __LINE__);
 }
 
 void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
-  uint8_t bufferRaw[BYTES_PER_OBCI_PACKET];
-  for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
-    bufferRaw[i] = i;
+  uint8_t bufferRaw[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(bufferRaw);
+  uint8_t expected_buffer[BYTES_PER_OBCI_PACKET];
+  expected_buffer[0] = STREAM_PACKET_BYTE_START;
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    expected_buffer[i] = bufferRaw[i];
   }
+  expected_buffer[BYTES_PER_SPI_PACKET] = bufferRaw[0];
 
   testRawBufferCleanUp();
   test.detail("PROCESS_RAW_PASS_SWITCH");
@@ -1281,17 +1293,17 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
   test.it("should switch to second buffer when first buffer is full and id last packet");
   for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_TCP; i++) {
     // Serial.printf("[%d]: | retVal: %d | pos: %d\n", i, wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), wifi.curRawBuffer->positionWrite);
-    wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET);
+    wifi.rawBufferProcessPacket(bufferRaw);
   }
 
   // Current buffer has data
   //     Current buffer has all packets
   //         Can swtich to other buffer
   //             Take it!
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_SWITCH, "should add the last packet", __LINE__);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_SWITCH, "should add the last packet", __LINE__);
   test.assertFalse((wifi.rawBuffer + 1)->gotAllPackets, "should set gotAllPackets to false for second buffer", __LINE__);
   test.assertEqual((wifi.rawBuffer + 1)->positionWrite, BYTES_PER_OBCI_PACKET, "should set the positionWrite to size of cali buffer", __LINE__);
-  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded raw buffer in the second buffer correctly", __LINE__);
+  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded raw buffer in the second buffer correctly", __LINE__);
 
   // Verify that both of the buffers are full
   test.assertTrue(wifi.rawBuffer->gotAllPackets, "should still have a full first buffer after switch", __LINE__);
@@ -1299,7 +1311,7 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
 
   test.assertFalse(wifi.curRawBuffer->gotAllPackets, "should set got all packets false on curRawBuffer", __LINE__);
   test.assertEqual(wifi.curRawBuffer->positionWrite, BYTES_PER_OBCI_PACKET, "should set positionWrite of curRawBuffer to that of the second buffer", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
 
 
   // Do it again in reverse, where the second buffer is full
@@ -1308,17 +1320,17 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
   testRawBufferCleanUp();
   wifi.curRawBuffer = wifi.rawBuffer + 1;
   for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_TCP; i++) {
-    wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET);
+    wifi.rawBufferProcessPacket(bufferRaw);
   }
 
   // Current buffer has data
   //     Current buffer has all packets
   //         Can swtich to other buffer
   //             Take it!
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_SWITCH, "should add the last packet", __LINE__);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_SWITCH, "should add the last packet", __LINE__);
   test.assertBoolean(wifi.rawBuffer->gotAllPackets, false, "should set gotAllPackets to false for second buffer", __LINE__);
   test.assertEqual(wifi.rawBuffer->positionWrite, BYTES_PER_OBCI_PACKET, "should set the positionWrite to size of cali buffer", __LINE__);
-  test.assertEqualBuffer(wifi.rawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer in the second buffer correctly", __LINE__);
+  test.assertEqualBuffer(wifi.rawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer in the second buffer correctly", __LINE__);
 
   // Verify that both of the buffers are full
   test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets, true, "should still have a full first buffer after switch", __LINE__);
@@ -1326,15 +1338,15 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
 
   test.assertBoolean(wifi.curRawBuffer->gotAllPackets, false, "should set got all packets false on curRawBuffer", __LINE__);
   test.assertEqual(wifi.curRawBuffer->positionWrite, BYTES_PER_OBCI_PACKET, "should set positionWrite of curRawBuffer to that of the second buffer", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
 
   test.it("should switch to second buffer when first is flushing");
   // First buffer flushing, second empty
   testRawBufferCleanUp();
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_FIRST);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_FIRST);
   test.assertFalse(wifi.rawBuffer->gotAllPackets, "should set gotAllPackets to false for first buffer", __LINE__);
-  test.assertEqualBuffer(wifi.rawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded data buffer in the first buffer correctly", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
+  test.assertEqualBuffer(wifi.rawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded data buffer in the first buffer correctly", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
   // Test is to simulate the first one is being flushed as this new packet comes in
   // Set the first buffer to flushing
   wifi.rawBuffer->flushing = true;
@@ -1342,25 +1354,25 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
   //     Current buffer has all packets
   //         Can swtich to other buffer
   //             Take it! Mark Last
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_SWITCH,"should switch and add the last packet when first is flushing", __LINE__);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_SWITCH,"should switch and add the last packet when first is flushing", __LINE__);
   test.assertFalse((wifi.rawBuffer + 1)->gotAllPackets, "should mark the second buffer not full", __LINE__);
-  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into the second buffer", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into curRawBuffer", __LINE__);
+  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into the second buffer", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into curRawBuffer", __LINE__);
   // Verify the first buffer is still loaded with the cali buffer
   test.assertTrue(wifi.rawBuffer->flushing, "should have flushing true for first buffer", __LINE__);
   test.assertFalse(wifi.rawBuffer->gotAllPackets, "should still have gotAllPackets false for first buffer", __LINE__);
   test.assertEqual(wifi.rawBuffer->positionWrite, BYTES_PER_OBCI_PACKET,"should still have positionWrite to size of cali buffer in buffer 1", __LINE__);
-  test.assertEqualBuffer(wifi.rawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should still have loaded cali buffer in the first buffer correctly", __LINE__);
+  test.assertEqualBuffer(wifi.rawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should still have loaded cali buffer in the first buffer correctly", __LINE__);
 
   test.it("should switch to first buffer when second is flushing and id last packet");
   // Second buffer flushing, first empty
   testRawBufferCleanUp();
   // Load the cali buffer into the second buffer
   wifi.curRawBuffer = wifi.rawBuffer + 1;
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_FIRST);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_FIRST);
   test.assertFalse((wifi.rawBuffer + 1)->gotAllPackets, "should set gotAllPackets to false for first buffer", __LINE__);
-  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded data buffer in the first buffer correctly", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
+  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded data buffer in the first buffer correctly", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
   // Test is to simulate the second one is being flushed as this new packet comes in
   // Set the second buffer to flushing
   (wifi.rawBuffer + 1)->flushing = true;
@@ -1368,43 +1380,63 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
   //     Current buffer has all packets
   //         Can swtich to other buffer
   //             Take it!
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_SWITCH,"should switch and add the last packet when first is flushing", __LINE__);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_SWITCH,"should switch and add the last packet when first is flushing", __LINE__);
   test.assertFalse(wifi.rawBuffer->gotAllPackets, "should mark the second buffer not full", __LINE__);
-  test.assertEqualBuffer(wifi.rawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into the second buffer", __LINE__);
-  test.assertEqualBuffer(wifi.curRawBuffer->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into curRawBuffer", __LINE__);
+  test.assertEqualBuffer(wifi.rawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into the second buffer", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have the taco buffer loaded into curRawBuffer", __LINE__);
   // Verify the first buffer is still loaded with the cali buffer
   test.assertTrue((wifi.rawBuffer + 1)->flushing, "should have flushing true for first buffer", __LINE__);
   test.assertFalse((wifi.rawBuffer + 1)->gotAllPackets, "should still have gotAllPackets false for first buffer", __LINE__);
   test.assertEqual((wifi.rawBuffer + 1)->positionWrite, BYTES_PER_OBCI_PACKET,"should still have positionWrite to size of cali buffer in buffer 1", __LINE__);
-  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, bufferRaw, BYTES_PER_OBCI_PACKET, "should still have loaded cali buffer in the first buffer correctly", __LINE__);
+  test.assertEqualBuffer((wifi.rawBuffer + 1)->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should still have loaded cali buffer in the first buffer correctly", __LINE__);
 
 }
 
 void testRawBuffer_PROCESS_RAW_PASS_MIDDLE() {
-  uint8_t bufferRaw[BYTES_PER_OBCI_PACKET];
-  for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
-    bufferRaw[i] = i;
+  uint8_t bufferRaw[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(bufferRaw);
+  uint8_t bufferRaw2[BYTES_PER_SPI_PACKET];
+  uint8_t expected_sampleNumber = 1;
+  giveMeASPIStreamPacket(bufferRaw2, expected_sampleNumber);
+  uint8_t numSamples = 2;
+  uint8_t expected_buffer[BYTES_PER_OBCI_PACKET*numSamples];
+  uint8_t byteCounter = 0;
+  expected_buffer[byteCounter++] = STREAM_PACKET_BYTE_START;
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    expected_buffer[byteCounter++] = bufferRaw[i];
   }
+  expected_buffer[byteCounter++] = bufferRaw[0];
+  expected_buffer[byteCounter++] = STREAM_PACKET_BYTE_START;
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    expected_buffer[byteCounter++] = bufferRaw2[i];
+  }
+  expected_buffer[byteCounter++] = bufferRaw2[0];
 
   testRawBufferCleanUp();
   test.detail("PROCESS_RAW_PASS_MIDDLE");
   test.it("should return middle pass when packet entered");
-  wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET);
+  wifi.rawBufferProcessPacket(bufferRaw);
 
   // Current buffer has data
   //     Current buffer does not have all packets
   //         Previous packet number == packetNumber + 1
   //             Take it!
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET), PROCESS_RAW_PASS_MIDDLE);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw2), PROCESS_RAW_PASS_MIDDLE);
   test.assertFalse(wifi.rawBuffer->gotAllPackets, "should not have gotAllPackets", __LINE__);
   test.assertEqual(wifi.rawBuffer->positionWrite, BYTES_PER_OBCI_PACKET * 2, "should set the positionWrite to size of two packets", __LINE__);
+  test.assertEqualBuffer(wifi.rawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET*2, "should have two buffers loaded into rawBuffer", __LINE__);
+
 }
 
 void testRawBuffer_PROCESS_RAW_FAIL_SWITCH() {
-  uint8_t bufferRaw[BYTES_PER_OBCI_PACKET];
-  for (uint8_t i = 0; i < BYTES_PER_OBCI_PACKET; i++) {
-    bufferRaw[i] = i;
+  uint8_t bufferRaw[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(bufferRaw);
+  uint8_t expected_buffer[BYTES_PER_OBCI_PACKET];
+  expected_buffer[0] = STREAM_PACKET_BYTE_START;
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    expected_buffer[i] = bufferRaw[i];
   }
+  expected_buffer[BYTES_PER_SPI_PACKET] = bufferRaw[0];
 
   testRawBufferCleanUp();
   test.detail("PROCESS_RAW_FAIL_SWITCH");
@@ -1412,14 +1444,14 @@ void testRawBuffer_PROCESS_RAW_FAIL_SWITCH() {
 
   // Fill the two buffers
   for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_TCP * 2; i++) {
-    wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET);
+    wifi.rawBufferProcessPacket(bufferRaw);
   }
 
   // Current buffer has data
   //     Current buffer has all packets
   //         Cannot switch to other buffer
   //             Reject it!
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET),PROCESS_RAW_FAIL_SWITCH,"should reject the addition of this buffer", __LINE__);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw),PROCESS_RAW_FAIL_SWITCH,"should reject the addition of this buffer", __LINE__);
 
   test.it("should not be able to switch to other buffer when the buffers are flushing");
   testRawBufferCleanUp();
@@ -1429,7 +1461,7 @@ void testRawBuffer_PROCESS_RAW_FAIL_SWITCH() {
   //     Current buffer has all packets
   //         Cannot switch to other buffer
   //             Reject it!
-  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET),PROCESS_RAW_FAIL_SWITCH,"should reject the addition of this buffer", __LINE__);
+  test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw),PROCESS_RAW_FAIL_SWITCH,"should reject the addition of this buffer", __LINE__);
 }
 
 void testRawBufferProcessPacket() {
@@ -1451,7 +1483,8 @@ void testRawBufferProcessPacket() {
 }
 
 void testRawBufferReadyForNewPage() {
-  uint8_t *bufferRaw = giveMeASPIStreamPacket(0);
+  uint8_t bufferRaw[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(bufferRaw);
   // # CLEANUP
   testRawBufferCleanUp();
 
@@ -1478,7 +1511,7 @@ void testRawBufferReadyForNewPage() {
   // Add data to buffer 2
   //
   for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_TCP * 2; i++) {
-    wifi.rawBufferProcessPacket(bufferRaw, BYTES_PER_OBCI_PACKET);
+    wifi.rawBufferProcessPacket(bufferRaw);
   }
   test.it("cannot add a page to either the first or second buffer when both are filled");
   wifi.rawBufferAddStreamPacket(wifi.curRawBuffer, bufferRaw);
@@ -1538,7 +1571,8 @@ void testRawBufferSwitchToOtherBuffer() {
   // # CLEANUP
   testRawBufferCleanUp();
 
-  uint8_t *bufferRaw = giveMeASPIStreamPacket(0);
+  uint8_t bufferRaw[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(bufferRaw);
 
   test.describe("rawBufferSwitchToOtherBuffer");
 
@@ -1607,8 +1641,10 @@ void testSPIProcessPacketStreamJSONGanglion() {
   test.it("for ganglion should add scaled data to sample struct");
   uint8_t expected_sampleNumber = 23; // Jordan
   uint8_t numChannels = NUM_CHANNELS_GANGLION;
-  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
-  uint8_t *gainPacket = giveMeASPIPacketGainSet(numChannels);
+  uint8_t data[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(data, expected_sampleNumber);
+  uint8_t gainPacket[BYTES_PER_SPI_PACKET];
+  giveMeASPIPacketGainSet(gainPacket, numChannels);
   wifi.setGains(gainPacket);
   double expected_channelData[numChannels];
   for (int i = 0; i < numChannels; i++) {
@@ -1634,8 +1670,10 @@ void testSPIProcessPacketStreamJSONCyton() {
   test.it("for cyton should add scaled data to sample struct");
   uint8_t expected_sampleNumber = 23; // Jordan
   uint8_t numChannels = NUM_CHANNELS_CYTON;
-  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
-  uint8_t *gainPacket = giveMeASPIPacketGainSet(numChannels);
+  uint8_t data[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(data, expected_sampleNumber);
+  uint8_t gainPacket[BYTES_PER_SPI_PACKET];
+  giveMeASPIPacketGainSet(gainPacket, numChannels);
   wifi.setGains(gainPacket);
   double expected_channelData[numChannels];
   for (int i = 0; i < numChannels; i++) {
@@ -1661,9 +1699,12 @@ void testSPIProcessPacketStreamJSONDaisy() {
   test.it("for cyton daisy should add scaled data to sample struct");
   uint8_t expected_sampleNumber = 23; // Jordan
   uint8_t numChannels = NUM_CHANNELS_CYTON_DAISY;
-  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
-  uint8_t *data_daisy = giveMeASPIStreamPacket(expected_sampleNumber);
-  uint8_t *gainPacket = giveMeASPIPacketGainSet(numChannels);
+  uint8_t data[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(data, expected_sampleNumber);
+  uint8_t data_daisy[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(data_daisy, expected_sampleNumber);
+  uint8_t gainPacket[BYTES_PER_SPI_PACKET];
+  giveMeASPIPacketGainSet(gainPacket, numChannels);
   wifi.setGains(gainPacket);
   double expected_channelData[numChannels];
   int32_t raws[MAX_CHANNELS_PER_PACKET];
@@ -1689,13 +1730,14 @@ void testSPIProcessPacketStreamRaw() {
   wifi.reset();
 
   uint8_t expected_sampleNumber = 23; // Jordan
-  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
+  uint8_t data[BYTES_PER_SPI_PACKET];
+  giveMeASPIStreamPacket(data, expected_sampleNumber);
 
   wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
   test.it("should add 33 bytes to the output buffer");
   wifi.spiProcessPacketStreamRaw(data);
 
-  test.assertEqualHex(wifi.curRawBuffer->data[0], 0xA0, "should set first byte to start byte", __LINE__);
+  test.assertEqualHex(wifi.curRawBuffer->data[0], STREAM_PACKET_BYTE_START, "should set first byte to start byte", __LINE__);
   test.assertEqualBuffer(wifi.curRawBuffer->data + 1, data + 1, BYTES_PER_SPI_PACKET-1, "should have the same 31 data bytes");
   test.assertEqualHex(wifi.curRawBuffer->data[BYTES_PER_SPI_PACKET], 0xC0, "should set the stop byte", __LINE__);
 }
@@ -1714,7 +1756,9 @@ void testSPIProcessPacketGain() {
   wifi.reset();
 
   uint8_t expected_numChannels = NUM_CHANNELS_CYTON_DAISY;
-  uint8_t *spiPacket = giveMeASPIPacketGainSet(expected_numChannels);
+  uint8_t spiPacket[BYTES_PER_SPI_PACKET];
+
+  giveMeASPIPacketGainSet(spiPacket, expected_numChannels);
 
   uint8_t expected_gains[expected_numChannels];
   for(int i = 0; i < expected_numChannels; i++) {
@@ -1803,20 +1847,20 @@ void testUtilisForRaw() {
 
 void testUtils() {
   testSPIProcessPacket();
-  // testUtilisForJSON();
-  // testUtilisForRaw();
+  testUtilisForJSON();
+  testUtilisForRaw();
 }
 
 void go() {
   // Start the test
   test.begin();
   digitalWrite(ledPin, HIGH);
-  // testGetters();
-  // delay(200);
-  // digitalWrite(ledPin, LOW);
-  // testSetters();
-  // delay(200);
-  // digitalWrite(ledPin, HIGH);
+  testGetters();
+  delay(200);
+  digitalWrite(ledPin, LOW);
+  testSetters();
+  delay(200);
+  digitalWrite(ledPin, HIGH);
   testUtils();
   test.end();
   digitalWrite(ledPin, LOW);

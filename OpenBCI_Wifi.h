@@ -132,7 +132,7 @@ public:
   void rawBufferFlush(RawBuffer *);
   void rawBufferFlushBuffers(void);
   boolean rawBufferLoadingMultiPacket(RawBuffer *);
-  byte rawBufferProcessPacket(uint8_t *, int);
+  byte rawBufferProcessPacket(uint8_t *);
   void rawBufferProcessSingle(RawBuffer *);
   boolean rawBufferReadyForNewPage(RawBuffer *);
   void rawBufferReset(RawBuffer *);

@@ -790,7 +790,7 @@ boolean OpenBCI_Wifi_Class::rawBufferAddStreamPacket(RawBuffer *buf, uint8_t *da
     return false;
   }
   uint8_t stopByte = data[0];
-  buf->data[buf->positionWrite++] = 0xA0;
+  buf->data[buf->positionWrite++] = STREAM_PACKET_BYTE_START;
   for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
     buf->data[buf->positionWrite++] = data[i];
   }
@@ -858,7 +858,7 @@ boolean OpenBCI_Wifi_Class::rawBufferHasData(RawBuffer *buf) {
   return buf->positionWrite > 0;
 }
 
-byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data, int len) {
+byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data) {
   // Current buffer has no data
   if (rawBufferReadyForNewPage(curRawBuffer)) {
     // Serial.println("Not last packet / Current buffer has no data");
@@ -1043,7 +1043,7 @@ void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStreamRaw(uint8_t *data) {
-  Serial.print("Raw Buffer Process: 0x"); Serial.print(perfectPrintByteHex(rawBufferProcessPacket(data, BYTES_PER_SPI_PACKET))); Serial.println();
+  Serial.print("Raw Buffer Process: 0x"); Serial.print(perfectPrintByteHex(rawBufferProcessPacket(data))); Serial.println();
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {
