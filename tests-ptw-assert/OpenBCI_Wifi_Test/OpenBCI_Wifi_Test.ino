@@ -833,6 +833,7 @@ void testReset() {
   test.assertEqual(wifi.mqttUsername, "", "should initialize mqttUsername to empty string", __LINE__);
   test.assertEqual(wifi.mqttPassword, "", "should initialize mqttPassword to empty string", __LINE__);
   test.assertEqual(wifi.outputString, "", "should initialize outputString to empty string", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, 0, "should initialize the passthroughPosition to 0", __LINE__);
   test.assertEqual(wifi.tcpAddress.toString(), "0.0.0.0", "should initialize tcpAddress to empty string", __LINE__);
   test.assertFalse(wifi.tcpDelimiter, "should initialize tcpDelimiter to false", __LINE__);
   test.assertEqual(wifi.tcpPort, 80, "should initialize tcpPort to 80", __LINE__);
@@ -1299,6 +1300,57 @@ void testUtilisForJSON() {
   testTransformRawsToScaledGanglion();
   testSampleReset();
   testRawToScaled();
+}
+
+void testPassthroughCommands() {
+  test.detail("Commands");
+
+  wifi.reset();
+
+  String cmds = "pushtheworld";
+  uint8_t expected_length = cmds.length();
+
+  test.assertEqual(wifi.passthroughCommands(""), PASSTHROUGH_FAIL_NO_CHARS, "should not pass through the commands", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, 0, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+
+  test.assertEqual(wifi.passthroughCommands("aj keller is the best programmer in the world woo!!!!"), PASSTHROUGH_FAIL_NO_CHARS, "should not pass through the commands", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, 0, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+
+  test.assertEqual(wifi.passthroughCommands(cmds), PASSTHROUGH_PASS, "should be able to pass through the commands", __LINE__);
+  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)cmds.c_str(), "should have put the cmds into the pass through buffer", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, expected_length+1, "should have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+
+  test.assertEqual(wifi.passthroughCommands(cmds), PASSTHROUGH_PASS, "should be able to pass through the commands", __LINE__);
+  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)String(cmds + cmds).c_str(), "should have put the cmds into the pass through buffer", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, expected_length*2+1, "should have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+
+  test.assertEqual(wifi.passthroughCommands(cmds), PASSTHROUGH_FAIL_QUEUE_FILLED, "should not be able to pass through the commands", __LINE__);
+  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)String(cmds + cmds).c_str(), "should not have put the cmds into the pass through buffer", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, expected_length*2+1, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+}
+
+void testPassthroughBufferClear() {
+  test.detail("Buffer Clear");
+
+  wifi.reset();
+
+  wifi.passthroughCommands("tacos");
+
+  wifi.passthroughBufferClear();
+
+  test.assertEqual(wifi.passthroughPosition, 0, "should have zeroed out the passthroughPosition", __LINE__);
+  boolean allZeros = true;
+  for (int i = 0; i < BYTES_PER_SPI_PACKET; i++) {
+    if (wifi.passthroughBuffer[i] > 0) {
+      allZeros = false;
+    }
+  }
+  test.assertTrue(allZeros, "should have been able to set each val in passthrough buffer to 0", __LINE__);
+}
+
+void testPassthrough() {
+  test.describe("testPassthrough");
+
 }
 
 void testRawBufferCleanUp() {

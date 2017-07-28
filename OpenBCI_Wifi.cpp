@@ -68,6 +68,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   head = 0;
   lastSampleNumber = 0;
   lastTimeWasPolled = 0;
+  passthroughPosition = 0;
   tail = 0;
   tcpPort = 80;
   _counter = 0;
@@ -794,6 +795,36 @@ unsigned long long OpenBCI_Wifi_Class::ntpGetPreciseAdjustment(unsigned long ntp
 unsigned long long OpenBCI_Wifi_Class::ntpGetTime(void) {
   unsigned long long curTime = time(nullptr);
   return curTime * MICROS_IN_SECONDS;
+}
+
+void OpenBCI_Wifi_Class::passthroughBufferClear(void) {
+  for (uint8_t i = 0; i < BYTES_PER_SPI_PACKET; i++) {
+    passthroughBuffer[i] = 0;
+  }
+  passthroughPosition = 0;
+}
+
+uint8_t OpenBCI_Wifi_Class::passthroughCommands(String commands) {
+  uint8_t numCmds = uint8_t(commands.length());
+  if (numCmds > BYTES_PER_SPI_PACKET - 1) {
+    return PASSTHROUGH_FAIL_TOO_MANY_CHARS;
+  } else if (numCmds == 0) {
+    return PASSTHROUGH_FAIL_NO_CHARS;
+  }
+  if (passthroughPosition > 0) {
+    if (numCmds > BYTES_PER_SPI_PACKET - passthroughPosition-1) { // -1 because of numCmds as first byte
+      return PASSTHROUGH_FAIL_QUEUE_FILLED;
+    }
+    passthroughBuffer[0] += numCmds;
+  } else {
+    passthroughBuffer[0] = numCmds;
+  }
+
+  for (int i = 0; i < numCmds + 1; i++) {
+    passthroughBuffer[passthroughPosition++] = commands.charAt(i);
+  }
+
+  return PASSTHROUGH_PASS;
 }
 
 /**

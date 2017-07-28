@@ -127,6 +127,8 @@ public:
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
+  void passthroughBufferClear(void);
+  uint8_t passthroughCommands(String);
   String perfectPrintByteHex(uint8_t);
   boolean rawBufferAddStreamPacket(RawBuffer *, uint8_t *);
   void rawBufferClean(RawBuffer *);
@@ -187,6 +189,9 @@ public:
   String mqttUsername;
   String mqttPassword;
   String outputString;
+
+  uint8_t passthroughPosition;
+  uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 
   unsigned long lastTimeWasPolled;
 
