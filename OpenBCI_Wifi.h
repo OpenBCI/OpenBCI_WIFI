@@ -14,6 +14,7 @@
 #define __OpenBCI_Wifi__
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_USE_DOUBLE 1
+#define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include <Arduino.h>
 #include <time.h>
 #include <ESP8266WiFi.h>
@@ -96,8 +97,8 @@ public:
   uint8_t getGainCyton(uint8_t b);
   uint8_t getGainGanglion(void);
   uint8_t getHead(void);
-  String getInfoMqtt(void);
-  String getInfoTcp(void);
+  String getInfoMQTT(void);
+  String getInfoTCP(void);
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
   String getJSONFromSamples(uint8_t, uint8_t);
@@ -140,7 +141,7 @@ public:
   void sampleReset(Sample *, uint8_t);
   void setGains(uint8_t *, uint8_t *);
   void setInfoMQTT(String, String, String);
-  void setInfoTCP(String, int);
+  void setInfoTCP(IPAddress, int, boolean);
   void setNumChannels(uint8_t);
   void setNTPOffset(unsigned long);
   void setOutputMode(OUTPUT_MODE);
@@ -154,6 +155,10 @@ public:
   ESP8266HTTPUpdateServer httpUpdater;
   ESP8266WebServer server(int port = 80);
 
+  IPAddress tcpAddress;
+
+  int tcpPort;
+
   OUTPUT_MODE curOutputMode;
   OUTPUT_PROTOCOL curOutputProtocol;
 
@@ -161,6 +166,10 @@ public:
   RawBuffer rawBuffer[NUM_RAW_BUFFERS];
 
   Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
+
+  String mqttBrokerAddress;
+  String mqttUsername;
+  String mqttPassword;
 
   WiFiClient clientTCP;
   WiFiClient espClient;

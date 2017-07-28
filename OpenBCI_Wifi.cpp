@@ -74,7 +74,8 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   mqttBrokerAddress = "";
   mqttUsername = "";
   mqttPassword = "";
-  tcpAddress = "";
+
+  tcpAddress = IPAddress();
 
   curOutputMode = OUTPUT_MODE_RAW;
   curOutputProtocol = OUTPUT_PROTOCOL_NONE;
@@ -170,7 +171,7 @@ uint8_t OpenBCI_Wifi_Class::getHead(void) {
   return head;
 }
 
-String OpenBCI_Wifi_Class::getInfoMqtt(void) {
+String OpenBCI_Wifi_Class::getInfoMQTT(void) {
   const size_t bufferSize = JSON_OBJECT_SIZE(4) + 225;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
@@ -178,12 +179,12 @@ String OpenBCI_Wifi_Class::getInfoMqtt(void) {
   root[JSON_MQTT_BROKER_ADDR] = String(mqttBrokerAddress);
   root[JSON_CONNECTED] = clientMQTT.connected() ? true : false;
   root[JSON_MQTT_USERNAME] = String(mqttUsername);
-  root[JSON_TCP_OUTPUT] = getCurOutputMode();
+  root[JSON_TCP_OUTPUT] = getCurOutputModeString();
   root.printTo(json);
   return json;
 }
 
-String OpenBCI_Wifi_Class::getInfoTcp(void) {
+String OpenBCI_Wifi_Class::getInfoTCP(void) {
   const size_t bufferSize = JSON_OBJECT_SIZE(5) + 100;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
@@ -191,7 +192,7 @@ String OpenBCI_Wifi_Class::getInfoTcp(void) {
   root[JSON_CONNECTED] = clientTCP.connected() ? true : false;
   root[JSON_TCP_DELIMITER] = tcpDelimiter ? true : false;
   root[JSON_TCP_IP] = tcpAddress.toString();
-  root[JSON_TCP_OUTPUT] = getCurOutputMode();
+  root[JSON_TCP_OUTPUT] = getCurOutputModeString();
   root[JSON_TCP_PORT] = tcpPort;
   root.printTo(json);
   return json;
@@ -547,11 +548,11 @@ void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, Stri
 
 /**
  * Used to configure the requried internal variables for TCP communication
- * @param address   {String} - The ip address in string form: "192.168.0.1"
+ * @param address   {IPAddress} - The ip address in string form: "192.168.0.1"
  * @param port      {int} - The port number as an int
  * @param delimiter {boolean} - Include the tcpDelimiter '\r\n'?
  */
-void OpenBCI_Wifi_Class::setInfoTCP(String address, int port, boolean delimiter) {
+void OpenBCI_Wifi_Class::setInfoTCP(IPAddress address, int port, boolean delimiter) {
   tcpAddress = address;
   tcpDelimiter = delimiter;
   tcpPort = port;

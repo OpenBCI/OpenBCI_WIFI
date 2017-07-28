@@ -153,15 +153,15 @@ void testGetInfoMQTT() {
   DynamicJsonBuffer jsonBuffer1(bufferSize);
 
   JsonObject& root1 = jsonBuffer1.parseObject(actual_infoMqtt);
-  brokerAddress = root1["broker_address"]; // "mock.getcloudbrain.com"
+  brokerAddress = root1.get<String>("broker_address"); // "mock.getcloudbrain.com"
   test.assertEqual(brokerAddress, expected_brokerAddress, "should get brokerAddress");
   connected = root1["connected"]; // false
   test.assertFalse(connected, "should not be connected");
-  output = root["output"]; // "json"
+  output = root1.get<String>("output"); // "json"
   test.assertEqual(output, "json", "should switch to json", __LINE__);
-  username = root1["username"]; // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
+  username = root1.get<String>("username"); // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
   test.assertEqual(username, expected_username, "should get username", __LINE__);
-  password = root1["password"]; // ""
+  password = root1.get<String>("password"); // ""
   test.assertEqual(password, expected_password, "should get password", __LINE__);
 }
 
@@ -192,7 +192,8 @@ void testGetInfoTCP() {
   String expected_ip = "255.255.255.255";
   int expected_port = 12345;
 
-  wifi.setInfoTCP(expected_ip, expected_port, expected_delimiter)
+  IPAddress tempIPAddr;
+  wifi.setInfoTCP(tempIPAddr.fromString(expected_ip), expected_port, expected_delimiter);
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
 
   actual_infoTCP = wifi.getInfoTCP();
@@ -205,9 +206,9 @@ void testGetInfoTCP() {
   test.assertFalse(connected, "should not be connected");
   delimiter = root1["delimiter"]; // true
   test.assertTrue(delimiter, "should be using delimiter");
-  ip = root1["ip"]; // "255.255.255.255"
+  ip = root1.get<String>("ip"); // "255.255.255.255"
   test.assertEqual(ip, expected_ip, "should be valid ip address", __LINE__);
-  output = root1["output"]; // "json"
+  output = root1.get<String>("output"); // "json"
   test.assertEqual(output, "json", "should be set to json output mode", __LINE__);
   port = root1["port"]; // 12345
   test.assertEqual(port, expected_port, "should be at port 12345", __LINE__);
@@ -216,8 +217,8 @@ void testGetInfoTCP() {
 
 void testGetInfo() {
   test.describe("getInfo");
-  testGetInfoMqtt();
-  testGetInfoTcp();
+  testGetInfoMQTT();
+  testGetInfoTCP();
 }
 
 void testGetJSONAdditionalBytes() {
@@ -650,12 +651,12 @@ void testReset() {
   test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer, "should point cur raw buffer to head of buffer", __LINE__);
   test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should initialize to 'raw' output mode");
   test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should initialize 'none' for output protocol");
-  test.assertEqual(wifi.mqttBrokerAddress, "", "should intialize mqttBrokerAddress to empty string", __LINE__);
-  test.assertEqual(wifi.mqttUsername, "", "should intialize mqttUsername to empty string", __LINE__);
-  test.assertEqual(wifi.mqttPassword, "", "should intialize mqttPassword to empty string", __LINE__);
-  test.assertEqual(wifi.tcpAddress, "", "should intialize tcpAddress to empty string", __LINE__);
+  test.assertEqual(wifi.mqttBrokerAddress, "", "should initialize mqttBrokerAddress to empty string", __LINE__);
+  test.assertEqual(wifi.mqttUsername, "", "should initialize mqttUsername to empty string", __LINE__);
+  test.assertEqual(wifi.mqttPassword, "", "should initialize mqttPassword to empty string", __LINE__);
+  test.assertEqual(wifi.tcpAddress.toString(), "0.0.0.0", "should initialize tcpAddress to empty string", __LINE__);
   test.assertFalse(wifi.tcpDelimiter, "should initialize tcpDelimiter to false", __LINE__);
-  test.assertEqual(wifi.tcpPort, 80, "should intialize tcpPort to 80", __LINE__);
+  test.assertEqual(wifi.tcpPort, 80, "should initialize tcpPort to 80", __LINE__);
   test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
   test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
   test.assertEqual(wifi.getJSONBufferSize(), (size_t)2836, "should reset jsonBufferSize to 0", __LINE__);
@@ -701,7 +702,7 @@ void testSetInfoMQTT() {
   String expected_username = "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573";
   String expected_password = "the password is not password";
 
-  wifi.setInfoMQTT();
+  wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password);
 
   test.assertEqual(wifi.mqttBrokerAddress, expected_brokerAddress, "should set mqttBrokerAddress", __LINE__);
   test.assertEqual(wifi.mqttUsername, expected_username, "should be able to set mqttUsername", __LINE__);
@@ -711,17 +712,23 @@ void testSetInfoMQTT() {
 void testSetInfoTCP() {
   test.detail("TCP");
 
-  String expected_address = "129.0.0.23";
+  IPAddress expected_address;
+  expected_address.fromString("129.0.0.23");
   boolean expected_delimiter = true;
   int expected_port = 99;
 
   wifi.setInfoTCP(expected_address, expected_port, expected_delimiter);
 
-  test.assertEqual(wifi.tcpAddress, expected_address, "should have set tcpAddress", __LINE__);
+  test.assertEqual(wifi.tcpAddress.toString(), expected_address.toString(), "should have set tcpAddress", __LINE__);
   test.assertTrue(wifi.tcpDelimiter, "should have set tcpDelimiter", __LINE__);
   test.assertEqual(wifi.tcpPort, expected_port, "should be set tcpPort", __LINE__);
 }
 
+void testSetInfo() {
+  test.describe("setInfo");
+  testSetInfoMQTT();
+  testSetInfoTCP();
+}
 
 void testSetNumChannels() {
   test.describe("setNumChannels");
@@ -783,6 +790,7 @@ void testSetOutputProtocol() {
 void testSetters() {
   testReset();
   testSetGain();
+  testSetInfo();
   testSetNumChannels();
   testSetNTPOffset();
   testSetOutputMode();
@@ -928,6 +936,7 @@ void testChannelDataCompute() {
   testChannelDataComputeDaisy();
   testChannelDataComputeGanglion();
 }
+
 void testExtractRaws() {
   test.describe("extractRaws");
 

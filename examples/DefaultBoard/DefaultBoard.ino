@@ -24,6 +24,7 @@
 // to recalculate visit:
 //   https://bblanchon.github.io/ArduinoJson/assistant/index.html
 // #define ARDUINOJSON_USE_DOUBLE 1
+#define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_ADDITIONAL_BYTES_4_CHAN 115
 #define ARDUINOJSON_ADDITIONAL_BYTES_8_CHAN 195
