@@ -130,6 +130,10 @@ String OpenBCI_Wifi_Class::getCurOutputProtocolString() {
   return getOutputProtocolString(curOutputProtocol);
 }
 
+uint8_t *OpenBCI_Wifi_Class::getGains() {
+  return _gains;
+}
+
 /**
  * Used to decode coded gain value from Cyton into actual gain
  * @param  b {uint8_t} The encoded ADS1299 gain value. 0-6
@@ -532,6 +536,10 @@ void OpenBCI_Wifi_Class::setGains(uint8_t *raw, uint8_t *gains) {
 #ifdef DEBUG
   Serial.println("Gain set");
 #endif
+}
+
+void OpenBCI_Wifi_Class::setGains(uint8_t *raw) {
+  setGains(raw, _gains);
 }
 
 /**
@@ -968,6 +976,23 @@ void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
   }
   sample->sampleNumber = 0;
   sample->timestamp = 0;
+}
+
+void OpenBCI_Wifi_Class::spiProcessPacketGain(uint8_t *data) {
+//   if (data[0] > 0) {
+//     if (data[0] == data[1]) {
+//       switch (data[0]) {
+//         case WIFI_SPI_MSG_GAINS:
+//           setGains(data);
+// #ifdef DEBUG
+//           Serial.println("gainSet");
+// #endif
+//           break;
+//         default:
+//           break;
+//       }
+//     }
+//   }
 }
 
 /**

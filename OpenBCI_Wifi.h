@@ -94,6 +94,7 @@ public:
   String getCurBoardTypeString();
   String getCurOutputModeString();
   String getCurOutputProtocolString();
+  uint8_t *getGains(void);
   uint8_t getGainCyton(uint8_t b);
   uint8_t getGainGanglion(void);
   uint8_t getHead(void);
@@ -139,6 +140,7 @@ public:
   void reset(void);
   void sampleReset(Sample *);
   void sampleReset(Sample *, uint8_t);
+  void setGains(uint8_t *);
   void setGains(uint8_t *, uint8_t *);
   void setInfoMQTT(String, String, String);
   void setInfoTCP(IPAddress, int, boolean);
@@ -146,11 +148,16 @@ public:
   void setNTPOffset(unsigned long);
   void setOutputMode(OUTPUT_MODE);
   void setOutputProtocol(OUTPUT_PROTOCOL);
+  void spiProcessPacketGain(uint8_t *);
   void transformRawsToScaledCyton(int32_t *, uint8_t *, uint8_t, double *);
   void transformRawsToScaledGanglion(int32_t *, double *);
 
   // Variables
+  boolean clientWaitingForResponse;
+  boolean clientWaitingForResponseFullfilled
   boolean tcpDelimiter;
+
+  CLIENT_RESPONSE curClientResponse;
 
   ESP8266HTTPUpdateServer httpUpdater;
   ESP8266WebServer server(int port = 80);
@@ -170,6 +177,7 @@ public:
   String mqttBrokerAddress;
   String mqttUsername;
   String mqttPassword;
+  String outputString;
 
   WiFiClient clientTCP;
   WiFiClient espClient;

@@ -648,12 +648,15 @@ void testReset() {
 
   wifi.reset();
   test.assertFalse(wifi.tcpDelimiter, "should set tcpDelimiter to false", __LINE__);
+  test.assertFalse(wifi.clientWaitingForResponse, "should set clientWaitingForResponse to false", __LINE__);
+  test.assertFalse(wifi.clientWaitingForResponseFullfilled, "should set clientWaitingForResponseFullfilled to false", __LINE__);
   test.assertTrue(wifi.curRawBuffer == wifi.rawBuffer, "should point cur raw buffer to head of buffer", __LINE__);
   test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should initialize to 'raw' output mode");
   test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should initialize 'none' for output protocol");
   test.assertEqual(wifi.mqttBrokerAddress, "", "should initialize mqttBrokerAddress to empty string", __LINE__);
   test.assertEqual(wifi.mqttUsername, "", "should initialize mqttUsername to empty string", __LINE__);
   test.assertEqual(wifi.mqttPassword, "", "should initialize mqttPassword to empty string", __LINE__);
+  test.assertEqual(wifi.outputString, "", "should initialize outputString to empty string", __LINE__);
   test.assertEqual(wifi.tcpAddress.toString(), "0.0.0.0", "should initialize tcpAddress to empty string", __LINE__);
   test.assertFalse(wifi.tcpDelimiter, "should initialize tcpDelimiter to false", __LINE__);
   test.assertEqual(wifi.tcpPort, 80, "should initialize tcpPort to 80", __LINE__);
@@ -1531,6 +1534,230 @@ void testRawBufferSwitchToOtherBuffer() {
   wifi.rawBuffer->flushing = true; // don't add data, just set it to flushing
   (wifi.rawBuffer + 1)->flushing = true; // don't add data, just set it to flushing
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to any buffer", __LINE__);
+}
+
+uint8_t *giveMeASPIStreamPacket(uint8_t sampleNumber) {
+  uint8_t data[BYTES_PER_SPI_PACKET];
+  data[0] = STREAM_PACKET_BYTE;
+  data[1] = sampleNumber;
+  uint8_t index = 1;
+  for (int i = 2; i < BYTES_PER_SPI_PACKET; i++) {
+    data[i] = 0;
+    if (i%3==2) {
+      data[i] = index;
+      index++;
+    }
+  }
+  return data;
+}
+
+uint8_t *giveMeASPIStreamPacket(void) {
+  return giveMeASPIStreamPacket(0);
+}
+
+uint8_t *giveMeASPIPacketGainSet(uint8_t numChannels) {
+  uint8_t byteCounter = 0;
+  uint8_t rawGainArray[numChannels];
+
+  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
+  rawGainArray[byteCounter++] = WIFI_SPI_MSG_LAST;
+  rawGainArray[byteCounter++] = numChannels;
+
+  for (int i = byteCounter; i < BYTES_PER_SPI_PACKET; i++) {
+    if (i < numChannels + byteCounter) {
+      if (numChannels == NUM_CHANNELS_GANGLION) {
+        rawGainArray[i] = GANGLION_GAIN;
+      } else {
+        rawGainArray[i] = wifi.CYTON_GAIN_24;
+      }
+    } else {
+      rawGainArray[i] = 0;
+    }
+  }
+}
+
+void testSPIProcessPacketStreamJSONGanglion() {
+  test.detail("JSON Ganglion");
+
+  wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+
+  test.it("for ganglion should add scaled data to sample struct");
+  uint8_t expected_sampleNumber = 23; // Jordan
+  uint8_t numChannels = NUM_CHANNELS_GANGLION;
+  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
+  uint8_t *gainPacket = giveMeASPIPacketGainSet(numChannels);
+  wifi.setGains(gainPacket);
+  double expected_channelData[numChannels];
+  for (int i = 0; i < numChannels; i++) {
+    int32_t raww = wifi.int24To32(data + (i*3)+2);
+    expected_channelData[i] = wifi.rawToScaled(raww, wifi.getScaleFactorVoltsGanglion());
+  }
+  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
+
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, 0, "should set timestamp greater than 0", __LINE__);
+  test.assertEqual(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should set the sample number", __LINE__);
+  for (uint8_t i = 0; i < numChannels; i++) {
+    test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should compute data for ganglion", __LINE__);
+  }
+}
+
+void testSPIProcessPacketStreamJSONCyton() {
+  test.detail("JSON Cyton");
+
+  wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+
+  test.it("for cyton should add scaled data to sample struct");
+  uint8_t expected_sampleNumber = 23; // Jordan
+  uint8_t numChannels = NUM_CHANNELS_CYTON;
+  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
+  uint8_t *gainPacket = giveMeASPIPacketGainSet(numChannels);
+  wifi.setGains(gainPacket);
+  double expected_channelData[numChannels];
+  for (int i = 0; i < numChannels; i++) {
+    int32_t raww = wifi.int24To32(data + (i*3)+2);
+    expected_channelData[i] = wifi.rawToScaled(raww, wifi.getScaleFactorVoltsCyton(wifi.getGains()[i]));
+  }
+  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
+
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, 0, "should set timestamp greater than 0", __LINE__);
+  test.assertEqual(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should set the sample number", __LINE__);
+  for (uint8_t i = 0; i < numChannels; i++) {
+    test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should compute data for cyton", __LINE__);
+  }
+}
+
+void testSPIProcessPacketStreamJSONDaisy() {
+  test.detail("JSON Cyton Daisy");
+
+  wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+
+  test.it("for cyton daisy should add scaled data to sample struct");
+  uint8_t expected_sampleNumber = 23; // Jordan
+  uint8_t numChannels = NUM_CHANNELS_CYTON_DAISY;
+  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
+  uint8_t *data_daisy = giveMeASPIStreamPacket(expected_sampleNumber);
+  uint8_t *gainPacket = giveMeASPIPacketGainSet(numChannels);
+  wifi.setGains(gainPacket);
+  double expected_channelData[numChannels];
+  int32_t raws[MAX_CHANNELS_PER_PACKET];
+
+  wifi.extractRaws(data_daisy + 2, raws, MAX_CHANNELS_PER_PACKET);
+  for (int i = 0; i < MAX_CHANNELS_PER_PACKET; i++) {
+    expected_channelData[i] = wifi.rawToScaled(raws[i], wifi.getScaleFactorVoltsCyton(wifi.getGains()[i]));
+    expected_channelData[i+MAX_CHANNELS_PER_PACKET] = wifi.rawToScaled(raws[i], wifi.getScaleFactorVoltsCyton(wifi.getGains()[i+MAX_CHANNELS_PER_PACKET]));
+  }
+  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
+  wifi.spiProcessPacketStream(data_daisy, BYTES_PER_SPI_PACKET);
+
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, 0, "should set timestamp greater than 0", __LINE__);
+  test.assertEqual(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should set the sample number", __LINE__);
+  for (uint8_t i = 0; i < numChannels; i++) {
+    test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should compute data for cyton daisy", __LINE__);
+  }
+}
+
+void testSPIProcessPacketStreamRaw() {
+  test.detail("Raw");
+
+  uint8_t expected_sampleNumber = 23; // Jordan
+  uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
+
+  wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
+  test.it("should add 33 bytes to the output buffer");
+  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
+
+  test.assertEqualHex(wifi.curRawBuffer->data[0], 0xA0, "should set first byte to start byte", __LINE__);
+  test.assertEqualBuffer(wifi.curRawBuffer->data + 1, data + 1, BYTES_PER_SPI_PACKET-1, "should have the same 31 data bytes");
+  test.assertEqualHex(wifi.curRawBuffer->data[BYTES_PER_SPI_PACKET], 0xC0, "should set the stop byte", __LINE__);
+}
+
+void testSPIProcessPacketStream() {
+  test.describe("spiProcessPacketStream");
+  testSPIProcessPacketStreamRaw();
+  testSPIProcessPacketStreamJSONCyton();
+  testSPIProcessPacketStreamJSONGanglion();
+  testSPIProcessPacketStreamJSONDaisy();
+}
+
+void testSPIProcessPacketGain() {
+  test.detail("Gain");
+
+  wifi.reset();
+
+  uint8_t expected_numChannels = NUM_CHANNELS_CYTON_DAISY;
+  uint8_t *spiPacket = giveMeASPIPacketGainSet(expected_numChannels);
+
+  uint8_t expected_gains[expected_numChannels];
+  for(int i = 0; i < expected_numChannels; i++) {
+    expected_gains[i] = wifi.getGainCyton(spiPacket[i+2]);
+  }
+
+  test.it("should set for cyton daisy the gains and num of channels in system");
+  wifi.spiProcessPacketGain(spiPacket);
+
+  test.assertEqualBuffer(wifi.getGains(), expected_gains, expected_numChannels, "should have been able to extract the right gains", __LINE__);
+  test.assertEqual(wifi.getNumChannels(), expected_numChannels, "should have gotten the right number of channels", __LINE__);
+  test.assertEqual(wifi.getCurBoardTypeString(), "daisy", "should have gotten daisy for cur board type", __LINE__);
+}
+
+void testSPIProcessPacketResponse() {
+  test.detail("Client Response");
+
+  wifi.reset();
+
+  test.it("should add the message to outputString, and not change client waiting or fufilled and set cur client response");
+  uint8_t message[BYTES_PER_SPI_PACKET];
+  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+    message[i] = 0;
+  }
+  message[0] = WIFI_SPI_MSG_MULTI;
+  message[1] = 'a'; message[2] = 'j'; message[3] = ' ';
+  message[4] = 'p'; message[5] = 't'; message[6] = 'w';
+
+  wifi.clientWaitingForResponse = true;
+  wifi.clientWaitingForResponseFullfilled = false;
+
+  wifi.spiProcessPacketResponse(message);
+
+  test.assertEqual(wifi.outputString, String(message+1, 6), "should have been able to put message into string", __LINE__);
+  test.assertTrue(wifi.clientWaitingForResponse, "should have kept clientWaitingForResponse to true", __LINE__);
+  test.assertFalse(wifi.clientWaitingForResponseFullfilled, "should have kept clientWaitingForResponseFullfilled to false", __LINE__);
+  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)CLIENT_RESPONSE_NONE, "should leave output string to none");
+
+  test.it("should load the last message and set flags");
+  message[0] = WIFI_SPI_MSG_LAST;
+
+  wifi.spiProcessPacketResponse(message);
+
+  test.assertEqual(wifi.outputString, String(message+1, 6) + String(message+1, 6), "should have been able to put message into string", __LINE__);
+  test.assertFalse(wifi.clientWaitingForResponse, "should change clientWaitingForResponse to false", __LINE__);
+  test.assertTrue(wifi.clientWaitingForResponseFullfilled, "should change clientWaitingForResponseFullfilled to true", __LINE__);
+  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)CLIENT_RESPONSE_OUTPUT_STRING, "should set to output string for response type");
+
+  test.it("should default to a none client response and set flags to send ok response");
+
+  wifi.clientWaitingForResponse = true;
+  wifi.clientWaitingForResponseFullfilled = false;
+
+  message[0] = 0x23;
+
+  wifi.spiProcessPacketResponse(message);
+
+  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)CLIENT_RESPONSE_NONE, "should set output string to none");
+  test.assertFalse(wifi.clientWaitingForResponse, "should change clientWaitingForResponse to false", __LINE__);
+  test.assertTrue(wifi.clientWaitingForResponseFullfilled, "should change clientWaitingForResponseFullfilled to true", __LINE__);
+}
+
+void testSPIProcessPacketOthers() {
+  test.describe("testSPIProcessPacketOther");
+  testSPIProcessPacketGain();
+  testSPIProcessPacketResponse();
+}
+
+void testSPIProcessPacket() {
+  test.describe("spiProcessPacket");
+  testSPIProcessPacketStream();
+  testSPIProcessPacketOthers();
 }
 
 void testUtilisForRaw() {

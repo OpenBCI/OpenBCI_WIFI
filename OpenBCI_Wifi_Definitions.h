@@ -33,6 +33,7 @@
 #define NUM_CHANNELS_CYTON 8
 #define NUM_CHANNELS_CYTON_DAISY 16
 #define NUM_CHANNELS_GANGLION 4
+#define GANGLION_GAIN 51
 // #define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
@@ -109,5 +110,7 @@
 #define PROCESS_RAW_PASS_FIRST 0x04
 #define PROCESS_RAW_PASS_SWITCH 0x05
 #define PROCESS_RAW_PASS_MIDDLE 0x06
+
+#define STREAM_PACKET_BYTE 0xC0
 
 #endif
