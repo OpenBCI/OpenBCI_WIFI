@@ -66,6 +66,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
 
   curNumChannels = 0;
   head = 0;
+  lastSampleNumber = 0;
   tail = 0;
   tcpPort = 80;
   _counter = 0;
@@ -681,9 +682,9 @@ void OpenBCI_Wifi_Class::debugPrintLLNumber(unsigned long long n) {
 /**
  * Should extract raw int32_t array of length number of channels to get
  * @param arr         {uint8_t *} The array of 3byte signed 2's complement numbers
- * @param numChannels {uint8_t} The number of channels to pull out of `arr`
  * @param output      {int32_t *} An array of length `numChannels` to store
  *                    the extracted values
+ * @param numChannels {uint8_t} The number of channels to pull out of `arr`
  */
 void OpenBCI_Wifi_Class::extractRaws(uint8_t *arr, int32_t *output, uint8_t numChannels) {
   for (uint8_t i = 0; i < numChannels; i++) {
@@ -707,6 +708,14 @@ int32_t OpenBCI_Wifi_Class::int24To32(uint8_t *arr) {
     raw &= 0x00FFFFFF;
   }
   return (int32_t)raw;
+}
+
+/**
+* @description Test to see if a char follows the stream tail byte format
+* @author AJ Keller (@pushtheworldllc)
+*/
+boolean OpenBCI_Wifi_Class::isAStreamByte(uint8_t b) {
+  return (b >> 4) == 0xC;
 }
 
 String OpenBCI_Wifi_Class::perfectPrintByteHex(uint8_t b) {
@@ -978,21 +987,98 @@ void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
   sample->timestamp = 0;
 }
 
+void OpenBCI_Wifi_Class::spiProcessPacket(uint8_t *data) {
+  if (isAStreamByte(data[0])) {
+    spiProcessPacketStream(data);
+  } else {
+    spiProcessPacketResponse(data);
+    spiProcessPacketGain(data);
+  }
+}
+
 void OpenBCI_Wifi_Class::spiProcessPacketGain(uint8_t *data) {
-//   if (data[0] > 0) {
-//     if (data[0] == data[1]) {
-//       switch (data[0]) {
-//         case WIFI_SPI_MSG_GAINS:
-//           setGains(data);
-// #ifdef DEBUG
-//           Serial.println("gainSet");
-// #endif
-//           break;
-//         default:
-//           break;
-//       }
-//     }
-//   }
+  if (data[0] > 0) {
+    if (data[0] == data[1]) {
+      switch (data[0]) {
+        case WIFI_SPI_MSG_GAINS:
+          setGains(data);
+#ifdef DEBUG
+          Serial.println("gainSet");
+#endif
+          break;
+        default:
+          break;
+      }
+    }
+  }
+}
+
+void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
+  if (getNumChannels() > MAX_CHANNELS_PER_PACKET) {
+    // DO DAISY
+    if (lastSampleNumber != data[1]) {
+      lastSampleNumber = data[1];
+      // this is first packet of new sample
+      if (head >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
+        head = 0;
+      }
+      // this is the first packet, no offset
+      channelDataCompute(data, getGains(), sampleBuffer + head, 0, getNumChannels());
+    } else {
+      // this is not first packet of new sample
+      channelDataCompute(data, getGains(), sampleBuffer + head, MAX_CHANNELS_PER_PACKET, getNumChannels());
+      head++;
+    }
+  } else { // Cyton or Ganglion
+    if (head >= NUM_PACKETS_IN_RING_BUFFER_JSON) {
+      head = 0;
+    }
+    // Convert sample immidiate, store to buffer and get out!
+    channelDataCompute(data, getGains(), sampleBuffer + head, 0, getNumChannels());
+    head++;
+  }
+}
+
+void OpenBCI_Wifi_Class::spiProcessPacketStreamRaw(uint8_t *data) {
+  rawBufferProcessPacket(data, BYTES_PER_SPI_PACKET);
+}
+
+void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {
+  if (curOutputMode == OUTPUT_MODE_JSON) {
+    spiProcessPacketStreamJSON(data);
+  } else {
+    spiProcessPacketStreamRaw(data);
+  }
+}
+
+void OpenBCI_Wifi_Class::spiProcessPacketResponse(uint8_t *data) {
+  if (clientWaitingForResponse) {
+    String newString = (char *)data;
+    newString = newString.substring(1, BYTES_PER_SPI_PACKET);
+
+    switch (data[0]) {
+      case WIFI_SPI_MSG_MULTI:
+        // Serial.print("mulit:\n\toutputString:\n\t"); Serial.print(outputString); Serial.print("\n\tnewString\n\t"); Serial.println(newString);
+        outputString.concat(newString);
+        break;
+      case WIFI_SPI_MSG_LAST:
+        // Serial.println("last");
+        // Serial.print("last:\n\toutputString:\n\t"); Serial.print(outputString); Serial.print("\n\tnewString\n\t"); Serial.println(newString);
+        outputString.concat(newString);
+        clientWaitingForResponse = false;
+#ifdef DEBUG
+        Serial.println(outputString);
+#endif
+        curClientResponse = CLIENT_RESPONSE_OUTPUT_STRING;
+        clientWaitingForResponseFullfilled = true;
+        break;
+      default:
+        curClientResponse = CLIENT_RESPONSE_NONE;
+        clientWaitingForResponseFullfilled = true;
+        clientWaitingForResponse = false;
+        break;
+    }
+  }
 }
 
 /**

@@ -982,6 +982,14 @@ void testInt24To32() {
   test.assertEqual(wifi.int24To32(arr), -8281855, "converts a large negative number", __LINE__);
 }
 
+void testIsAStreamByte() {
+  test.describe("isAStreamByte");
+
+  test.assertTrue(wifi.isAStreamByte(0xC0), "should find a stream byte", __LINE__);
+  test.assertTrue(wifi.isAStreamByte(0xC5), "should find a stream byte", __LINE__);
+  test.assertFalse(wifi.isAStreamByte(0x05), "should not find a stream byte", __LINE__);
+}
+
 void testTransformRawsToScaledCyton() {
   test.describe("transformRawsToScaledCyton");
   uint8_t numChannels = NUM_CHANNELS_CYTON_DAISY;
@@ -1110,6 +1118,7 @@ void testUtilisForJSON() {
   testChannelDataCompute();
   testExtractRaws();
   testInt24To32();
+  testIsAStreamByte();
   testTransformRawsToScaledCyton();
   testTransformRawsToScaledGanglion();
   testSampleReset();
@@ -1579,6 +1588,8 @@ uint8_t *giveMeASPIPacketGainSet(uint8_t numChannels) {
 void testSPIProcessPacketStreamJSONGanglion() {
   test.detail("JSON Ganglion");
 
+  wifi.reset();
+
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
 
   test.it("for ganglion should add scaled data to sample struct");
@@ -1592,9 +1603,9 @@ void testSPIProcessPacketStreamJSONGanglion() {
     int32_t raww = wifi.int24To32(data + (i*3)+2);
     expected_channelData[i] = wifi.rawToScaled(raww, wifi.getScaleFactorVoltsGanglion());
   }
-  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
+  wifi.spiProcessPacketStreamJSON(data);
 
-  test.assertGreaterThan(wifi.sampleBuffer->timestamp, 0, "should set timestamp greater than 0", __LINE__);
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (unsigned long long)0, "should set timestamp greater than 0", __LINE__);
   test.assertEqual(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should set the sample number", __LINE__);
   for (uint8_t i = 0; i < numChannels; i++) {
     test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should compute data for ganglion", __LINE__);
@@ -1603,6 +1614,8 @@ void testSPIProcessPacketStreamJSONGanglion() {
 
 void testSPIProcessPacketStreamJSONCyton() {
   test.detail("JSON Cyton");
+
+  wifi.reset();
 
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
 
@@ -1617,9 +1630,9 @@ void testSPIProcessPacketStreamJSONCyton() {
     int32_t raww = wifi.int24To32(data + (i*3)+2);
     expected_channelData[i] = wifi.rawToScaled(raww, wifi.getScaleFactorVoltsCyton(wifi.getGains()[i]));
   }
-  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
+  wifi.spiProcessPacketStreamJSON(data);
 
-  test.assertGreaterThan(wifi.sampleBuffer->timestamp, 0, "should set timestamp greater than 0", __LINE__);
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (unsigned long long)0, "should set timestamp greater than 0", __LINE__);
   test.assertEqual(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should set the sample number", __LINE__);
   for (uint8_t i = 0; i < numChannels; i++) {
     test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should compute data for cyton", __LINE__);
@@ -1628,6 +1641,8 @@ void testSPIProcessPacketStreamJSONCyton() {
 
 void testSPIProcessPacketStreamJSONDaisy() {
   test.detail("JSON Cyton Daisy");
+
+  wifi.reset();
 
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
 
@@ -1646,10 +1661,10 @@ void testSPIProcessPacketStreamJSONDaisy() {
     expected_channelData[i] = wifi.rawToScaled(raws[i], wifi.getScaleFactorVoltsCyton(wifi.getGains()[i]));
     expected_channelData[i+MAX_CHANNELS_PER_PACKET] = wifi.rawToScaled(raws[i], wifi.getScaleFactorVoltsCyton(wifi.getGains()[i+MAX_CHANNELS_PER_PACKET]));
   }
-  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
-  wifi.spiProcessPacketStream(data_daisy, BYTES_PER_SPI_PACKET);
+  wifi.spiProcessPacketStreamJSON(data);
+  wifi.spiProcessPacketStreamJSON(data_daisy);
 
-  test.assertGreaterThan(wifi.sampleBuffer->timestamp, 0, "should set timestamp greater than 0", __LINE__);
+  test.assertGreaterThan(wifi.sampleBuffer->timestamp, (unsigned long long)0, "should set timestamp greater than 0", __LINE__);
   test.assertEqual(wifi.sampleBuffer->sampleNumber, expected_sampleNumber, "should set the sample number", __LINE__);
   for (uint8_t i = 0; i < numChannels; i++) {
     test.assertApproximately(wifi.sampleBuffer->channelData[i], expected_channelData[i], 1.0, "should compute data for cyton daisy", __LINE__);
@@ -1659,12 +1674,14 @@ void testSPIProcessPacketStreamJSONDaisy() {
 void testSPIProcessPacketStreamRaw() {
   test.detail("Raw");
 
+  wifi.reset();
+
   uint8_t expected_sampleNumber = 23; // Jordan
   uint8_t *data = giveMeASPIStreamPacket(expected_sampleNumber);
 
   wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
   test.it("should add 33 bytes to the output buffer");
-  wifi.spiProcessPacketStream(data, BYTES_PER_SPI_PACKET);
+  wifi.spiProcessPacketStreamRaw(data);
 
   test.assertEqualHex(wifi.curRawBuffer->data[0], 0xA0, "should set first byte to start byte", __LINE__);
   test.assertEqualBuffer(wifi.curRawBuffer->data + 1, data + 1, BYTES_PER_SPI_PACKET-1, "should have the same 31 data bytes");
@@ -1719,20 +1736,21 @@ void testSPIProcessPacketResponse() {
 
   wifi.spiProcessPacketResponse(message);
 
-  test.assertEqual(wifi.outputString, String(message+1, 6), "should have been able to put message into string", __LINE__);
+  String expected_output = (char *)message+1;
+  test.assertEqual(wifi.outputString, expected_output, "should have been able to put message into string", __LINE__);
   test.assertTrue(wifi.clientWaitingForResponse, "should have kept clientWaitingForResponse to true", __LINE__);
   test.assertFalse(wifi.clientWaitingForResponseFullfilled, "should have kept clientWaitingForResponseFullfilled to false", __LINE__);
-  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)CLIENT_RESPONSE_NONE, "should leave output string to none");
+  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)wifi.CLIENT_RESPONSE_NONE, "should leave output string to none");
 
   test.it("should load the last message and set flags");
   message[0] = WIFI_SPI_MSG_LAST;
 
   wifi.spiProcessPacketResponse(message);
-
-  test.assertEqual(wifi.outputString, String(message+1, 6) + String(message+1, 6), "should have been able to put message into string", __LINE__);
+  expected_output.concat((char *)message+1);
+  test.assertEqual(wifi.outputString, expected_output, "should have been able to put message into output string", __LINE__);
   test.assertFalse(wifi.clientWaitingForResponse, "should change clientWaitingForResponse to false", __LINE__);
   test.assertTrue(wifi.clientWaitingForResponseFullfilled, "should change clientWaitingForResponseFullfilled to true", __LINE__);
-  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)CLIENT_RESPONSE_OUTPUT_STRING, "should set to output string for response type");
+  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)wifi.CLIENT_RESPONSE_OUTPUT_STRING, "should set to output string for response type");
 
   test.it("should default to a none client response and set flags to send ok response");
 
@@ -1743,7 +1761,7 @@ void testSPIProcessPacketResponse() {
 
   wifi.spiProcessPacketResponse(message);
 
-  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)CLIENT_RESPONSE_NONE, "should set output string to none");
+  test.assertEqualHex((uint8_t)wifi.curClientResponse, (uint8_t)wifi.CLIENT_RESPONSE_NONE, "should set output string to none");
   test.assertFalse(wifi.clientWaitingForResponse, "should change clientWaitingForResponse to false", __LINE__);
   test.assertTrue(wifi.clientWaitingForResponseFullfilled, "should change clientWaitingForResponseFullfilled to true", __LINE__);
 }
@@ -1772,6 +1790,8 @@ void testUtilisForRaw() {
 }
 
 void testUtils() {
+  testSPIProcessPacketStream();
+  delay(50);
   testUtilisForJSON();
   testUtilisForRaw();
 }

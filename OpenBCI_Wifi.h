@@ -121,6 +121,7 @@ public:
   double getScaleFactorVoltsGanglion(void);
   unsigned long long getTime(void);
   int32_t int24To32(uint8_t *);
+  boolean isAStreamByte(uint8_t);
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
@@ -148,13 +149,18 @@ public:
   void setNTPOffset(unsigned long);
   void setOutputMode(OUTPUT_MODE);
   void setOutputProtocol(OUTPUT_PROTOCOL);
+  void spiProcessPacket(uint8_t *);
   void spiProcessPacketGain(uint8_t *);
+  void spiProcessPacketStream(uint8_t *);
+  void spiProcessPacketStreamJSON(uint8_t *);
+  void spiProcessPacketStreamRaw(uint8_t *);
+  void spiProcessPacketResponse(uint8_t *);
   void transformRawsToScaledCyton(int32_t *, uint8_t *, uint8_t, double *);
   void transformRawsToScaledGanglion(int32_t *, double *);
 
   // Variables
   boolean clientWaitingForResponse;
-  boolean clientWaitingForResponseFullfilled
+  boolean clientWaitingForResponseFullfilled;
   boolean tcpDelimiter;
 
   CLIENT_RESPONSE curClientResponse;
@@ -195,6 +201,7 @@ private:
 
   uint8_t _gains[MAX_CHANNELS];
   uint8_t curNumChannels;
+  uint8_t lastSampleNumber;
 
   unsigned long _counter;
   unsigned long _ntpOffset;
