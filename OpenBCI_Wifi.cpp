@@ -75,6 +75,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   tail = 0;
   tcpPort = 80;
   _counter = 0;
+  _latency = DEFAULT_LATENCY;
   _ntpOffset = 0;
 
   mqttBrokerAddress = "";
@@ -183,7 +184,7 @@ uint8_t OpenBCI_Wifi_Class::getHead(void) {
 }
 
 String OpenBCI_Wifi_Class::getInfoAll(void) {
-  const size_t argBufferSize = JSON_OBJECT_SIZE(6) + 115;
+  const size_t argBufferSize = JSON_OBJECT_SIZE(8) + 135;
   DynamicJsonBuffer jsonBuffer(argBufferSize);
   JsonObject& root = jsonBuffer.createObject();
   root.set(JSON_BOARD_CONNECTED, (bool)spiHasMaster());
@@ -193,6 +194,8 @@ String OpenBCI_Wifi_Class::getInfoAll(void) {
   root[JSON_MAC] = getMac();
   root[JSON_NAME] = getName();
   root[JSON_NUM_CHANNELS] = getNumChannels();
+  root[JSON_VERSION] = getVersion();
+  root[JSON_LATENCY] = String(getLatency());
   String output;
   root.printTo(output);
   return output;
@@ -216,7 +219,7 @@ String OpenBCI_Wifi_Class::getInfoBoard(void) {
 }
 
 String OpenBCI_Wifi_Class::getInfoMQTT(void) {
-  const size_t bufferSize = JSON_OBJECT_SIZE(4) + 225;
+  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 225;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
@@ -224,6 +227,7 @@ String OpenBCI_Wifi_Class::getInfoMQTT(void) {
   root[JSON_CONNECTED] = clientMQTT.connected() ? true : false;
   root[JSON_MQTT_USERNAME] = String(mqttUsername);
   root[JSON_TCP_OUTPUT] = getCurOutputModeString();
+  root[JSON_LATENCY] = String(getLatency());
   root.printTo(json);
   return json;
 }
@@ -238,6 +242,7 @@ String OpenBCI_Wifi_Class::getInfoTCP(void) {
   root[JSON_TCP_IP] = tcpAddress.toString();
   root[JSON_TCP_OUTPUT] = getCurOutputModeString();
   root[JSON_TCP_PORT] = tcpPort;
+  root[JSON_LATENCY] = String(getLatency());
   root.printTo(json);
   return json;
 }
@@ -315,14 +320,22 @@ String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numPa
 }
 
 /**
+ * Gets the latency
+ * @return  {unsigned long} - The latency of the system
+ */
+unsigned long OpenBCI_Wifi_Class::getLatency(void) {
+  return _latency;
+}
+
+/**
  * We want to max the size out to < 2000bytes per json chunk
  */
 uint8_t OpenBCI_Wifi_Class::getJSONMaxPackets(uint8_t numChannels) {
   switch (numChannels) {
     case NUM_CHANNELS_GANGLION:
-      return 8; // Size of
+      return 7; // Size of
     case NUM_CHANNELS_CYTON_DAISY:
-      return 3;
+      return 2;
     case NUM_CHANNELS_CYTON:
     default:
       return 5;
@@ -524,6 +537,10 @@ String OpenBCI_Wifi_Class::getStringLLNumber(unsigned long long n) {
   return getStringLLNumber(n, DEC);
 }
 
+String OpenBCI_Wifi_Class::getVersion(void) {
+  return SOFTWARE_VERSION;
+}
+
 void OpenBCI_Wifi_Class::gainReset(void) {
   for (uint8_t i = 0; i < MAX_CHANNELS; i++) {
     _gains[i] = 0;
@@ -608,6 +625,14 @@ void OpenBCI_Wifi_Class::setInfoTCP(String address, int port, boolean delimiter)
   tcpAddress.fromString(address);
   tcpDelimiter = delimiter;
   tcpPort = port;
+}
+
+/**
+ * Sets the latency
+ * @param latency {unsigned long} - The latency of the system
+ */
+void OpenBCI_Wifi_Class::setLatency(unsigned long latency) {
+  _latency = latency;
 }
 
 /**

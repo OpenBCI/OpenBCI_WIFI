@@ -9,6 +9,8 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
+#define SOFTWARE_VERSION "v1.0.0"
+
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
 #define ADC_24BIT_RES 8388607.0
@@ -34,6 +36,7 @@
 #define NUM_CHANNELS_CYTON_DAISY 16
 #define NUM_CHANNELS_GANGLION 4
 #define GANGLION_GAIN 51
+#define DEFAULT_LATENCY 10000
 // #define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
@@ -52,6 +55,7 @@
 #define CLIENT_RESPONSE_NO_BODY_IN_POST 402
 #define CLIENT_RESPONSE_MISSING_REQUIRED_CMD 403
 #define NANO_VOLTS_IN_VOLTS 1000000000.0
+#define MAX_JSON_BUFFER_SIZE 3000
 
 #define ADS_GAIN_1 1
 #define ADS_GAIN_2 2
@@ -101,6 +105,7 @@
 #define JSON_TCP_IP "ip"
 #define JSON_TCP_OUTPUT "output"
 #define JSON_TCP_PORT "port"
+#define JSON_VERSION "version"
 
 // Used to determine the result of processing a packet
 #define PASSTHROUGH_FAIL_TOO_MANY_CHARS 0x00

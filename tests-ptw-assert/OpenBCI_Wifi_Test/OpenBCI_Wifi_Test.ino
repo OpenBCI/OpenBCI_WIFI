@@ -166,7 +166,7 @@ void testGetInfoAll() {
   String actual_infoAll = wifi.getInfoAll();
 
   // Serial.println(actual_infoAll);
-  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 120 + 200;
+  const size_t bufferSize = JSON_OBJECT_SIZE(8) + 150 + 200;
   DynamicJsonBuffer jsonBuffer(bufferSize);
 
   JsonObject& root = jsonBuffer.parseObject(actual_infoAll);
@@ -183,6 +183,8 @@ void testGetInfoAll() {
   test.assertEqual(mac, wifi.getMac(), "should get the full mac address", __LINE__);
   String name = root["name"]; //
   test.assertEqual(name, wifi.getName(), "should get the full name", __LINE__);
+  String version = root["version"]; // v1.0.0
+  test.assertEqual(version, wifi.getVersion(), "should get the software version", __LINE__);
   uint8_t numChannels = root["num_channels"];
   test.assertEqual(numChannels, 0, "should get 0 channels", __LINE__);
 
@@ -211,6 +213,8 @@ void testGetInfoAll() {
   test.assertEqual(mac, wifi.getMac(), "should get the full mac address", __LINE__);
   name = root1.get<String>("name"); //
   test.assertEqual(name, wifi.getName(), "should get the full name", __LINE__);
+  version = root.get<String>("version"); // v1.0.0
+  test.assertEqual(version, wifi.getVersion(), "should get the software version", __LINE__);
   numChannels = root1.get<uint8_t>("num_channels");
   test.assertEqual(numChannels, expected_numChannels, "should get 8 channels", __LINE__);
 }
@@ -274,7 +278,7 @@ void testGetInfoMQTT() {
 
   String actual_infoMqtt = wifi.getInfoMQTT();
 
-  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 240;
+  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 270;
   DynamicJsonBuffer jsonBuffer(bufferSize);
 
   // const char* json = "{\"broker_address\":\"mock.getcloudbrain.com\",\"connected\":false,\"username\":\"/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573\",\"password\":\"\"}";
@@ -289,6 +293,8 @@ void testGetInfoMQTT() {
   test.assertEqual(username, "", "should be an empty username", __LINE__);
   String password = root["password"]; // ""
   test.assertEqual(password, "", "should be an empty password", __LINE__);
+  unsigned long latency = root["latency"];
+  test.assertEqual(latency, (unsigned long)DEFAULT_LATENCY, "should get the default latency", __LINE__);
 
   String expected_brokerAddress = "mock.getcloudbrain.com";
   String expected_username = "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573";
@@ -311,6 +317,8 @@ void testGetInfoMQTT() {
   test.assertEqual(username, expected_username, "should get username", __LINE__);
   password = root1.get<String>("password"); // ""
   test.assertEqual(password, expected_password, "should get password", __LINE__);
+  latency = root.get<unsigned long>("latency");
+  test.assertEqual(latency, (unsigned long)DEFAULT_LATENCY, "should get the default latency", __LINE__);
 }
 
 void testGetInfoTCP() {
@@ -319,10 +327,8 @@ void testGetInfoTCP() {
 
   String actual_infoTCP = wifi.getInfoTCP();
 
-  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 90;
+  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 100;
   DynamicJsonBuffer jsonBuffer(bufferSize);
-
-  // const char* json = "{\"connected\":false,\"delimiter\":true,\"ip\":\"255.255.255.255\",\"output\":\"json\",\"port\":12345}";
 
   JsonObject& root = jsonBuffer.parseObject(actual_infoTCP);
   IPAddress tempIPAddr;
@@ -337,6 +343,8 @@ void testGetInfoTCP() {
   test.assertEqual(output, "raw", "should be default to raw", __LINE__);
   int port = root["port"]; // 12345
   test.assertEqual(port, 80, "should be at port 80", __LINE__);
+  unsigned long latency = root["latency"];
+  test.assertEqual(latency, (unsigned long)DEFAULT_LATENCY, "should get the default latency", __LINE__);
 
   boolean expected_delimiter = true;
   String expected_ip = "192.168.0.1";
@@ -361,7 +369,8 @@ void testGetInfoTCP() {
   test.assertEqual(output, "json", "should be set to json output mode", __LINE__);
   port = root1["port"]; // 12345
   test.assertEqual(port, expected_port, "should be at port 12345", __LINE__);
-
+  latency = root.get<unsigned long>("latency");
+  test.assertEqual(latency, (unsigned long)DEFAULT_LATENCY, "should get the default latency", __LINE__);
 }
 
 void testGetInfo() {
@@ -384,12 +393,15 @@ void testGetJSONBufferSize() {
   test.detail("getJSONBufferSize");
 
   wifi.reset();
-  size_t intialSize = wifi.getJSONBufferSize();
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)1876, "should initialize json buffer size to zero", __LINE__);
-  wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
-  test.assertGreaterThan(wifi.getJSONBufferSize(), intialSize, "should set the json buffer greater than zero or inital", __LINE__);
-  test.assertLessThan(wifi.getJSONBufferSize(), (size_t)3000, "should be less than 3000bytes per chunk", __LINE__);
 
+  test.it("should set all channel possibilities and verify json max buffer is less than 3000 bytes");
+  test.assertLessThan(wifi.getJSONBufferSize(), (size_t)MAX_JSON_BUFFER_SIZE, "should initialize json buffer size with 0 channels", __LINE__);
+  wifi.setNumChannels(NUM_CHANNELS_CYTON);
+  test.assertLessThan(wifi.getJSONBufferSize(), (size_t)MAX_JSON_BUFFER_SIZE, "cyton json buffer size less than 3000 bytes per chunk", __LINE__);
+  wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
+  test.assertLessThan(wifi.getJSONBufferSize(), (size_t)MAX_JSON_BUFFER_SIZE, "cyton daisy json buffer size less than 3000 bytes per chunk", __LINE__);
+  wifi.setNumChannels(NUM_CHANNELS_GANGLION);
+  test.assertLessThan(wifi.getJSONBufferSize(), (size_t)MAX_JSON_BUFFER_SIZE, "ganglion json buffer size less than 3000 bytes per chunk", __LINE__);
 }
 
 void testGetJSONFromSamplesCytonMax() {
@@ -528,6 +540,7 @@ void testGetJSONFromSamplesCytonDaisy() {
 
   // Cyton Daisy with three packets
   wifi.reset(); // Clear everything
+  delay(5);
   wifi.setNumChannels(numChannels);
   numSamples = wifi.getJSONMaxPackets(numChannels);
   for (uint8_t i = 0; i < numSamples; i++) {
@@ -540,11 +553,16 @@ void testGetJSONFromSamplesCytonDaisy() {
     }
   }
   actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
-  // Serial.println(actual_serializedOutput);
-  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(16) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 1110 + 500;
+  Serial.println(actual_serializedOutput);
+  const size_t bufferSize1 = JSON_ARRAY_SIZE(2) + 2*JSON_ARRAY_SIZE(16) + JSON_OBJECT_SIZE(2) + 2*JSON_OBJECT_SIZE(3) + 750 + 250;
   DynamicJsonBuffer jsonBuffer1(bufferSize1);
 
   JsonObject& root1 = jsonBuffer1.parseObject(actual_serializedOutput.c_str());
+
+  if (!root1.success()) {
+    Serial.println("not able to parse json object");
+    Serial.println(actual_serializedOutput);
+  }
   JsonArray& chunk = root1["chunk"];
 
   for (uint8_t i = 0; i < numSamples; i++) {
@@ -656,9 +674,30 @@ void testGetJSONFromSamples() {
 void testGetJSONMaxPackets() {
   test.describe("getJSONMaxPackets");
 
-  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_GANGLION), 8, "should get the correct number for packets for ganglion", __LINE__);
-  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON), 5, "should get the correct number for packets for cyton daisy", __LINE__);
-  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON_DAISY), 3, "should get the correct number for packets for cyton", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_GANGLION), 7, "should get the correct number for packets for ganglion", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON), 5, "should get the correct number for packets for cyton", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON_DAISY), 2, "should get the correct number for packets for daisy cyton", __LINE__);
+}
+
+void testGetJSON() {
+  test.describe("getJSON");
+  testGetJSONAdditionalBytes();
+  testGetJSONBufferSize();
+  testGetJSONFromSamples();
+  testGetJSONMaxPackets();
+}
+
+void testGetLatency() {
+  test.describe("getLatency");
+
+  wifi.reset();
+  unsigned long expected_latency = DEFAULT_LATENCY;
+  test.assertEqual(wifi.getLatency(), expected_latency, "should get default latency", __LINE__);
+
+  expected_latency = 5000;
+  wifi.setLatency(expected_latency);
+
+  test.assertEqual(wifi.getLatency(), expected_latency, "should get new latency", __LINE__);
 }
 
 void testGetMacLastFourBytes() {
@@ -785,12 +824,9 @@ void testGetScaleFactorVoltsGanglion() {
 
 }
 
-void testGetJSON() {
-  test.describe("getJSON");
-  testGetJSONAdditionalBytes();
-  testGetJSONBufferSize();
-  testGetJSONFromSamples();
-  testGetJSONMaxPackets();
+void testGetVersion() {
+  test.describe("getVersion");
+  test.assertEqual(wifi.getVersion(), SOFTWARE_VERSION, "should get the correct version number", __LINE__);
 }
 
 void testGetters() {
@@ -801,6 +837,7 @@ void testGetters() {
   testGetGain();
   testGetInfo();
   testGetJSON();
+  testGetLatency();
   testGetMacLastFourBytes();
   testGetMac();
   testGetModelNumber();
@@ -820,6 +857,7 @@ void testReset() {
   test.describe("reset");
 
   wifi.setNTPOffset(123456);
+  wifi.setLatency(1234);
   wifi.setNumChannels(NUM_CHANNELS_CYTON_DAISY);
 
   wifi.reset();
@@ -839,10 +877,11 @@ void testReset() {
   test.assertFalse(wifi.tcpDelimiter, "should initialize tcpDelimiter to false", __LINE__);
   test.assertEqual(wifi.tcpPort, 80, "should initialize tcpPort to 80", __LINE__);
   test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
-  test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
   test.assertEqual(wifi.getJSONBufferSize(), (size_t)1876, "should reset jsonBufferSize to 0", __LINE__);
+  test.assertEqual(wifi.getLatency(), (unsigned long)DEFAULT_LATENCY, "should reset latency to default", __LINE__);
   test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
   test.assertEqual(wifi.getNumChannels(), 0, "should set numChannels to 0", __LINE__);
+  test.assertEqual(wifi.getTail(), 0, "should reset tail to 0", __LINE__);
 }
 
 void testSetGain() {
@@ -911,6 +950,17 @@ void testSetInfo() {
   testSetInfoTCP();
 }
 
+void testSetLatency() {
+  test.describe("setLatency");
+
+  wifi.reset();
+
+  unsigned long expected_latency = 5000;
+  wifi.setLatency(expected_latency);
+
+  test.assertEqual(wifi.getLatency(), expected_latency, "should set the new latency", __LINE__);
+}
+
 void testSetNumChannels() {
   test.describe("setNumChannels");
 
@@ -972,6 +1022,7 @@ void testSetters() {
   testReset();
   testSetGain();
   testSetInfo();
+  testSetLatency();
   testSetNumChannels();
   testSetNTPOffset();
   testSetOutputMode();

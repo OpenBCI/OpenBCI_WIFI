@@ -106,6 +106,7 @@ public:
   size_t getJSONBufferSize(void);
   String getJSONFromSamples(uint8_t, uint8_t);
   uint8_t getJSONMaxPackets(uint8_t);
+  unsigned long getLatency(void);
   String getMacLastFourBytes(void);
   String getMac(void);
   String getModelNumber(void);
@@ -118,10 +119,11 @@ public:
   String getStringLLNumber(long long, uint8_t);
   String getStringLLNumber(unsigned long long);
   String getStringLLNumber(unsigned long long, uint8_t);
-  uint8_t getTail(void);
   double getScaleFactorVoltsCyton(uint8_t);
   double getScaleFactorVoltsGanglion(void);
+  uint8_t getTail(void);
   unsigned long long getTime(void);
+  String getVersion();
   int32_t int24To32(uint8_t *);
   boolean isAStreamByte(uint8_t);
   boolean ntpActive(void);
@@ -151,6 +153,7 @@ public:
   void setGains(uint8_t *, uint8_t *);
   void setInfoMQTT(String, String, String);
   void setInfoTCP(String, int, boolean);
+  void setLatency(unsigned long);
   void setNumChannels(uint8_t);
   void setNTPOffset(unsigned long);
   void setOutputMode(OUTPUT_MODE);
@@ -216,6 +219,7 @@ private:
   uint8_t lastSampleNumber;
 
   unsigned long _counter;
+  unsigned long _latency;
   unsigned long _ntpOffset;
 
   volatile uint8_t head;
