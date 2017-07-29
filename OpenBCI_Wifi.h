@@ -31,6 +31,7 @@
 #include <ArduinoJson.h>
 #include <WebSocketsServer.h>
 #include <Hash.h>
+#include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
 
 class OpenBCI_Wifi_Class {
@@ -104,7 +105,7 @@ public:
   String getInfoTCP(void);
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
-  String getJSONFromSamples(uint8_t, uint8_t);
+  void getJSONFromSamples(JsonObject&, uint8_t, uint8_t);
   uint8_t getJSONMaxPackets(uint8_t);
   unsigned long getLatency(void);
   String getMacLastFourBytes(void);
@@ -159,6 +160,8 @@ public:
   void setOutputMode(OUTPUT_MODE);
   void setOutputProtocol(OUTPUT_PROTOCOL);
   boolean spiHasMaster(void);
+  void spiOnDataSent(void);
+  void spiOnStatusSent(void);
   void spiProcessPacket(uint8_t *);
   void spiProcessPacketGain(uint8_t *);
   void spiProcessPacketStream(uint8_t *);
@@ -171,6 +174,7 @@ public:
   // Variables
   boolean clientWaitingForResponse;
   boolean clientWaitingForResponseFullfilled;
+  boolean passthroughBufferLoaded;
   boolean tcpDelimiter;
 
   CLIENT_RESPONSE curClientResponse;
@@ -199,8 +203,10 @@ public:
   uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 
   unsigned long lastTimeWasPolled;
+  unsigned long timePassthroughBufferLoaded;
 
   WiFiClient clientTCP;
+  // WiFiClientPrint<> tcpBufferedPrinter;
   WiFiClient espClient;
   PubSubClient clientMQTT;
 

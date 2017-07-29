@@ -32,6 +32,7 @@ void OpenBCI_Wifi_Class::begin(void) {
 }
 
 void OpenBCI_Wifi_Class::initArduino(void) {
+  // tcpBufferedPrinter.setClient(clientTCP);
   clientMQTT.setClient(espClient);
 }
 
@@ -65,6 +66,7 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 void OpenBCI_Wifi_Class::initVariables(void) {
   clientWaitingForResponse = false;
   clientWaitingForResponseFullfilled = false;
+  passthroughBufferLoaded = false;
   tcpDelimiter = false;
 
   curNumChannels = 0;
@@ -74,6 +76,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   passthroughPosition = 0;
   tail = 0;
   tcpPort = 80;
+  timePassthroughBufferLoaded = 0;
   _counter = 0;
   _latency = DEFAULT_LATENCY;
   _ntpOffset = 0;
@@ -279,10 +282,10 @@ size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
  *                      exceed the `::getJSONMaxPackets()` for `numChannels`.
  * @return             {String} - Strinigified version of the "chunk"
  */
-String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numPackets) {
-  DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize + 500);
-
-  JsonObject& root = jsonSampleBuffer.createObject();
+void OpenBCI_Wifi_Class::getJSONFromSamples(JsonObject& root, uint8_t numChannels, uint8_t numPackets) {
+  // DynamicJsonBuffer jsonSampleBuffer(_jsonBufferSize + 500);
+  //
+  // JsonObject& root = jsonSampleBuffer.createObject();
   JsonArray& chunk = root.createNestedArray("chunk");
 
   root["count"] = _counter++;
@@ -314,9 +317,9 @@ String OpenBCI_Wifi_Class::getJSONFromSamples(uint8_t numChannels, uint8_t numPa
     tail++;
   }
 
-  String returnStr = "";
-  root.printTo(returnStr);
-  return returnStr;
+  // String returnStr = "";
+  // root.printTo(returnStr);
+  // return returnStr;
 }
 
 /**
@@ -853,6 +856,10 @@ uint8_t OpenBCI_Wifi_Class::passthroughCommands(String commands) {
     // Serial.printf("cmd %c | passthroughPosition: %d\n", commands.charAt(i), passthroughPosition);
     passthroughBuffer[passthroughPosition++] = commands.charAt(i);
   }
+  passthroughBufferLoaded = true;
+  clientWaitingForResponse = true;
+  timePassthroughBufferLoaded = millis();
+  SPISlave.setData(passthroughBuffer, BYTES_PER_SPI_PACKET);
   return PASSTHROUGH_PASS;
 }
 
@@ -1109,6 +1116,20 @@ void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
 boolean OpenBCI_Wifi_Class::spiHasMaster(void) {
   if (lastTimeWasPolled > 0) return millis() < lastTimeWasPolled + SPI_MASTER_POLL_TIMEOUT_MS;
   return false;
+}
+
+void OpenBCI_Wifi_Class::spiOnDataSent(void) {
+  lastTimeWasPolled = millis();
+  passthroughBufferClear();
+  SPISlave.setData(passthroughBuffer, BYTES_PER_SPI_PACKET);
+
+}
+
+void OpenBCI_Wifi_Class::spiOnStatusSent(void) {
+#ifdef DEBUG
+  Serial.println("Status Sent");
+#endif
+  SPISlave.setStatus(209);
 }
 
 
