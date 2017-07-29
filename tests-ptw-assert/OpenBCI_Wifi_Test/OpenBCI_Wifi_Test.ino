@@ -618,7 +618,8 @@ void testGetJSONFromSamplesGanglion() {
     }
   }
   actual_serializedOutput = wifi.getJSONFromSamples(numChannels, numSamples);
-  const size_t bufferSize1 = JSON_ARRAY_SIZE(3) + 3*JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 3*JSON_OBJECT_SIZE(3) + 650;
+  // Serial.println(actual_serializedOutput);
+  const size_t bufferSize1 = 8*JSON_ARRAY_SIZE(4) + JSON_ARRAY_SIZE(8) + JSON_OBJECT_SIZE(2) + 8*JSON_OBJECT_SIZE(3) + 1370;
   DynamicJsonBuffer jsonBuffer1(bufferSize1);
 
   JsonObject& root1 = jsonBuffer1.parseObject(actual_serializedOutput.c_str());
@@ -1277,6 +1278,7 @@ void testSampleReset() {
   }
   // Serial.printf("pre: wifi.sampleBuffer->sampleNumber %d\n", wifi.sampleBuffer->sampleNumber);
 
+  test.it("should be able to reset the given sample");
   wifi.sampleReset(wifi.sampleBuffer);
 
   test.assertEqual(wifi.sampleBuffer->timestamp, (uint64_t)0, String("should set timestamp to zero but got " + String((unsigned long)wifi.sampleBuffer->timestamp, DEC)).c_str());
@@ -1289,6 +1291,34 @@ void testSampleReset() {
     }
   }
   test.assertBoolean(isAllClear, true, "should have cleared all values to 0.0", __LINE__);
+
+  test.it("should reset all samples");
+  for (int i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
+    (wifi.sampleBuffer + i)->timestamp = i;
+    (wifi.sampleBuffer + i)->sampleNumber = i;
+    for (int i = 0; i < numChannels; i++) {
+      (wifi.sampleBuffer + i)->channelData[i] = 1099.0 + i;
+    }
+  }
+  wifi.sampleReset();
+
+  for (int i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
+    boolean isAllClear = true;
+    if ((wifi.sampleBuffer + i)->timestamp > 0) {
+      isAllClear = false;
+    }
+    if ((wifi.sampleBuffer + i)->sampleNumber > 0) {
+      isAllClear = false;
+    }
+    for (int j = 0; j < numChannels; j++) {
+      if ((wifi.sampleBuffer + i)->channelData[j] > 0.001 || (wifi.sampleBuffer + i)->channelData[j] < -0.001) {
+        isAllClear = false;
+      }
+    }
+    if (!isAllClear) {
+      test.assertBoolean(isAllClear, true, "should have cleared all values to 0(", __LINE__);
+    }
+  }
 }
 
 void testUtilisForJSON() {
@@ -1310,23 +1340,26 @@ void testPassthroughCommands() {
   String cmds = "pushtheworld";
   uint8_t expected_length = cmds.length();
 
-  test.assertEqual(wifi.passthroughCommands(""), PASSTHROUGH_FAIL_NO_CHARS, "should not pass through the commands", __LINE__);
-  test.assertEqual(wifi.passthroughPosition, 0, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+  test.assertEqualHex(wifi.passthroughCommands(""), PASSTHROUGH_FAIL_NO_CHARS, "should not pass through the commands", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, 0, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte", __LINE__);
 
-  test.assertEqual(wifi.passthroughCommands("aj keller is the best programmer in the world woo!!!!"), PASSTHROUGH_FAIL_NO_CHARS, "should not pass through the commands", __LINE__);
-  test.assertEqual(wifi.passthroughPosition, 0, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+  test.assertEqualHex(wifi.passthroughCommands("aj keller is the best programmer in the world woo!!!!"), PASSTHROUGH_FAIL_TOO_MANY_CHARS, "should not pass through the commands", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, 0, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte", __LINE__);
 
-  test.assertEqual(wifi.passthroughCommands(cmds), PASSTHROUGH_PASS, "should be able to pass through the commands", __LINE__);
-  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)cmds.c_str(), "should have put the cmds into the pass through buffer", __LINE__);
-  test.assertEqual(wifi.passthroughPosition, expected_length+1, "should have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+  test.assertEqualHex(wifi.passthroughCommands(cmds), PASSTHROUGH_PASS, "should be able to pass through the commands", __LINE__);
+  test.assertEqual((int)wifi.passthroughBuffer[0], (int)cmds.length(), "should have loaded 12 commands into the buffer", __LINE__);
+  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)cmds.c_str(), expected_length, "should have put the cmds into the pass through buffer", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, expected_length+1, "should have put the cmds into the pass through buffer offset by one for storage of num cmds byte", __LINE__);
 
-  test.assertEqual(wifi.passthroughCommands(cmds), PASSTHROUGH_PASS, "should be able to pass through the commands", __LINE__);
-  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)String(cmds + cmds).c_str(), "should have put the cmds into the pass through buffer", __LINE__);
-  test.assertEqual(wifi.passthroughPosition, expected_length*2+1, "should have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+  test.assertEqualHex(wifi.passthroughCommands(cmds), PASSTHROUGH_PASS, "should be able to pass through the commands", __LINE__);
+  test.assertEqual((int)wifi.passthroughBuffer[0], (int)(cmds.length() + cmds.length()), "should have loaded 24 commands into the buffer", __LINE__);
+  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)String(cmds + cmds).c_str(), expected_length*2, "should have put the cmds into the pass through buffer", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, expected_length*2+1, "should have put the cmds into the pass through buffer offset by one for storage of num cmds byte", __LINE__);
 
-  test.assertEqual(wifi.passthroughCommands(cmds), PASSTHROUGH_FAIL_QUEUE_FILLED, "should not be able to pass through the commands", __LINE__);
-  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)String(cmds + cmds).c_str(), "should not have put the cmds into the pass through buffer", __LINE__);
-  test.assertEqual(wifi.passthroughPosition, expected_length*2+1, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte");
+  test.assertEqualHex(wifi.passthroughCommands(cmds), PASSTHROUGH_FAIL_QUEUE_FILLED, "should not be able to pass through the commands", __LINE__);
+  test.assertEqual((int)wifi.passthroughBuffer[0], (int)(cmds.length() + cmds.length()), "should have loaded 24 commands into the buffer", __LINE__);
+  test.assertEqualBuffer((char *)wifi.passthroughBuffer+1, (char *)String(cmds + cmds).c_str(), expected_length*2, "should not have put the cmds into the pass through buffer", __LINE__);
+  test.assertEqual(wifi.passthroughPosition, expected_length*2+1, "should not have put the cmds into the pass through buffer offset by one for storage of num cmds byte", __LINE__);
 }
 
 void testPassthroughBufferClear() {
@@ -1348,9 +1381,10 @@ void testPassthroughBufferClear() {
   test.assertTrue(allZeros, "should have been able to set each val in passthrough buffer to 0", __LINE__);
 }
 
-void testPassthrough() {
+void testUtilsForPassthrough() {
   test.describe("testPassthrough");
-
+  testPassthroughCommands();
+  testPassthroughBufferClear();
 }
 
 void testRawBufferCleanUp() {
@@ -1725,7 +1759,8 @@ void testRawBufferReadyForNewPage() {
 void testRawBufferReset() {
   // Test the reset functions
   test.describe("rawBufferReset");
-
+  wifi.reset();
+  test.it("should reset the passed in raw buffer");
   wifi.curRawBuffer->flushing = true;
   wifi.curRawBuffer->gotAllPackets = true;
   wifi.curRawBuffer->positionWrite = 60;
@@ -1734,9 +1769,31 @@ void testRawBufferReset() {
   wifi.rawBufferReset(wifi.curRawBuffer);
 
   // Verify they got Reset
-  test.assertBoolean(wifi.curRawBuffer->flushing,false,"should set flushing to false");
-  test.assertBoolean(wifi.curRawBuffer->gotAllPackets,false,"should set got all packets to false");
-  test.assertEqual(wifi.curRawBuffer->positionWrite,0,"should set positionWrite to 0");
+  test.assertFalse(wifi.curRawBuffer->flushing, "should set flushing to false");
+  test.assertFalse(wifi.curRawBuffer->gotAllPackets, "should set got all packets to false");
+  test.assertEqual(wifi.curRawBuffer->positionWrite, 0, "should set positionWrite to 0");
+
+  test.it("should reset all the raw buffers");
+
+  wifi.rawBuffer->flushing = true;
+  wifi.rawBuffer->gotAllPackets = true;
+  wifi.rawBuffer->positionWrite = 60;
+  (wifi.rawBuffer + 1)->flushing = true;
+  (wifi.rawBuffer + 1)->gotAllPackets = true;
+  (wifi.rawBuffer + 1)->positionWrite = 60;
+
+  // Reset the flags
+  wifi.rawBufferReset();
+
+  // Verify they got Reset
+  test.assertFalse(wifi.rawBuffer->flushing, "should set flushing to false");
+  test.assertFalse(wifi.rawBuffer->gotAllPackets, "should set got all packets to false");
+  test.assertEqual(wifi.rawBuffer->positionWrite, 0, "should set positionWrite to 0");
+  test.assertFalse((wifi.rawBuffer + 1)->flushing, "should set flushing to false");
+  test.assertFalse((wifi.rawBuffer + 1)->gotAllPackets, "should set got all packets to false");
+  test.assertEqual((wifi.rawBuffer + 1)->positionWrite, 0, "should set positionWrite to 0");
+
+
 }
 
 void testRawBufferSwitchToOtherBuffer() {
@@ -2036,6 +2093,7 @@ void testUtilisForSPI() {
 
 void testUtils() {
   testUtilisForJSON();
+  testUtilsForPassthrough();
   testUtilisForRaw();
   testUtilisForSPI();
 }

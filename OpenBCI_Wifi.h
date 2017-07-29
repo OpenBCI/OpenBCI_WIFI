@@ -139,10 +139,12 @@ public:
   byte rawBufferProcessPacket(uint8_t *);
   void rawBufferProcessSingle(RawBuffer *);
   boolean rawBufferReadyForNewPage(RawBuffer *);
+  void rawBufferReset(void);
   void rawBufferReset(RawBuffer *);
   boolean rawBufferSwitchToOtherBuffer(void);
   double rawToScaled(int32_t, double);
   void reset(void);
+  void sampleReset(void);
   void sampleReset(Sample *);
   void sampleReset(Sample *, uint8_t);
   void setGains(uint8_t *);

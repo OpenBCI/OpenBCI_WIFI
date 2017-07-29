@@ -41,6 +41,7 @@ void OpenBCI_Wifi_Class::initArduino(void) {
 */
 void OpenBCI_Wifi_Class::initArrays(void) {
   gainReset();
+  rawBufferReset();
 }
 
 /**
@@ -62,6 +63,8 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 * @author AJ Keller (@pushtheworldllc)
 */
 void OpenBCI_Wifi_Class::initVariables(void) {
+  clientWaitingForResponse = false;
+  clientWaitingForResponseFullfilled = false;
   tcpDelimiter = false;
 
   curNumChannels = 0;
@@ -77,6 +80,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   mqttBrokerAddress = "";
   mqttUsername = "";
   mqttPassword = "";
+  outputString = "";
 
   tcpAddress = IPAddress();
 
@@ -811,19 +815,19 @@ uint8_t OpenBCI_Wifi_Class::passthroughCommands(String commands) {
   } else if (numCmds == 0) {
     return PASSTHROUGH_FAIL_NO_CHARS;
   }
+  // Serial.printf("got %d commands | passthroughPosition: %d\n", numCmds, passthroughPosition);
   if (passthroughPosition > 0) {
     if (numCmds > BYTES_PER_SPI_PACKET - passthroughPosition-1) { // -1 because of numCmds as first byte
       return PASSTHROUGH_FAIL_QUEUE_FILLED;
     }
     passthroughBuffer[0] += numCmds;
   } else {
-    passthroughBuffer[0] = numCmds;
+    passthroughBuffer[passthroughPosition++] = numCmds;
   }
-
-  for (int i = 0; i < numCmds + 1; i++) {
+  for (int i = 0; i < numCmds; i++) {
+    // Serial.printf("cmd %c | passthroughPosition: %d\n", commands.charAt(i), passthroughPosition);
     passthroughBuffer[passthroughPosition++] = commands.charAt(i);
   }
-
   return PASSTHROUGH_PASS;
 }
 
@@ -1025,6 +1029,15 @@ boolean OpenBCI_Wifi_Class::rawBufferSwitchToOtherBuffer(void) {
 }
 
 /**
+ * Resets all the raw buffers
+ */
+void OpenBCI_Wifi_Class::rawBufferReset(void) {
+  for (uint8_t i = 0; i < NUM_RAW_BUFFERS; i++) {
+    rawBufferReset(rawBuffer + i);
+  }
+}
+
+/**
  * Resets the raw buffer
  * @param buf      {RawBuffer} - the buffer struct
  */
@@ -1032,6 +1045,15 @@ void OpenBCI_Wifi_Class::rawBufferReset(RawBuffer *buf) {
   buf->flushing = false;
   buf->gotAllPackets = false;
   buf->positionWrite = 0;
+}
+
+/**
+ * Resets all the samples assuming 16 channels
+ */
+void OpenBCI_Wifi_Class::sampleReset(void) {
+  for (int i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
+    sampleReset(sampleBuffer + i);
+  }
 }
 
 /**
@@ -1080,9 +1102,6 @@ void OpenBCI_Wifi_Class::spiProcessPacketGain(uint8_t *data) {
       switch (data[0]) {
         case WIFI_SPI_MSG_GAINS:
           setGains(data);
-#ifdef DEBUG
-          Serial.println("gainSet");
-#endif
           break;
         default:
           break;
