@@ -1,14 +1,4 @@
-// #include <ESP8266HTTPUpdateServer.h>
-// #include <ESP8266WiFi.h>
-// #include <DNSServer.h>
-// #include <ESP8266WebServer.h>
-// #include <ESP8266SSDP.h>
-// #include <WiFiManager.h>
-// #include <ESP8266mDNS.h>
-// #include <WiFiUdp.h>
-// #include <ArduinoOTA.h>
-// #include <PubSubClient.h>
-// #include <ArduinoJson.h>
+
 #include "OpenBCI_Wifi.h"
 #include "PTW-Arduino-Assert.h"
 
@@ -275,8 +265,8 @@ void testGetInfoMQTT() {
   test.detail("MQTT");
   wifi.reset();
 
-
-  String actual_infoMqtt = wifi.getInfoMQTT();
+  boolean expected_connected = false;
+  String actual_infoMqtt = wifi.getInfoMQTT(expected_connected);
 
   const size_t bufferSize = JSON_OBJECT_SIZE(6) + 270;
   DynamicJsonBuffer jsonBuffer(bufferSize);
@@ -286,7 +276,7 @@ void testGetInfoMQTT() {
   String brokerAddress = root["broker_address"]; // "mock.getcloudbrain.com"
   test.assertEqual(brokerAddress, "", "should be an empty string");
   boolean connected = root["connected"]; // false
-  test.assertBoolean(connected, false, "should not be connected");
+  test.assertBoolean(connected, expected_connected, "should not be connected");
   String output = root["output"]; // "raw"
   test.assertEqual(output, "raw", "should be default to raw", __LINE__);
   String username = root["username"]; // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
@@ -302,7 +292,8 @@ void testGetInfoMQTT() {
 
   wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password);
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
-  actual_infoMqtt = wifi.getInfoMQTT();
+  expected_connected = true;
+  actual_infoMqtt = wifi.getInfoMQTT(expected_connected);
 
   DynamicJsonBuffer jsonBuffer1(bufferSize);
 
@@ -310,7 +301,7 @@ void testGetInfoMQTT() {
   brokerAddress = root1.get<String>("broker_address"); // "mock.getcloudbrain.com"
   test.assertEqual(brokerAddress, expected_brokerAddress, "should get brokerAddress");
   connected = root1.get<boolean>("connected"); // false
-  test.assertBoolean(connected, false, "should not be connected");
+  test.assertBoolean(connected, expected_connected, "should be connected");
   output = root1.get<String>("output"); // "json"
   test.assertEqual(output, "json", "should switch to json", __LINE__);
   username = root1.get<String>("username"); // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
@@ -324,8 +315,9 @@ void testGetInfoMQTT() {
 void testGetInfoTCP() {
   test.detail("TCP");
   wifi.reset();
+  boolean expected_connected = false;
 
-  String actual_infoTCP = wifi.getInfoTCP();
+  String actual_infoTCP = wifi.getInfoTCP(expected_connected);
 
   const size_t bufferSize = JSON_OBJECT_SIZE(6) + 100;
   DynamicJsonBuffer jsonBuffer(bufferSize);
@@ -334,7 +326,7 @@ void testGetInfoTCP() {
   IPAddress tempIPAddr;
 
   boolean connected = root["connected"]; // false
-  test.assertBoolean(connected, false, "should not be connected");
+  test.assertBoolean(connected, expected_connected, "should not be connected");
   boolean delimiter = root["delimiter"]; // false
   test.assertBoolean(delimiter, false, "should not be using delimiter");
   String ip = root["ip"]; // "255.255.255.255"
@@ -349,18 +341,18 @@ void testGetInfoTCP() {
   boolean expected_delimiter = true;
   String expected_ip = "192.168.0.1";
   int expected_port = 12345;
-
+  expected_connected = true;
   wifi.setInfoTCP(expected_ip, expected_port, expected_delimiter);
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
 
-  actual_infoTCP = wifi.getInfoTCP();
+  actual_infoTCP = wifi.getInfoTCP(expected_connected);
 
   DynamicJsonBuffer jsonBuffer1(bufferSize);
 
   JsonObject& root1 = jsonBuffer.parseObject(actual_infoTCP);
 
   connected = root1.get<boolean>("connected"); // false
-  test.assertBoolean(connected, false, "should not be connected");
+  test.assertBoolean(connected, expected_connected, "should not be connected");
   delimiter = root1.get<boolean>("delimiter"); // true
   test.assertBoolean(delimiter, true, "should be using delimiter");
   ip = root1.get<String>("ip"); // "255.255.255.255"
@@ -927,7 +919,7 @@ void testSetInfoMQTT() {
   String expected_password = "the password is not password";
 
   wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password);
-
+  test.assertEqual((int)wifi.curOutputProtocol, (int)wifi.OUTPUT_PROTOCOL_MQTT, "should have set the output protocol to MQTT", __LINE__);
   test.assertEqual(wifi.mqttBrokerAddress, expected_brokerAddress, "should set mqttBrokerAddress", __LINE__);
   test.assertEqual(wifi.mqttUsername, expected_username, "should be able to set mqttUsername", __LINE__);
   test.assertEqual(wifi.mqttPassword, expected_password, "should be able to set mqttPassword", __LINE__);
@@ -942,7 +934,7 @@ void testSetInfoTCP() {
   int expected_port = 99;
 
   wifi.setInfoTCP(addr, expected_port, expected_delimiter);
-
+  test.assertEqual((int)wifi.curOutputProtocol, (int)wifi.OUTPUT_PROTOCOL_TCP, "should have set the output protocol to TCP", __LINE__);
   test.assertEqual(wifi.tcpAddress.toString(), expected_address.toString(), "should have set tcpAddress", __LINE__);
   test.assertTrue(wifi.tcpDelimiter, "should have set tcpDelimiter", __LINE__);
   test.assertEqual(wifi.tcpPort, expected_port, "should be set tcpPort", __LINE__);
@@ -1962,13 +1954,6 @@ void testSPIOnDataSent() {
   test.assertEqual(wifi.passthroughPosition, (uint8_t)0, "should have reset the passthrough buffer", __LINE__);
 }
 
-void testSPIOnStatusSent() {
-  test.describe("spiOnStatusSent");
-  wifi.reset();
-
-  wifi.spiOnStatusSent();
-}
-
 void testSPIProcessPacketStreamJSONGanglion() {
   test.detail("JSON Ganglion");
 
@@ -2175,7 +2160,6 @@ void testSPIProcessPacket() {
 void testUtilisForSPI() {
   testSpiHasMaster();
   testSPIOnDataSent();
-  testSPIOnStatusSent();
   testSPIProcessPacket();
 }
 

@@ -101,8 +101,8 @@ public:
   uint8_t getHead(void);
   String getInfoAll(void);
   String getInfoBoard(void);
-  String getInfoMQTT(void);
-  String getInfoTCP(void);
+  String getInfoMQTT(boolean);
+  String getInfoTCP(boolean);
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
   void getJSONFromSamples(JsonObject&, uint8_t, uint8_t);
@@ -127,20 +127,19 @@ public:
   String getVersion();
   int32_t int24To32(uint8_t *);
   boolean isAStreamByte(uint8_t);
+  void loop(void);
+  boolean mqttConnect(void);
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
+  void ntpStart(void);
   void passthroughBufferClear(void);
   uint8_t passthroughCommands(String);
   String perfectPrintByteHex(uint8_t);
   boolean rawBufferAddStreamPacket(RawBuffer *, uint8_t *);
   void rawBufferClean(RawBuffer *);
   boolean rawBufferHasData(RawBuffer *);
-  void rawBufferFlush(RawBuffer *);
-  void rawBufferFlushBuffers(void);
-  boolean rawBufferLoadingMultiPacket(RawBuffer *);
   byte rawBufferProcessPacket(uint8_t *);
-  void rawBufferProcessSingle(RawBuffer *);
   boolean rawBufferReadyForNewPage(RawBuffer *);
   void rawBufferReset(void);
   void rawBufferReset(RawBuffer *);
@@ -161,7 +160,6 @@ public:
   void setOutputProtocol(OUTPUT_PROTOCOL);
   boolean spiHasMaster(void);
   void spiOnDataSent(void);
-  void spiOnStatusSent(void);
   void spiProcessPacket(uint8_t *);
   void spiProcessPacketGain(uint8_t *);
   void spiProcessPacketStream(uint8_t *);
@@ -178,9 +176,6 @@ public:
   boolean tcpDelimiter;
 
   CLIENT_RESPONSE curClientResponse;
-
-  ESP8266HTTPUpdateServer httpUpdater;
-  ESP8266WebServer server(int port = 80);
 
   IPAddress tcpAddress;
 
@@ -204,11 +199,6 @@ public:
 
   unsigned long lastTimeWasPolled;
   unsigned long timePassthroughBufferLoaded;
-
-  WiFiClient clientTCP;
-  // WiFiClientPrint<> tcpBufferedPrinter;
-  WiFiClient espClient;
-  PubSubClient clientMQTT;
 
 private:
   // Functions

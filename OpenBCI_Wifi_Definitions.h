@@ -35,6 +35,8 @@
 #define NUM_CHANNELS_CYTON 8
 #define NUM_CHANNELS_CYTON_DAISY 16
 #define NUM_CHANNELS_GANGLION 4
+#define LED_PROG 0
+#define LED_NOTIFY 5
 #define GANGLION_GAIN 51
 #define DEFAULT_LATENCY 10000
 // #define bit(b) (1UL << (b)) // Taken directly from Arduino.h

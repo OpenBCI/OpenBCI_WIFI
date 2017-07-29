@@ -32,8 +32,9 @@ void OpenBCI_Wifi_Class::begin(void) {
 }
 
 void OpenBCI_Wifi_Class::initArduino(void) {
-  // tcpBufferedPrinter.setClient(clientTCP);
-  clientMQTT.setClient(espClient);
+  pinMode(LED_NOTIFY, OUTPUT);
+  pinMode(LED_PROG, OUTPUT);
+  digitalWrite(LED_PROG, LOW);
 }
 
 /**
@@ -221,13 +222,13 @@ String OpenBCI_Wifi_Class::getInfoBoard(void) {
   return output;
 }
 
-String OpenBCI_Wifi_Class::getInfoMQTT(void) {
+String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
   const size_t bufferSize = JSON_OBJECT_SIZE(5) + 225;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
   root[JSON_MQTT_BROKER_ADDR] = String(mqttBrokerAddress);
-  root[JSON_CONNECTED] = clientMQTT.connected() ? true : false;
+  root[JSON_CONNECTED] = clientMQTTConnected ? true : false;
   root[JSON_MQTT_USERNAME] = String(mqttUsername);
   root[JSON_TCP_OUTPUT] = getCurOutputModeString();
   root[JSON_LATENCY] = String(getLatency());
@@ -235,12 +236,12 @@ String OpenBCI_Wifi_Class::getInfoMQTT(void) {
   return json;
 }
 
-String OpenBCI_Wifi_Class::getInfoTCP(void) {
+String OpenBCI_Wifi_Class::getInfoTCP(boolean clientTCPConnected) {
   const size_t bufferSize = JSON_OBJECT_SIZE(5) + 100;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
-  root[JSON_CONNECTED] = clientTCP.connected() ? true : false;
+  root[JSON_CONNECTED] = clientTCPConnected ? true : false;
   root[JSON_TCP_DELIMITER] = tcpDelimiter ? true : false;
   root[JSON_TCP_IP] = tcpAddress.toString();
   root[JSON_TCP_OUTPUT] = getCurOutputModeString();
@@ -616,6 +617,7 @@ void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, Stri
   mqttBrokerAddress = brokerAddress;
   mqttUsername = username;
   mqttPassword = password;
+  setOutputProtocol(OUTPUT_PROTOCOL_MQTT);
 }
 
 /**
@@ -628,6 +630,7 @@ void OpenBCI_Wifi_Class::setInfoTCP(String address, int port, boolean delimiter)
   tcpAddress.fromString(address);
   tcpDelimiter = delimiter;
   tcpPort = port;
+  setOutputProtocol(OUTPUT_PROTOCOL_TCP);
 }
 
 /**
@@ -797,12 +800,26 @@ String OpenBCI_Wifi_Class::perfectPrintByteHex(uint8_t b) {
   }
 }
 
+void OpenBCI_Wifi_Class::loop(void) {
+
+}
+
 /**
  * Check to see if SNTP is active
  * @type {Number}
  */
 boolean OpenBCI_Wifi_Class::ntpActive() {
   return time(nullptr) > 1000;
+}
+
+/**
+ * Use this to start the sntp time sync
+ */
+void OpenBCI_Wifi_Class::ntpStart(void) {
+#ifdef DEBUG
+  Serial.println("Setting time using SNTP");
+#endif
+  configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 }
 
 /**
@@ -916,39 +933,6 @@ void OpenBCI_Wifi_Class::rawBufferClean(RawBuffer *buf) {
 }
 
 /**
-* @description Called when all the packets have been recieved to flush the
-*       contents of the buffer to the currently selected protocol pipeline.
-* @param `buf` {RawBuffer *} - The buffer to flush.
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::rawBufferFlush(RawBuffer *buf) {
-  // Lock this buffer down!
-  buf->flushing = true;
-  if (curOutputProtocol == OUTPUT_PROTOCOL_TCP) {
-    clientTCP.write(buf->data, buf->positionWrite);
-    if (tcpDelimiter) {
-      clientTCP.write("\r\n");
-    }
-  } else if (curOutputProtocol == OUTPUT_PROTOCOL_MQTT) {
-    clientMQTT.publish("openbci",(const char*)buf->data);
-  } else {
-    Serial.println((const char*)buf->data);
-  }
-  buf->flushing = false;
-}
-
-/**
-* @description Used to flush any raw output buffer that is ready to be flushed to
-*  the serial port.
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::rawBufferFlushBuffers(void) {
-  for (int i = 0; i < NUM_RAW_BUFFERS; i++) {
-    rawBufferProcessSingle(rawBuffer + i);
-  }
-}
-
-/**
 * @description Used to determine if there is data in the radio buffer. Most
 *  likely this data needs to be cleared.
 * @param `buf` {RawBuffer *} - The buffer to examine.
@@ -1007,22 +991,6 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data) {
     }
   }
 }
-
-/**
-* @description Should only flush a buffer if it has data in it and has gotten all
-*  of it's packets. This function will be called every loop so it's important to
-*  make sure we don't flush a buffer unless it's really ready!
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::rawBufferProcessSingle(RawBuffer *buf) {
-  if (rawBufferHasData(buf) && buf->gotAllPackets) {
-    // Flush radio buffer to the driver
-    rawBufferFlush(buf);
-    // Reset the radio buffer flags
-    rawBufferReset(buf);
-  }
-}
-
 
 /**
 * @description Used to determing if the output buffer `buf` is in a locked state.
@@ -1121,17 +1089,7 @@ boolean OpenBCI_Wifi_Class::spiHasMaster(void) {
 void OpenBCI_Wifi_Class::spiOnDataSent(void) {
   lastTimeWasPolled = millis();
   passthroughBufferClear();
-  SPISlave.setData(passthroughBuffer, BYTES_PER_SPI_PACKET);
-
 }
-
-void OpenBCI_Wifi_Class::spiOnStatusSent(void) {
-#ifdef DEBUG
-  Serial.println("Status Sent");
-#endif
-  SPISlave.setStatus(209);
-}
-
 
 void OpenBCI_Wifi_Class::spiProcessPacket(uint8_t *data) {
   if (isAStreamByte(data[0])) {
