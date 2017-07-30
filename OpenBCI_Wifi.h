@@ -29,7 +29,6 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <WebSocketsServer.h>
 #include <Hash.h>
 #include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
@@ -106,6 +105,7 @@ public:
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
   void getJSONFromSamples(JsonObject&, uint8_t, uint8_t);
+  uint8_t getJSONMaxPackets(void);
   uint8_t getJSONMaxPackets(uint8_t);
   unsigned long getLatency(void);
   String getMacLastFourBytes(void);
@@ -194,11 +194,15 @@ public:
   String mqttPassword;
   String outputString;
 
+  uint8_t lastSampleNumber;
   uint8_t passthroughPosition;
   uint8_t passthroughBuffer[BYTES_PER_SPI_PACKET];
 
   unsigned long lastTimeWasPolled;
   unsigned long timePassthroughBufferLoaded;
+
+  volatile uint8_t head;
+  volatile uint8_t tail;
 
 private:
   // Functions
@@ -212,14 +216,10 @@ private:
 
   uint8_t _gains[MAX_CHANNELS];
   uint8_t curNumChannels;
-  uint8_t lastSampleNumber;
 
   unsigned long _counter;
   unsigned long _latency;
   unsigned long _ntpOffset;
-
-  volatile uint8_t head;
-  volatile uint8_t tail;
 
 
 };

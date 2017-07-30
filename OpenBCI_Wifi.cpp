@@ -346,6 +346,10 @@ uint8_t OpenBCI_Wifi_Class::getJSONMaxPackets(uint8_t numChannels) {
   }
 }
 
+uint8_t OpenBCI_Wifi_Class::getJSONMaxPackets() {
+  return getJSONMaxPackets(getNumChannels());
+}
+
 /**
  * Used to get the last two bytes of the max addresses
  * @return {String} The last two bytes, will always be four chars.
