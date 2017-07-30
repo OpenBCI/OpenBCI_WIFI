@@ -1,4 +1,5 @@
-
+#define ARDUINOJSON_USE_LONG_LONG 1
+#define ARDUINOJSON_USE_DOUBLE 1
 #include "OpenBCI_Wifi.h"
 #include "PTW-Arduino-Assert.h"
 
@@ -316,13 +317,13 @@ void testGetInfoTCP() {
   test.detail("TCP");
   wifi.reset();
   boolean expected_connected = false;
+  // String actual_infoTCP = "";
+  JsonObject& root = wifi.getInfoTCP(expected_connected);
 
-  String actual_infoTCP = wifi.getInfoTCP(expected_connected);
-
-  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 100;
-  DynamicJsonBuffer jsonBuffer(bufferSize);
-
-  JsonObject& root = jsonBuffer.parseObject(actual_infoTCP);
+  // const size_t bufferSize = JSON_OBJECT_SIZE(6) + 100;
+  // DynamicJsonBuffer jsonBuffer(bufferSize);
+//
+  // JsonObject& root = jsonBuffer.parseObject(actual_infoTCP);
   IPAddress tempIPAddr;
 
   boolean connected = root["connected"]; // false
@@ -345,11 +346,11 @@ void testGetInfoTCP() {
   wifi.setInfoTCP(expected_ip, expected_port, expected_delimiter);
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
 
-  actual_infoTCP = wifi.getInfoTCP(expected_connected);
+  // actual_infoTCP =
 
-  DynamicJsonBuffer jsonBuffer1(bufferSize);
+  // DynamicJsonBuffer jsonBuffer1(bufferSize);
 
-  JsonObject& root1 = jsonBuffer.parseObject(actual_infoTCP);
+  JsonObject& root1 = wifi.getInfoTCP(expected_connected);
 
   connected = root1.get<boolean>("connected"); // false
   test.assertBoolean(connected, expected_connected, "should not be connected");

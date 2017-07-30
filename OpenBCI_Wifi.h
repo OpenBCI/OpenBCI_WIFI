@@ -8,29 +8,17 @@
 *
 * Author: Push The World LLC (AJ Keller)
 */
+#define ARDUINOJSON_USE_LONG_LONG 1
+#define ARDUINOJSON_USE_DOUBLE 1
 
 
 #ifndef __OpenBCI_Wifi__
 #define __OpenBCI_Wifi__
-#define ARDUINOJSON_USE_LONG_LONG 1
-#define ARDUINOJSON_USE_DOUBLE 1
-#define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include <Arduino.h>
 #include <time.h>
 #include <ESP8266WiFi.h>
-#include <DNSServer.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266HTTPUpdateServer.h>
-#include <ESP8266SSDP.h>
-#include <WiFiManager.h>
 #include "SPISlave.h"
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
-#include <ArduinoOTA.h>
-#include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <Hash.h>
-#include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
 
 class OpenBCI_Wifi_Class {

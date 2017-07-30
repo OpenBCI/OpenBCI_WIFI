@@ -4,9 +4,6 @@
 * Purpose: This is the header file for the OpenBCI wifi chip.
 * Author: Push The World LLC (AJ Keller)
 */
-#define ARDUINOJSON_USE_LONG_LONG 1
-#define ARDUINOJSON_USE_DOUBLE 1
-
 #include "OpenBCI_Wifi.h"
 
 OpenBCI_Wifi_Class OpenBCI_Wifi;
@@ -237,7 +234,7 @@ String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
 }
 
 String OpenBCI_Wifi_Class::getInfoTCP(boolean clientTCPConnected) {
-  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 100;
+  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
@@ -246,7 +243,7 @@ String OpenBCI_Wifi_Class::getInfoTCP(boolean clientTCPConnected) {
   root[JSON_TCP_IP] = tcpAddress.toString();
   root[JSON_TCP_OUTPUT] = getCurOutputModeString();
   root[JSON_TCP_PORT] = tcpPort;
-  root[JSON_LATENCY] = String(getLatency());
+  root[JSON_LATENCY] = getLatency();
   root.printTo(json);
   return json;
 }

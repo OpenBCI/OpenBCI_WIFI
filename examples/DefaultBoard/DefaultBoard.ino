@@ -1,3 +1,7 @@
+#define ARDUINOJSON_USE_LONG_LONG 1
+#define ARDUINOJSON_USE_DOUBLE 1
+// #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
+// #include <GDBStub.h>
 #include <time.h>
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -11,9 +15,7 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <WebSocketsServer.h>
-#include <Hash.h>
-#include "WiFiClientPrint.h"
+#include "WiFiClientPrintSmall.h"
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
@@ -318,17 +320,28 @@ void setupSocketWithClient() {
 
   wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_TCP);
 
+  // const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
+  // DynamicJsonBuffer jsonBuffer(bufferSize);
+  // JsonObject& rootOut = jsonBuffer.createObject();
   if (clientTCP.connect(wifi.tcpAddress, wifi.tcpPort)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
     clientTCP.setNoDelay(1);
-    return server.send(200, "text/json", wifi.getInfoTCP(true));
+    jsonStr = wifi.getInfoTCP(true);
+    // jsonStr = "";
+    // rootOut.printTo(jsonStr);
+    server.setContentLength(jsonStr.length());
+    return server.send(200, "text/json", jsonStr.c_str());
   } else {
 #ifdef DEBUG
     Serial.println("Failed to connect to server");
 #endif
-    return server.send(504, "text/json", wifi.getInfoTCP(false));
+    jsonStr = wifi.getInfoTCP(false);
+    // jsonStr = "";
+    // rootOut.printTo(jsonStr);
+    server.setContentLength(jsonStr.length());
+    return server.send(504, "text/json", jsonStr.c_str());
   }
 }
 
@@ -540,12 +553,49 @@ void setup() {
   server.on("/mqtt", HTTP_POST, mqttSetup);
 
   server.on("/tcp", HTTP_GET, []() {
-    server.send(200, "text/json", wifi.getInfoTCP(clientTCP.connected()));
+    // Serial.printf("Your ESP has %d bytes on the heap\n", ESP.getFreeHeap());
+
+    // const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
+    // DynamicJsonBuffer jsonBuffer(bufferSize);
+    // Serial.printf("DynamicJsonBuffer allocated with %d bytes\n", bufferSize);
+    String out = wifi.getInfoTCP(clientTCP.connected());
+    // root[JSON_LATENCY] = wifi.getLatency();
+    // JsonObject& root = jsonBuffer.createObject();
+    // root[JSON_CONNECTED] = clientTCP.connected() ? true : false;
+    // root[JSON_TCP_DELIMITER] = wifi.tcpDelimiter ? true : false;
+    // root[JSON_TCP_IP] = wifi.tcpAddress.toString();
+    // root[JSON_TCP_OUTPUT] = wifi.getCurOutputModeString();
+    // root[JSON_TCP_PORT] = wifi.tcpPort;
+    // root[JSON_LATENCY] = wifi.getLatency();
+    // Serial.println("root object created");
+    // Serial.println("got tcp info");
+    server.setContentLength(out.length());
+    // Serial.printf("content length set to %d\n", root.measureLength());
+    server.send(200, "application/json", out.c_str());
+    // Serial.println("sent success message");
+    // WiFiClientPrintSmall<> p(server.client());
+    // Serial.println("WiFiClientPrintSmall allocated\nVerify serial output:");
+    // root.printTo(Serial);Serial.println();
+    // root.printTo(p);
+    // Serial.println("root printed to WiFiClientPrintSmall");
+    // p.flush();
+    // Serial.println("stopped WiFiClientPrintSmall");
+    // jsonStr = "";
+    // root.printTo(jsonStr);
+    // server.setContentLength(jsonStr.length());
+    // server.send(200, "text/json", jsonStr.c_str());
+    // server.send(200, "text/json", "{\"connected\":true}");
   });
   server.on("/tcp", HTTP_POST, setupSocketWithClient);
   server.on("/tcp", HTTP_DELETE, []() {
     clientTCP.stop();
-    server.send(200, "text/json", wifi.getInfoTCP(clientTCP.connected()));
+    // const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
+    // DynamicJsonBuffer jsonBuffer(bufferSize);
+    jsonStr = wifi.getInfoTCP(false);
+    // jsonStr = "";
+    // root.printTo(jsonStr);
+    server.setContentLength(jsonStr.length());
+    server.send(200, "text/json", jsonStr.c_str());
   });
 
   // These could be helpful...
@@ -784,12 +834,15 @@ void loop() {
 
         if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
           // root.printTo(Serial);
-          WiFiClientPrint<> tcpBufferedPrinter(clientTCP);
-          root.printTo(tcpBufferedPrinter);
-          tcpBufferedPrinter.flush();
+          // WiFiClientPrint<> tcpBufferedPrinter(clientTCP);
+          root.printTo(jsonStr);
+          // root.printTo(tcpBufferedPrinter);
+          // tcpBufferedPrinter.flush();
+          clientTCP.write(jsonStr.c_str());
           if (wifi.tcpDelimiter) {
             clientTCP.write("\r\n");
           }
+          jsonStr = "";
         } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
           jsonStr = "";
           root.printTo(jsonStr);
