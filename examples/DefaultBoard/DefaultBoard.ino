@@ -1,8 +1,9 @@
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_USE_DOUBLE 1
+#define ARDUINO_ARCH_ESP8266
+#define ESP8266
 // #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 // #include <GDBStub.h>
-#include <time.h>
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
@@ -15,8 +16,10 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "WiFiClientPrintSmall.h"
+// #include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
+#include <TimeLib.h>
+#include <NtpClientLib.h>
 #include "OpenBCI_Wifi.h"
 
 boolean isWaitingOnResetConfirm;
@@ -389,6 +392,23 @@ void mqttSetup() {
   }
 }
 
+void processSyncEvent(NTPSyncEvent_t ntpEvent) {
+	if (ntpEvent) {
+		Serial.print("Time Sync error: ");
+		if (ntpEvent == noResponse)
+			Serial.println("NTP server not reachable");
+		else if (ntpEvent == invalidAddress)
+			Serial.println("Invalid NTP server address");
+	}
+	else {
+		Serial.print("Got NTP time: ");
+		Serial.println(NTP.getTimeDateString(NTP.getLastNTPSync()));
+	}
+}
+
+boolean syncEventTriggered = false; // True if a time even has been triggered
+NTPSyncEvent_t ntpEvent; // Last triggered event
+
 void removeWifiAPInfo() {
   wifi.curClientResponse = wifi.CLIENT_RESPONSE_OUTPUT_STRING;
   wifi.outputString = "Forgetting wifi credentials and rebooting";
@@ -430,6 +450,9 @@ void setup() {
   Serial.println("Serial started");
 #endif
 
+NTP.begin("pool.ntp.org", 1, true);
+NTP.setInterval(63);
+
   wifi.begin();
 
   //WiFiManager
@@ -449,7 +472,16 @@ void setup() {
 #ifdef DEBUG
   Serial.printf("Starting ntp...\n");
 #endif
-  wifi.ntpStart();
+  // configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  //
+
+
+  NTP.onNTPSyncEvent([](NTPSyncEvent_t event) {
+    ntpEvent = event;
+    syncEventTriggered = true;
+  });
+
+  // wifi.ntpStart();
 
 #ifdef DEBUG
   Serial.printf("Starting SSDP...\n");
@@ -481,9 +513,9 @@ void setup() {
 
   // The master has read the status register
   SPISlave.onStatusSent([]() {
-#ifdef DEBUG
-    Serial.println("Status Sent");
-#endif
+// #ifdef DEBUG
+    // Serial.println("Status Sent");
+// #endif
     SPISlave.setStatus(209);
   });
 
@@ -601,10 +633,12 @@ void setup() {
   // These could be helpful...
   server.on("/stream/start", HTTP_GET, []() {
     wifi.passthroughCommands("b");
+    SPISlave.setData(wifi.passthroughBuffer, BYTES_PER_SPI_PACKET);
     returnOK();
   });
   server.on("/stream/stop", HTTP_GET, []() {
-    wifi.passthroughCommands("b");
+    wifi.passthroughCommands("s");
+    SPISlave.setData(wifi.passthroughBuffer, BYTES_PER_SPI_PACKET);
     returnOK();
   });
 
@@ -701,6 +735,27 @@ void setup() {
 void loop() {
   ArduinoOTA.handle();
   server.handleClient();
+  static int i = 0;
+	static int last = 0;
+  if (syncEventTriggered) {
+  processSyncEvent(ntpEvent);
+    syncEventTriggered = false;
+  }
+
+  if ((millis() - last) > 5100) {
+    //Serial.println(millis() - last);
+    last = millis();
+    Serial.print(i); Serial.print(" ");
+    Serial.print(NTP.getTimeDateString()); Serial.print(" ");
+    Serial.print(NTP.isSummerTime() ? "Summer Time. " : "Winter Time. ");
+    Serial.print("WiFi is ");
+    Serial.print(WiFi.isConnected() ? "connected" : "not connected"); Serial.print(". ");
+    Serial.print("Uptime: ");
+    Serial.print(NTP.getUptimeString()); Serial.print(" since ");
+    Serial.println(NTP.getTimeDateString(NTP.getFirstSync()).c_str());
+
+    i++;
+  }
 
   if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
     if (clientMQTT.connected()) {
@@ -745,7 +800,7 @@ void loop() {
       ntpLastTimeSeconds = 0;
     }
     ntpTimeSyncAttempts++;
-    if (ntpTimeSyncAttempts > 10) {
+    if (ntpTimeSyncAttempts > 100) {
 #ifdef DEBUG
       Serial.println("Unable to get ntp sync");
 #endif
@@ -834,10 +889,10 @@ void loop() {
 
         if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
           // root.printTo(Serial);
-          // WiFiClientPrint<> tcpBufferedPrinter(clientTCP);
+          // WiFiClientPrint<> p(clientTCP);
           root.printTo(jsonStr);
-          // root.printTo(tcpBufferedPrinter);
-          // tcpBufferedPrinter.flush();
+          // root.printTo(p);
+          // p.flush();
           clientTCP.write(jsonStr.c_str());
           if (wifi.tcpDelimiter) {
             clientTCP.write("\r\n");
@@ -860,4 +915,6 @@ void loop() {
       }
     }
   }
+  delay(0);
+
 }
