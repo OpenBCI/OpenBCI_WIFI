@@ -801,6 +801,7 @@ void loop() {
     if (wifi.curOutputMode == wifi.OUTPUT_MODE_RAW) {
       for(int i = 0; i < 2; i++) {
         if (wifi.rawBufferHasData(wifi.rawBuffer + i)) {
+          (wifi.rawBuffer + i)->flushing = true;
           digitalWrite(LED_NOTIFY, LOW);
           if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
             clientTCP.write((wifi.rawBuffer + i)->data, (wifi.rawBuffer + i)->positionWrite);
@@ -815,6 +816,7 @@ void loop() {
           wifi.rawBufferReset(wifi.rawBuffer + i);
           lastSendToClient = micros();
           digitalWrite(LED_NOTIFY, HIGH);
+          (wifi.rawBuffer + i)->flushing = false;
         }
       }
     } else { // output mode is JSON
