@@ -820,9 +820,7 @@ void OpenBCI_Wifi_Class::ntpStart(void) {
 #ifdef DEBUG
   Serial.println("Setting time using SNTP");
 #endif
-// NTP.begin("pool.ntp.org", 8, true);
-// NTP.setInterval(63);
-  // configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 }
 
 /**
