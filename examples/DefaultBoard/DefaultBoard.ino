@@ -875,10 +875,11 @@ void loop() {
           jsonStr = "";
         } else {
           root.printTo(jsonStr);
-          Serial.println(jsonStr);
           jsonStr = "";
           // root.printTo(Serial);
+#ifdef DEBUG
           Serial.println();
+#endif
         }
         lastSendToClient = micros();
         digitalWrite(LED_NOTIFY, HIGH);
