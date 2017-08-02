@@ -196,7 +196,7 @@ String OpenBCI_Wifi_Class::getInfoAll(void) {
   root[JSON_NAME] = getName();
   root[JSON_NUM_CHANNELS] = getNumChannels();
   root[JSON_VERSION] = getVersion();
-  root[JSON_LATENCY] = String(getLatency());
+  root[JSON_LATENCY] = getLatency();
   String output;
   root.printTo(output);
   return output;
@@ -228,7 +228,7 @@ String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
   root[JSON_CONNECTED] = clientMQTTConnected ? true : false;
   root[JSON_MQTT_USERNAME] = String(mqttUsername);
   root[JSON_TCP_OUTPUT] = getCurOutputModeString();
-  root[JSON_LATENCY] = String(getLatency());
+  root[JSON_LATENCY] = getLatency();
   root.printTo(json);
   return json;
 }

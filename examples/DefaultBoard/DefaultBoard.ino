@@ -370,7 +370,7 @@ void setupSocketWithClient() {
 void mqttSetup() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs(5);
+  JsonObject& root = getArgFromArgs(6);
   //
   // size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
   // DynamicJsonBuffer jsonBuffer(argBufferSize);
@@ -382,7 +382,7 @@ void mqttSetup() {
     mqttUsername = root.get<String>(JSON_MQTT_USERNAME);
   }
   String mqttPassword = "";
-  if (!root.containsKey(JSON_MQTT_PASSWORD)) {
+  if (root.containsKey(JSON_MQTT_PASSWORD)) {
     mqttPassword = root.get<String>(JSON_MQTT_PASSWORD);
   }
 
@@ -390,6 +390,20 @@ void mqttSetup() {
     wifi.setLatency(root[JSON_LATENCY]);
 #ifdef DEBUG
     Serial.print("Set latency to "); Serial.print(wifi.getLatency()); Serial.println(" uS");
+#endif
+  }
+
+  if (root.containsKey(JSON_TCP_OUTPUT)) {
+    String outputModeStr = root[JSON_TCP_OUTPUT];
+    if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW))) {
+      wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
+    } else if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON))) {
+      wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+    } else {
+      return returnFail(506, "Error: '" + String(JSON_TCP_OUTPUT) + "' must be either " + wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW)+" or " + wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON));
+    }
+#ifdef DEBUG
+    Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
 #endif
   }
 
@@ -407,8 +421,14 @@ void mqttSetup() {
   clientMQTT.setServer(wifi.mqttBrokerAddress.c_str(), 1883);
   boolean connected = false;
   if (mqttUsername.equals("")) {
+#ifdef DEBUG
+    Serial.println("No auth approach");
+#endif
     connected = mqttConnect();
   } else {
+#ifdef DEBUG
+    Serial.println("Auth approach being taken");
+#endif
     connected = mqttConnect(mqttUsername, mqttPassword);
   }
   if (connected) {

@@ -1,3 +1,7 @@
+# v1.0.0.1
+
+Lots of stability. Added 596 tests to ensure the core wifi engine core works as expected every time. This is very close to what will be released with the initial production run.
+
 # v0.2.1
 
 ### Bug Fixes

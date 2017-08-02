@@ -1953,7 +1953,7 @@ void testSPIOnDataSent() {
   test.assertEqual(wifi.passthroughPosition, (uint8_t)0, "should have reset the passthrough buffer", __LINE__);
 }
 
-void testspiProcessPacketStreamJSONGanglion() {
+void testSPIProcessPacketStreamJSONGanglion() {
   test.detail("JSON Ganglion");
 
   wifi.reset();
@@ -2051,7 +2051,7 @@ void testSPIProcessPacketStreamRaw() {
 
   wifi.reset();
 
-  uint8_t expected_sampleNumber = 23; // Jordan
+  uint8_t expected_sampleNumber = 1; // Jordan
   uint8_t data[BYTES_PER_SPI_PACKET];
   giveMeASPIStreamPacket(data, expected_sampleNumber);
 
@@ -2062,6 +2062,7 @@ void testSPIProcessPacketStreamRaw() {
   test.assertEqualHex(wifi.curRawBuffer->data[0], STREAM_PACKET_BYTE_START, "should set first byte to start byte", __LINE__);
   test.assertEqualBuffer(wifi.curRawBuffer->data + 1, data + 1, BYTES_PER_SPI_PACKET-1, "should have the same 31 data bytes");
   test.assertEqualHex(wifi.curRawBuffer->data[BYTES_PER_SPI_PACKET], 0xC0, "should set the stop byte", __LINE__);
+
 }
 
 void testSPIProcessPacketStream() {
