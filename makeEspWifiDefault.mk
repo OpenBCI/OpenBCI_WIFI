@@ -7,7 +7,7 @@ UPLOAD_PORT = /dev/cu.usbserial-A104JV88
 ESP_ROOT = $(HOME)/esp8266
 ESP_LIBS = $(ESP_ROOT)/libraries
 
-HTTP_ADDR=192.168.0.217
+HTTP_ADDR=OpenBCI-A4AD.local
 # BOARD = openbci
 BOARD = huzzah
 
