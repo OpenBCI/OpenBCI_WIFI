@@ -220,7 +220,7 @@ String OpenBCI_Wifi_Class::getInfoBoard(void) {
 }
 
 String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
-  const size_t bufferSize = JSON_OBJECT_SIZE(5) + 225;
+  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 1000;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();

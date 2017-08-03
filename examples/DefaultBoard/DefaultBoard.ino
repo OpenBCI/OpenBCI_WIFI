@@ -370,7 +370,7 @@ void setupSocketWithClient() {
 void mqttSetup() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs(6);
+  JsonObject& root = getArgFromArgs(20);
   //
   // size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
   // DynamicJsonBuffer jsonBuffer(argBufferSize);
