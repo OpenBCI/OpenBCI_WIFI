@@ -439,9 +439,9 @@ void mqttSetup() {
 }
 
 void removeWifiAPInfo() {
-  wifi.curClientResponse = wifi.CLIENT_RESPONSE_OUTPUT_STRING;
-  wifi.outputString = "Forgetting wifi credentials and rebooting";
-  wifi.clientWaitingForResponseFullfilled = true;
+  // wifi.curClientResponse = wifi.CLIENT_RESPONSE_OUTPUT_STRING;
+  // wifi.outputString = "Forgetting wifi credentials and rebooting";
+  // wifi.clientWaitingForResponseFullfilled = true;
 
 #ifdef DEBUG
   Serial.println(wifi.outputString);
@@ -680,12 +680,8 @@ void setup() {
   });
 
   server.on("/wifi", HTTP_DELETE, []() {
-    pinMode(0, INPUT);
-    isWaitingOnResetConfirm = true;
-    wifi.clientWaitingForResponseFullfilled = false;
-#ifdef DEBUG
-    Serial.println("waiting for button press");
-#endif
+    returnOK("reseting wifi");
+    removeWifiAPInfo();
   });
 
   httpUpdater.setup(&server);
@@ -734,17 +730,17 @@ void loop() {
     }
   }
 
-  if (isWaitingOnResetConfirm) {
-    if (digitalRead(0)==0) {
-      isWaitingOnResetConfirm = false;
-      removeWifiAPInfo();
-#ifdef DEBUG
-    } else {
-      Serial.print(".");
-      delay(1);
-#endif
-    }
-  }
+//   if (isWaitingOnResetConfirm) {
+//     if (digitalRead(0)==0) {
+//       isWaitingOnResetConfirm = false;
+//       removeWifiAPInfo();
+// #ifdef DEBUG
+//     } else {
+//       Serial.print(".");
+//       delay(1);
+// #endif
+//     }
+//   }
 
   if (syncingNtp) {
     unsigned long long curTime = time(nullptr);
