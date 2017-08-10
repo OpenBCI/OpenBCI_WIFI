@@ -64,6 +64,8 @@ void OpenBCI_Wifi_Class::initObjects(void) {
 void OpenBCI_Wifi_Class::initVariables(void) {
   clientWaitingForResponse = false;
   clientWaitingForResponseFullfilled = false;
+  jsonHasSampleNumbers = false;
+  jsonHasTimeStamps = true;
   passthroughBufferLoaded = false;
   tcpDelimiter = false;
 
@@ -294,11 +296,11 @@ void OpenBCI_Wifi_Class::getJSONFromSamples(JsonObject& root, uint8_t numChannel
     }
     JsonObject& sample = chunk.createNestedObject();
     // Serial.printf("timestamp: "); debugPrintLLNumber((sampleBuffer + tail)->timestamp); Serial.println();
-    sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
+    if (jsonHasTimeStamps) sample.set<unsigned long long>("timestamp", (sampleBuffer + tail)->timestamp);
     // unsigned long long timestamp = sample.get<unsigned long long>("timestamp");
     // printLLNumber(timestamp); Serial.println();
     // Serial.printf("timestamp: %.0f\n", timestamp);
-    sample["sampleNumber"] = (sampleBuffer + tail)->sampleNumber;
+    if (jsonHasSampleNumbers) sample["sampleNumber"] = (sampleBuffer + tail)->sampleNumber;
     JsonArray& data = sample.createNestedArray("data");
     for (uint8_t j = 0; j < numChannels; j++) {
       // Serial.printf("%d %d ", i, j);

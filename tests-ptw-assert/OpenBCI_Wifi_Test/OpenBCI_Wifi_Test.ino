@@ -435,7 +435,7 @@ void testGetJSONFromSamplesCytonMax() {
     test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
 
     uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
-    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
+    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("cyton multi packet should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
 
     JsonArray& sample_data = sample["data"];
     for (uint8_t j = 0; j < numChannels; j++) {
@@ -477,8 +477,7 @@ void testGetJSONFromSamplesCytonSingle() {
   double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
   test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "should be able to set timestamp", __LINE__);
 
-  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
-  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
+  test.assertFalse(root.containsKey(JSON_SAMPLE_NUMBER), "should not have sample numbers in json", __LINE__);
 
   JsonArray& chunk0_data = chunk0["data"];
   for (int i = 0; i < numChannels; i++) {
@@ -490,6 +489,7 @@ void testGetJSONFromSamplesCytonSingle() {
 void testGetJSONFromSamplesCytonDaisyMax() {
   // Cyton Daisy with three packets
   wifi.reset(); // Clear everything
+  wifi.jsonHasSampleNumbers = true;
   uint8_t expected_sampleNumber = 29;
   unsigned long long expected_timestamp = 1500916934017000;
   double expected_channelData[MAX_CHANNELS];
@@ -518,7 +518,7 @@ void testGetJSONFromSamplesCytonDaisyMax() {
     test.assertEqual(actual_timestamp, expected_timestamp + i, String("should be able to set timestamp for " + String(i)).c_str(), __LINE__);
 
     uint8_t actual_sampleNumber = sample["sampleNumber"]; // 255
-    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
+    test.assertEqual(actual_sampleNumber, expected_sampleNumber + i, String("cyton daisy multi packet should be able to set sampleNumber for " + String(i)).c_str(), __LINE__);
 
     JsonArray& sample_data = sample["data"];
     for (uint8_t j = 0; j < numChannels; j++) {
@@ -561,8 +561,7 @@ void testGetJSONFromSamplesCytonDaisySingle() {
   double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
   test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "daisy should be able to set timestamp", __LINE__);
 
-  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
-  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "daisy should be able to set sampleNumber", __LINE__);
+  test.assertFalse(root.containsKey(JSON_SAMPLE_NUMBER), "should not have sample numbers in json", __LINE__);
 
   JsonArray& chunk0_data = chunk0["data"];
   for (int i = 0; i < numChannels; i++) {
@@ -574,6 +573,7 @@ void testGetJSONFromSamplesCytonDaisySingle() {
 void testGetJSONFromSamplesGanglionMax() {
   // Ganglion with eight packets
   wifi.reset(); // Clear everything
+  wifi.jsonHasSampleNumbers = true;
   uint8_t expected_sampleNumber = 29;
   unsigned long long expected_timestamp = 1500916934017000;
   double expected_channelData[MAX_CHANNELS];
@@ -644,13 +644,52 @@ void testGetJSONFromSamplesGanglionSingle() {
   double actual_timestamp = chunk0["timestamp"]; // 1500916934017000
   test.assertEqual((unsigned long long)actual_timestamp, expected_timestamp, "ganglion should be able to set timestamp", __LINE__);
 
-  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
-  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "ganglion should be able to set sampleNumber", __LINE__);
+  test.assertFalse(root.containsKey(JSON_SAMPLE_NUMBER), "should not have sample numbers in json", __LINE__);
 
   JsonArray& chunk0_data = chunk0["data"];
   for (int i = 0; i < numChannels; i++) {
     double chunk0_tempData = chunk0_data[i];
     test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "ganglion should be able to code large numbers", __LINE__);
+  }
+}
+
+void testGetJSONFromSamplesNoTimestamp() {
+  test.it("should work to get a single JSON from samples with no timestamp Cyton");
+
+  wifi.reset(); // Clear everything
+  wifi.jsonHasTimeStamps = false;
+  uint8_t numChannels = NUM_CHANNELS_CYTON;
+  uint8_t numPackets = 1;
+  uint8_t expected_sampleNumber = 29;
+  unsigned long long expected_timestamp = 1500916934017000;
+  double expected_channelData[MAX_CHANNELS];
+  for (int i = 0; i < MAX_CHANNELS; i++) {
+    if (i%2 == 0) {
+      expected_channelData[i] = ADC_24BIT_MAX_VAL_NANO_VOLT;
+    } else {
+      expected_channelData[i] = -1 * ADC_24BIT_MAX_VAL_NANO_VOLT;
+    }
+  }
+
+  wifi.sampleBuffer->sampleNumber = expected_sampleNumber;
+  wifi.sampleBuffer->timestamp = expected_timestamp;
+  for (int i = 0; i < numChannels; i++) {
+    wifi.sampleBuffer->channelData[i] = expected_channelData[i];
+  }
+
+  DynamicJsonBuffer jsonBuffer(wifi.getJSONBufferSize());
+  JsonObject& root = jsonBuffer.createObject();
+  wifi.getJSONFromSamples(root, numChannels, numPackets);
+
+  test.assertFalse(root.containsKey("timestamp"), "should not have timestamp in json", __LINE__);
+
+  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
+  test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
+
+  JsonArray& chunk0_data = chunk0["data"];
+  for (int i = 0; i < numChannels; i++) {
+    double chunk0_tempData = chunk0_data[i];
+    test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
   }
 }
 
@@ -861,6 +900,8 @@ void testReset() {
   test.assertEqual(wifi.curOutputMode, wifi.OUTPUT_MODE_RAW, "should initialize to 'raw' output mode", __LINE__);
   test.assertEqual(wifi.curOutputProtocol, wifi.OUTPUT_PROTOCOL_NONE, "should initialize 'none' for output protocol", __LINE__);
   test.assertEqual(wifi.lastTimeWasPolled, (unsigned long)0, "should initialize 'lastTimeWasPolled' for 0", __LINE__);
+  test.assertFalse(wifi.jsonHasSampleNumbers, "should not have sample numbers by default in JSON");
+  test.assertTrue(wifi.jsonHasTimeStamps, "should have timestamps by default in JSON");
   test.assertEqual(wifi.mqttBrokerAddress, "", "should initialize mqttBrokerAddress to empty string", __LINE__);
   test.assertEqual(wifi.mqttUsername, "", "should initialize mqttUsername to empty string", __LINE__);
   test.assertEqual(wifi.mqttPassword, "", "should initialize mqttPassword to empty string", __LINE__);

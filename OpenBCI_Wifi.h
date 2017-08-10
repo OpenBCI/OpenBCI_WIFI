@@ -161,6 +161,8 @@ public:
   boolean clientWaitingForResponse;
   boolean clientWaitingForResponseFullfilled;
   boolean passthroughBufferLoaded;
+  boolean jsonHasSampleNumbers;
+  boolean jsonHasTimeStamps;
   boolean tcpDelimiter;
 
   CLIENT_RESPONSE curClientResponse;

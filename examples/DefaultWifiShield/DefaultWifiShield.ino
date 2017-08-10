@@ -3,9 +3,7 @@
 #define ARDUINO_ARCH_ESP8266
 #define ESP8266
 // #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
-// #include <GDBStub.h>
 #include <time.h>
-// #include <NtpClientLib.h>
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
@@ -18,7 +16,6 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-// #include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
@@ -26,7 +23,6 @@ boolean isWaitingOnResetConfirm;
 boolean ntpOffsetSet;
 boolean underSelfTest;
 boolean syncingNtp;
-boolean tcpDelimiter;
 boolean waitingOnNTP;
 
 ESP8266WebServer server(80);
@@ -286,10 +282,10 @@ void passthroughCommand() {
   }
 }
 
-void setupSocketWithClient() {
+void tcpSetup() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs(5);
+  JsonObject& root = getArgFromArgs(7);
   if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
   String tempAddr = root[JSON_TCP_IP];
   IPAddress tempIPAddr;
@@ -328,6 +324,20 @@ void setupSocketWithClient() {
 #endif
   }
   wifi.setInfoTCP(tempAddr, port, tcpDelimiter);
+
+  if (root.containsKey(JSON_SAMPLE_NUMBERS)) {
+    wifi.jsonHasSampleNumbers = root[JSON_SAMPLE_NUMBERS];
+#ifdef DEBUG
+    Serial.print("Set jsonHasSampleNumbers to "); Serial.println(wifi.jsonHasSampleNumbers ? String("true") : String("false"));
+#endif
+  }
+
+  if (root.containsKey(JSON_TIMESTAMPS)) {
+    wifi.jsonHasTimeStamps = root[JSON_TIMESTAMPS];
+#ifdef DEBUG
+    Serial.print("Set jsonHasTimeStamps to "); Serial.println(wifi.jsonHasTimeStamps ? String("true") : String("false"));
+#endif
+  }
 
 #ifdef DEBUG
   Serial.print("Got ip: "); Serial.println(wifi.tcpAddress.toString());
@@ -404,6 +414,20 @@ void mqttSetup() {
     }
 #ifdef DEBUG
     Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
+#endif
+  }
+  
+  if (root.containsKey(JSON_SAMPLE_NUMBERS)) {
+    wifi.jsonHasSampleNumbers = root[JSON_SAMPLE_NUMBERS];
+#ifdef DEBUG
+    Serial.print("Set jsonHasSampleNumbers to "); Serial.println(wifi.jsonHasSampleNumbers ? String("true") : String("false"));
+#endif
+  }
+
+  if (root.containsKey(JSON_TIMESTAMPS)) {
+    wifi.jsonHasTimeStamps = root[JSON_TIMESTAMPS];
+#ifdef DEBUG
+    Serial.print("Set jsonHasTimeStamps to "); Serial.println(wifi.jsonHasTimeStamps ? String("true") : String("false"));
 #endif
   }
 
@@ -609,7 +633,7 @@ void setup() {
     server.setContentLength(out.length());
     server.send(200, "application/json", out.c_str());
   });
-  server.on("/tcp", HTTP_POST, setupSocketWithClient);
+  server.on("/tcp", HTTP_POST, tcpSetup);
   server.on("/tcp", HTTP_DELETE, []() {
     clientTCP.stop();
     jsonStr = wifi.getInfoTCP(false);
