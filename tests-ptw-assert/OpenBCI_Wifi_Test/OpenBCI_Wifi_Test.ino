@@ -397,7 +397,7 @@ void testGetJSONBufferSize() {
 
 void testGetJSONFromSamplesCytonMax() {
   wifi.reset(); // Clear everything
-
+  wifi.jsonHasSampleNumbers = true;
   test.it("should work to get JSON from max samples Cyton. mem stress");
   uint8_t numChannels = NUM_CHANNELS_CYTON;
   wifi.setNumChannels(numChannels);
@@ -683,10 +683,10 @@ void testGetJSONFromSamplesNoTimestamp() {
 
   test.assertFalse(root.containsKey("timestamp"), "should not have timestamp in json", __LINE__);
 
-  uint8_t actual_sampleNumber = chunk0["sampleNumber"]; // 255
+  uint8_t actual_sampleNumber = root["sampleNumber"]; // 255
   test.assertEqual(actual_sampleNumber, expected_sampleNumber, "should be able to set sampleNumber", __LINE__);
 
-  JsonArray& chunk0_data = chunk0["data"];
+  JsonArray& chunk0_data = root["data"];
   for (int i = 0; i < numChannels; i++) {
     double chunk0_tempData = chunk0_data[i];
     test.assertApproximately(chunk0_data[i], expected_channelData[i], 1.0, "should be able to code large numbers", __LINE__);
