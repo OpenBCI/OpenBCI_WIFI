@@ -416,7 +416,7 @@ void mqttSetup() {
     Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
 #endif
   }
-  
+
   if (root.containsKey(JSON_SAMPLE_NUMBERS)) {
     wifi.jsonHasSampleNumbers = root[JSON_SAMPLE_NUMBERS];
 #ifdef DEBUG
@@ -578,6 +578,11 @@ void setup() {
   server.on("/", HTTP_GET, [](){
     digitalWrite(LED_NOTIFY, LOW);
     server.send(200, "text/plain", "Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
+    digitalWrite(LED_NOTIFY, HIGH);
+  });
+  server.on("/cloud", HTTP_GET, [](){
+    digitalWrite(LED_NOTIFY, LOW);
+    server.send(200, "text/html", "<!DOCTYPE html> html lang=\"en\"> <head><meta http-equiv=\"refresh\"content=\"0; url=https://app.getcloudbrain.com\"/><title>Redirecting ...</title></head></html>");
     digitalWrite(LED_NOTIFY, HIGH);
   });
   server.on("/index.html", HTTP_GET, [](){
