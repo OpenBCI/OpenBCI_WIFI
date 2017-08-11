@@ -1,3 +1,15 @@
+# v1.0.0
+
+Add /cloud route for cloudbrain redirect.
+
+Lots of stability. Added 596 tests to ensure the core wifi engine core works as expected every time. This is very close to what will be released with the initial production run.
+
+# v0.2.1
+
+### Bug Fixes
+
+* Timestamp was not correct due to offset issue.
+
 # v0.2.0
 
 ### Bug Fixes
