@@ -1,4 +1,6 @@
-# v1.0.0.1
+# v1.0.0
+
+Add /cloud route for cloudbrain redirect.
 
 Lots of stability. Added 596 tests to ensure the core wifi engine core works as expected every time. This is very close to what will be released with the initial production run.
 
