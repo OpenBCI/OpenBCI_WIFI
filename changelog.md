@@ -1,3 +1,9 @@
+# v1.0.1
+
+### Bug Fixes
+
+* Extended timeout for command passthrough to allow for long messages such as '?' on cyton to be passed through in one message.
+
 # v1.0.0
 
 Add /cloud route for cloudbrain redirect.

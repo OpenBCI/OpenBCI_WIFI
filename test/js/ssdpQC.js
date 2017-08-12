@@ -134,7 +134,7 @@ client.on('response', function inResponse(headers, code, rinfo) {
   console.log('Got a response to an m-search:\n%d\n%s\n%s', code, JSON.stringify(headers, null, '  '), JSON.stringify(rinfo, null, '  '));
   // hitThatShit(rinfo.address, '/websocket');
   client.stop();
-  post(rinfo.address, '/websocket', {"port": server.address().port});
+  post(rinfo.address, '/tcp', {"port": server.address().port});
   addrOfDUT = rinfo.address;
   get(`http://${rinfo.address}/test/start`);
   // http.get({

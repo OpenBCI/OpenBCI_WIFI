@@ -832,7 +832,7 @@ void loop() {
     }
   }
 
-  if (wifi.clientWaitingForResponse && (millis() > (wifi.timePassthroughBufferLoaded + 1000))) {
+  if (wifi.clientWaitingForResponse && (millis() > (wifi.timePassthroughBufferLoaded + 2000))) {
     wifi.clientWaitingForResponse = false;
     returnFail(502, "Error: timeout getting command response, be sure board is fully connected");
 #ifdef DEBUG
