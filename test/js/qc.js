@@ -5,41 +5,40 @@
  *   [nodejs](https://nodejs.org/en/)
  *
  * To run:
- *   change directory to this file `cd examples/debug`
+ *   change directory to this file `cd test/js`
  *   do `npm install`
  *   then `npm start`
  */
 var debug = false; // Pretty print any bytes in and out... it's amazing...
 var verbose = true; // Adds verbosity to functions
 
-var Wifi = require('openbci-wifi').Wifi;
 const k = require('openbci-utilities').Constants;
+var Wifi = require('../../index').Wifi;
 var wifi = new Wifi({
   debug: debug,
   verbose: verbose,
   sendCounts: false
 });
 
-let counter = 0;
-let sampleRateCounterInterval = null;
+let packetCounter = 0;
+let sampleRateInterval = null;
 let lastSampleNumber = 0;
-const MAX_SAMPLE_NUMBER = 255;
 
 const sampleFunc = (sample) => {
   try {
     if (sample.valid) {
-      counter++;
-      if (sampleRateCounterInterval === null) {
-        sampleRateCounterInterval = setInterval(() => {
-          console.log(`SR: ${counter}`);
-          counter = 0;
+      // console.log(sample.sampleNumber);
+      packetCounter++;
+      let packetDif = sample.sampleNumber - lastSampleNumber;
+      if (packetDif < 0) packetDif += 255;
+      if (packetDif > 1) console.log(`Dropped ${packetDif} packets | lastSampleNumber: ${lastSampleNumber} | curSampleNumber: ${sample.sampleNumber}`);
+      lastSampleNumber = sample.sampleNumber;
+      if (sampleRateInterval === null) {
+        sampleRateInterval = setInterval(() => {
+          console.log("sample rate:", packetCounter);
+          packetCounter = 0;
         }, 1000);
       }
-      let packetDiff = sample.sampleNumber = lastSampleNumber;
-      if (packetDiff < 0) packetDiff += MAX_SAMPLE_NUMBER;
-      if (packetDiff > 0) console.log(`dropped ${packetDiff} packets | cur sn: ${sample.sampleNumber} | last sn: ${lastSampleNumber}`);
-      lastSampleNumber = sample.sampleNumber;
-      console.log(JSON.stringify(sample));
     }
   } catch (err) {
     console.log(err);
@@ -48,14 +47,28 @@ const sampleFunc = (sample) => {
 
 wifi.on('sample', sampleFunc);
 
-wifi.autoFindAndConnectToWifiShield()
-  .then(() => {
-    console.log("Wifi connected");
-    return wifi.streamStart();
-  })
-  .catch((err) => {
-    console.log(err);
-  });
+wifi.once('wifiShield', (shield) => {
+  wifi.connect(shield.ipAddress)
+    .then(() => {
+      if (wifi.getNumberOfChannels() === 4) {
+        console.log("setting sample rate to 1600 for ganglion");
+        return wifi.setSampleRate(1600);
+      } else {
+        console.log("setting sample rate to 1000 for cyton/daisy");
+        return wifi.setSampleRate(1000);
+      }
+    })
+    .then(() => {
+    console.log("sending stream start");
+      return wifi.streamStart();
+    })
+    .catch((err) => {
+      console.log(err);
+    });
+  wifi.searchStop().catch(console.log);
+});
+
+wifi.searchStart().catch(console.log);
 
 function exitHandler (options, err) {
   if (options.cleanup) {
@@ -65,22 +78,18 @@ function exitHandler (options, err) {
     wifi.removeAllListeners('rawDataPacket');
     wifi.removeAllListeners('sample');
     wifi.destroy();
-    if (sampleRateCounterInterval) {
-      clearInterval(sampleRateCounterInterval);
-    }
   }
   if (err) console.log(err.stack);
   if (options.exit) {
     if (verbose) console.log('exit');
     if (wifi.isStreaming()) {
-      let timmy = setTimeout(() => {
+      setTimeout(() => {
         console.log("timeout");
         process.exit(0);
       }, 1000);
       wifi.streamStop()
         .then(() => {
           console.log('stream stopped');
-          if (timmy) clearTimeout(timmy);
           process.exit(0);
         }).catch((err) => {
           console.log(err);

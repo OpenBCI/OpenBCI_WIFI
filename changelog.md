@@ -3,6 +3,7 @@
 ### Bug Fixes
 
 * Extended timeout for command passthrough to allow for long messages such as '?' on cyton to be passed through in one message.
+* Extended the length of raw buffer to allow for more packets to be sent when at high sample rate.
 
 # v1.0.0
 
