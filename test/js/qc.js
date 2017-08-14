@@ -13,7 +13,7 @@ var debug = false; // Pretty print any bytes in and out... it's amazing...
 var verbose = true; // Adds verbosity to functions
 
 const k = require('openbci-utilities').Constants;
-var Wifi = require('../../index').Wifi;
+var Wifi = require('openbci-wifi').Wifi;
 var wifi = new Wifi({
   debug: debug,
   verbose: verbose,
@@ -95,6 +95,8 @@ function exitHandler (options, err) {
           console.log(err);
           process.exit(0);
         });
+    } else {
+      process.exit(0);
     }
   }
 }
