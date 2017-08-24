@@ -27,7 +27,7 @@
   "homepage": "https://github.com/PushTheWorld/OpenBCI_Wifi#readme",
   "dependencies": {
     "lodash": "^4.17.4",
-    "openbci-utilities": "^0.1.2",
-    "openbci-wifi": "^0.1.0"
+    "openbci-utilities": "^0.2.0",
+    "openbci-wifi": "^0.1.4"
   }
 }

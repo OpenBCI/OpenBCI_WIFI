@@ -1,3 +1,9 @@
+# v1.1.1
+
+### Bug Fixes
+
+* Extend number of packets per TCP send for Cyton with Daisy board.
+
 # v1.1.0
 
 ### Bug Fixes
