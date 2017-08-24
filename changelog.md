@@ -1,3 +1,9 @@
+# v1.1.0
+
+### Bug Fixes
+
+* Extend raw ring buffer by 1900 packets to 2000. Really helped with dropped packets.
+
 # v1.0.1
 
 ### Bug Fixes

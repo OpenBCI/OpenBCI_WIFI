@@ -23,7 +23,7 @@ var wifi = new Wifi({
 let packetCounter = 0;
 let sampleRateInterval = null;
 let lastSampleNumber = 0;
-
+let avg = [];
 const sampleFunc = (sample) => {
   try {
     if (sample.valid) {
@@ -31,11 +31,20 @@ const sampleFunc = (sample) => {
       packetCounter++;
       let packetDif = sample.sampleNumber - lastSampleNumber;
       if (packetDif < 0) packetDif += 255;
-      if (packetDif > 1) console.log(`Dropped ${packetDif} packets | lastSampleNumber: ${lastSampleNumber} | curSampleNumber: ${sample.sampleNumber}`);
+      // if (packetDif > 1) console.log(`Dropped ${packetDif} packets | lastSampleNumber: ${lastSampleNumber} | curSampleNumber: ${sample.sampleNumber}`);
       lastSampleNumber = sample.sampleNumber;
       if (sampleRateInterval === null) {
         sampleRateInterval = setInterval(() => {
-          console.log("sample rate:", packetCounter);
+          avg.push(packetCounter);
+          let sum = 0;
+          for (let i = 0; i < avg.length; i++) {
+            sum += avg[i];
+          }
+          let avge = sum/avg.length;
+          if (avg.length > 10) {
+            avg.shift();
+          }
+          console.log("sample rate:", packetCounter, " avg ", avge);
           packetCounter = 0;
         }, 1000);
       }

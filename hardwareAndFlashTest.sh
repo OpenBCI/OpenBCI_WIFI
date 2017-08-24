@@ -8,4 +8,4 @@ echo "Starting flash of wifi shield"
 make -f makeEspWifiDefault.mk flash
 echo "Flash complete, now use your computer to get the shield on your local network"
 read -p "Press enter to continue once your computer is back on the network:"
-echo "Programming complete... thanks!"
+echo "Test Pass if center LED is lit - Press RESET button if necessary"
