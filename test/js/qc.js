@@ -17,7 +17,8 @@ var Wifi = require('openbci-wifi').Wifi;
 var wifi = new Wifi({
   debug: debug,
   verbose: verbose,
-  sendCounts: false
+  sendCounts: false,
+  latency: 10000
 });
 
 let packetCounter = 0;
