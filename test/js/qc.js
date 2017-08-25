@@ -18,7 +18,7 @@ var wifi = new Wifi({
   debug: debug,
   verbose: verbose,
   sendCounts: false,
-  latency: 10000
+  latency: 15000
 });
 
 let packetCounter = 0;

@@ -1,3 +1,9 @@
+# v1.1.2
+
+### Bug Fixes
+
+* Fix bug where DELETE /wifi was not working on some modules.
+
 # v1.1.1
 
 ### Bug Fixes
