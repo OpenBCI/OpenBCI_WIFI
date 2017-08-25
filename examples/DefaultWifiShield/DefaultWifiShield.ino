@@ -24,6 +24,7 @@ boolean ntpOffsetSet;
 boolean underSelfTest;
 boolean syncingNtp;
 boolean waitingOnNTP;
+boolean wifiReset;
 
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -473,8 +474,9 @@ void removeWifiAPInfo() {
 #else
   ESP.eraseConfig();
 #endif
-  delay(5000);
+  delay(1000);
   ESP.reset();
+  delay(1000);
 }
 
 void initializeVariables() {
@@ -483,6 +485,7 @@ void initializeVariables() {
   underSelfTest = false;
   syncingNtp = false;
   waitingOnNTP = false;
+  wifiReset = false;
 
   lastHeadMove = 0;
   lastMQTTConnectAttempt = 0;
@@ -709,8 +712,8 @@ void setup() {
   });
 
   server.on("/wifi", HTTP_DELETE, []() {
-    returnOK("reseting wifi");
-    removeWifiAPInfo();
+    returnOK("Reseting wifi. Please power cycle your board in 10 seconds");
+    wifiReset = true;
   });
 
   httpUpdater.setup(&server);
@@ -750,6 +753,15 @@ void setup() {
 void loop() {
   ArduinoOTA.handle();
   server.handleClient();
+
+  if (wifiReset) {
+    wifiReset = false;
+    delay(1000);
+    WiFi.disconnect();
+    delay(1000);
+    ESP.reset();
+    delay(1000);
+  }
 
   if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
     if (clientMQTT.connected()) {
