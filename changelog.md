@@ -1,3 +1,10 @@
+# v1.1.3
+
+### Enhancements
+
+* Spurious code clean up
+* Fixed potential issue with gains
+
 # v1.1.2
 
 ### Bug Fixes

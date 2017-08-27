@@ -1098,8 +1098,17 @@ void OpenBCI_Wifi_Class::spiProcessPacket(uint8_t *data) {
   if (isAStreamByte(data[0])) {
     spiProcessPacketStream(data);
   } else {
-    spiProcessPacketResponse(data);
-    spiProcessPacketGain(data);
+    switch (data[0]) {
+      case WIFI_SPI_MSG_GAINS:
+        spiProcessPacketGain(data);
+        break;
+      case WIFI_SPI_MSG_LAST:
+      case WIFI_SPI_MSG_MULTI:
+        spiProcessPacketResponse(data);
+        break;
+      default:
+        break;
+    }
   }
 }
 
@@ -1167,12 +1176,9 @@ void OpenBCI_Wifi_Class::spiProcessPacketResponse(uint8_t *data) {
 
     switch (data[0]) {
       case WIFI_SPI_MSG_MULTI:
-        // Serial.print("mulit:\n\toutputString:\n\t"); Serial.print(outputString); Serial.print("\n\tnewString\n\t"); Serial.println(newString);
         outputString.concat(newString);
         break;
       case WIFI_SPI_MSG_LAST:
-        // Serial.println("last");
-        // Serial.print("last:\n\toutputString:\n\t"); Serial.print(outputString); Serial.print("\n\tnewString\n\t"); Serial.println(newString);
         outputString.concat(newString);
         clientWaitingForResponse = false;
 #ifdef DEBUG
