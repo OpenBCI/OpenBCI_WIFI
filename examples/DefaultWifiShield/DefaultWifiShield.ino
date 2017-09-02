@@ -847,7 +847,7 @@ void loop() {
   if (wifi.clientWaitingForResponse && (millis() > (wifi.timePassthroughBufferLoaded + 2000))) {
     wifi.clientWaitingForResponse = false;
     returnFail(502, "Error: timeout getting command response, be sure board is fully connected");
-    outputString = "";
+    wifi.outputString = "";
 #ifdef DEBUG
     Serial.println("Failed to get response in 1000ms");
 #endif
