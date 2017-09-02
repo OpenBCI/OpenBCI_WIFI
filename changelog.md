@@ -1,3 +1,14 @@
+# v1.1.3
+
+### Enhancements
+
+* Spurious code clean up
+
+### Bug Fixes
+
+* Fixed potential issue with gains
+* Fixed issue where `outputString` was not cleared after timeout.
+
 # v1.1.2
 
 ### Bug Fixes
