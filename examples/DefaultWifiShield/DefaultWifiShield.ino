@@ -270,7 +270,7 @@ void passthroughCommand() {
         case PASSTHROUGH_FAIL_TOO_MANY_CHARS:
           return returnFail(501, "Error: Sent more than 31 chars");
         case PASSTHROUGH_FAIL_NO_CHARS:
-          return returnFail(502, "Error: No characters found for key 'command'");
+          return returnFail(505, "Error: No characters found for key 'command'");
         case PASSTHROUGH_FAIL_QUEUE_FILLED:
           return returnFail(503, "Error: Queue is full, please wait 20ms and try again.");
         default:

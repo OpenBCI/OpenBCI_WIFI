@@ -1,3 +1,9 @@
+# v1.1.4
+
+### Bug Fixes
+
+* Calling to /tcp with POST could result in a 502 error when no characters found in _command_ key and also when there was a timeout waiting for the attached board to respond. Changed error when no characters found in _command_ key to 505.
+
 # v1.1.3
 
 ### Enhancements
