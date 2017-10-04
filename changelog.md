@@ -1,3 +1,9 @@
+# v1.2.0
+
+### Bug Fixes
+
+* Allow for CORS on HTTP server for every call. Closes #41
+
 # v1.1.4
 
 ### Bug Fixes
