@@ -163,13 +163,8 @@ boolean noBodyInParam() {
   return server.args() == 0;
 }
 
-void sendHeadersCORS(void) {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-}
-
 void serverReturn(int code, String s) {
   digitalWrite(LED_NOTIFY, LOW);
-  sendHeadersCORS();
   server.send(code, "text/plain", s + "\r\n");
   digitalWrite(LED_NOTIFY, HIGH);
 }
@@ -209,7 +204,6 @@ void returnMissingRequiredParam(const char *err) {
 
 void returnFail(int code, String msg) {
   digitalWrite(LED_NOTIFY, LOW);
-  sendHeadersCORS();
   server.send(code, "text/plain", msg + "\r\n");
   digitalWrite(LED_NOTIFY, HIGH);
 }
@@ -366,7 +360,6 @@ void tcpSetup() {
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
-    sendHeadersCORS();
     server.setContentLength(jsonStr.length());
     return server.send(200, "text/json", jsonStr.c_str());
   } else {
@@ -376,7 +369,6 @@ void tcpSetup() {
     jsonStr = wifi.getInfoTCP(false);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
-    sendHeadersCORS();
     server.setContentLength(jsonStr.length());
     return server.send(504, "text/json", jsonStr.c_str());
   }
@@ -387,6 +379,8 @@ void tcpSetup() {
  * {"username":"user_name", "password": "you_password", "broker_address": "/your.broker.com"}
  */
 void mqttSetup() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
   JsonObject& root = getArgFromArgs(20);
@@ -465,10 +459,8 @@ void mqttSetup() {
     connected = mqttConnect(mqttUsername, mqttPassword);
   }
   if (connected) {
-    sendHeadersCORS();
     return server.send(200, "text/json", wifi.getInfoMQTT(true));
   } else {
-    sendHeadersCORS();
     return server.send(505, "text/json", wifi.getInfoMQTT(false));
   }
 }
@@ -589,28 +581,22 @@ void setup() {
   Serial.printf("Starting HTTP...\n");
 #endif
   server.on("/", HTTP_GET, [](){
-    returnOK("Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
-  });
-  // server.on("/", HTTP_OPTIONS, []() {
-  //   server.sendHeader("Access-Control-Allow-Origin", "*");
-  //   server.sendHeader("Access-Control-Allow-Methods", "POST, DELETE, GET, OPTIONS");
-  //   server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  //   server.send(200, "text/plain", "" );
-  // });
-  server.on("*", HTTP_OPTIONS, []() {
-    server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    server.send(200, "text/plain", "");
+    digitalWrite(LED_NOTIFY, LOW);
+    // server.sendHeader("Access-Control-Allow-Origin", "*");
+    // server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
+    // server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    server.send(200, "text/plain", "Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
+    digitalWrite(LED_NOTIFY, HIGH);
   });
   server.on("/cloud", HTTP_GET, [](){
     digitalWrite(LED_NOTIFY, LOW);
-    sendHeadersCORS();
-    server.send(200, "text/html", "<!DOCTYPE html> html lang=\"en\"> <head><meta http-equiv=\"refresh\"content=\"0; url=https://app.getcloudbrain.com\"/><title>Redirecting ...</title></head></html>");
+    server.send(200, "text/html", "<!DOCTYPE html> html lang=\"en\"> <head><meta http-equiv=\"refresh\"content=\"0; url=https://app.exocortex.ai\"/><title>Redirecting ...</title></head></html>");
     digitalWrite(LED_NOTIFY, HIGH);
   });
   server.on("/index.html", HTTP_GET, [](){
-    returnOK("Push The World - OpenBCI - Wifi bridge - is up and running woo");
+    digitalWrite(LED_NOTIFY, LOW);
+    server.send(200, "text/plain", "Push The World - OpenBCI - Wifi bridge - is up and running woo");
+    digitalWrite(LED_NOTIFY, HIGH);
   });
   server.on("/description.xml", HTTP_GET, [](){
 #ifdef DEBUG
@@ -622,7 +608,6 @@ void setup() {
   });
   server.on("/yt", HTTP_GET, [](){
     digitalWrite(LED_NOTIFY, LOW);
-    sendHeadersCORS();
     server.send(200, "text/plain", "Keep going! Push The World!");
     digitalWrite(LED_NOTIFY, HIGH);
   });
@@ -652,14 +637,18 @@ void setup() {
   });
 
   server.on("/mqtt", HTTP_GET, []() {
-    sendHeadersCORS();
     server.send(200, "text/json", wifi.getInfoMQTT(clientMQTT.connected()));
   });
   server.on("/mqtt", HTTP_POST, mqttSetup);
+  server.on("/mqtt", HTTP_OPTIONS, []() {
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    server.send(200, "text/plain", "");
+  });
 
   server.on("/tcp", HTTP_GET, []() {
     String out = wifi.getInfoTCP(clientTCP.connected());
-    sendHeadersCORS();
     server.setContentLength(out.length());
     server.send(200, "application/json", out.c_str());
   });
@@ -667,7 +656,6 @@ void setup() {
   server.on("/tcp", HTTP_DELETE, []() {
     clientTCP.stop();
     jsonStr = wifi.getInfoTCP(false);
-    sendHeadersCORS();
     server.setContentLength(jsonStr.length());
     server.send(200, "text/json", jsonStr.c_str());
     jsonStr = "";
@@ -689,7 +677,7 @@ void setup() {
 
   server.on("/version", HTTP_GET, [](){
     digitalWrite(LED_NOTIFY, LOW);
-    returnOK(wifi.getVersion());
+    server.send(200, "text/plain", wifi.getVersion());
     digitalWrite(LED_NOTIFY, HIGH);
   });
 
@@ -711,9 +699,9 @@ void setup() {
   }
 
   server.onNotFound([](){
-    server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Access-Control-Allow-Methods", "POST, DELETE, GET, OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    // server.sendHeader("Access-Control-Allow-Origin", "*");
+    // server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
+    // server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
     server.send(404, "text/plain", "Route Not Found");
   });
   // server.onNotFound(handleNotFound);
@@ -721,7 +709,6 @@ void setup() {
   //get heap status, analog input value and all GPIO statuses in one json call
   server.on("/all", HTTP_GET, [](){
     String output = wifi.getInfoAll();
-    sendHeadersCORS();
     server.setContentLength(output.length());
     server.send(200, "text/json", output);
 #ifdef DEBUG
@@ -731,7 +718,6 @@ void setup() {
 
   server.on("/board", HTTP_GET, [](){
     String output = wifi.getInfoBoard();
-    sendHeadersCORS();
     server.setContentLength(output.length());
     server.send(200, "text/json", output);
 #ifdef DEBUG
@@ -895,7 +881,7 @@ void loop() {
               clientTCP.write("\r\n");
             }
           } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
-            clientMQTT.publish("openbci",(const char*)(wifi.rawBuffer + i)->data);
+            clientMQTT.publish("openbci:eeg",(const char*)(wifi.rawBuffer + i)->data);
           } else {
             Serial.println((const char*)(wifi.rawBuffer + i)->data);
           }
