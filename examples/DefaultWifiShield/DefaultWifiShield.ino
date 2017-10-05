@@ -591,11 +591,17 @@ void setup() {
   server.on("/", HTTP_GET, [](){
     returnOK("Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
   });
+  // server.on("/", HTTP_OPTIONS, []() {
+  //   server.sendHeader("Access-Control-Allow-Origin", "*");
+  //   server.sendHeader("Access-Control-Allow-Methods", "POST, DELETE, GET, OPTIONS");
+  //   server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  //   server.send(200, "text/plain", "" );
+  // });
   server.on("*", HTTP_OPTIONS, []() {
     server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Access-Control-Allow-Methods", "POST, DELETE, GET, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
     server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    server.send(200, "text/plain", "" );
+    server.send(200, "text/plain", "");
   });
   server.on("/cloud", HTTP_GET, [](){
     digitalWrite(LED_NOTIFY, LOW);
@@ -705,7 +711,9 @@ void setup() {
   }
 
   server.onNotFound([](){
-    sendHeadersCORS();
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "POST, DELETE, GET, OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     server.send(404, "text/plain", "Route Not Found");
   });
   // server.onNotFound(handleNotFound);
