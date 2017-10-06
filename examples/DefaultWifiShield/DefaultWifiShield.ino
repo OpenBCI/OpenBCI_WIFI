@@ -163,8 +163,20 @@ boolean noBodyInParam() {
   return server.args() == 0;
 }
 
+void sendHeadersForCORS() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+}
+
+void sendHeadersForOptions() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+  server.send(200, "text/plain", "");
+}
+
 void serverReturn(int code, String s) {
   digitalWrite(LED_NOTIFY, LOW);
+  sendHeadersForCORS();
   server.send(code, "text/plain", s + "\r\n");
   digitalWrite(LED_NOTIFY, HIGH);
 }
@@ -203,9 +215,7 @@ void returnMissingRequiredParam(const char *err) {
 }
 
 void returnFail(int code, String msg) {
-  digitalWrite(LED_NOTIFY, LOW);
-  server.send(code, "text/plain", msg + "\r\n");
-  digitalWrite(LED_NOTIFY, HIGH);
+  serverReturn(code, msg);
 }
 
 bool readRequest(WiFiClient& client) {
@@ -360,6 +370,7 @@ void tcpSetup() {
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
+    sendHeadersForCORS();
     server.setContentLength(jsonStr.length());
     return server.send(200, "text/json", jsonStr.c_str());
   } else {
@@ -369,6 +380,7 @@ void tcpSetup() {
     jsonStr = wifi.getInfoTCP(false);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
+    sendHeadersForCORS();
     server.setContentLength(jsonStr.length());
     return server.send(504, "text/json", jsonStr.c_str());
   }
@@ -379,7 +391,6 @@ void tcpSetup() {
  * {"username":"user_name", "password": "you_password", "broker_address": "/your.broker.com"}
  */
 void mqttSetup() {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
 
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
@@ -458,6 +469,7 @@ void mqttSetup() {
 #endif
     connected = mqttConnect(mqttUsername, mqttPassword);
   }
+  sendHeadersForCORS();
   if (connected) {
     return server.send(200, "text/json", wifi.getInfoMQTT(true));
   } else {
@@ -581,23 +593,23 @@ void setup() {
   Serial.printf("Starting HTTP...\n");
 #endif
   server.on("/", HTTP_GET, [](){
-    digitalWrite(LED_NOTIFY, LOW);
-    // server.sendHeader("Access-Control-Allow-Origin", "*");
-    // server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
-    // server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    server.send(200, "text/plain", "Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
-    digitalWrite(LED_NOTIFY, HIGH);
+    returnOK("Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
   });
+  server.on("/", HTTP_OPTIONS, sendHeadersForOptions);
+
   server.on("/cloud", HTTP_GET, [](){
     digitalWrite(LED_NOTIFY, LOW);
+    sendHeadersForCORS();
     server.send(200, "text/html", "<!DOCTYPE html> html lang=\"en\"> <head><meta http-equiv=\"refresh\"content=\"0; url=https://app.exocortex.ai\"/><title>Redirecting ...</title></head></html>");
     digitalWrite(LED_NOTIFY, HIGH);
   });
+  server.on("/cloud", HTTP_OPTIONS, sendHeadersForOptions);
+
   server.on("/index.html", HTTP_GET, [](){
-    digitalWrite(LED_NOTIFY, LOW);
-    server.send(200, "text/plain", "Push The World - OpenBCI - Wifi bridge - is up and running woo");
-    digitalWrite(LED_NOTIFY, HIGH);
+    returnOK("Push The World - OpenBCI - Wifi bridge - is up and running woo");
   });
+  server.on("/index.html", HTTP_OPTIONS, sendHeadersForOptions);
+
   server.on("/description.xml", HTTP_GET, [](){
 #ifdef DEBUG
     Serial.println("SSDP HIT");
@@ -607,10 +619,9 @@ void setup() {
     digitalWrite(LED_NOTIFY, HIGH);
   });
   server.on("/yt", HTTP_GET, [](){
-    digitalWrite(LED_NOTIFY, LOW);
-    server.send(200, "text/plain", "Keep going! Push The World!");
-    digitalWrite(LED_NOTIFY, HIGH);
+    returnOK("Keep going! Push The World!");
   });
+  server.on("/yt", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/test/start", HTTP_GET, [](){
     underSelfTest = true;
@@ -619,6 +630,8 @@ void setup() {
 #endif
     returnOK();
   });
+  server.on("/test/start", HTTP_OPTIONS, sendHeadersForOptions);
+
   server.on("/test/stop", HTTP_GET, [](){
     underSelfTest = false;
 #ifdef DEBUG
@@ -626,34 +639,38 @@ void setup() {
 #endif
     returnOK();
   });
+  server.on("/test/stop", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/output/json", HTTP_GET, [](){
     wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
     returnOK();
   });
+  server.on("/output/json", HTTP_OPTIONS, sendHeadersForOptions);
+
   server.on("/output/raw", HTTP_GET, [](){
     wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
     returnOK();
   });
+  server.on("/output/raw", HTTP_OPTIONS, sendHeadersForOptions);
+
 
   server.on("/mqtt", HTTP_GET, []() {
+    sendHeadersForCORS();
     server.send(200, "text/json", wifi.getInfoMQTT(clientMQTT.connected()));
   });
   server.on("/mqtt", HTTP_POST, mqttSetup);
-  server.on("/mqtt", HTTP_OPTIONS, []() {
-    server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
-    server.send(200, "text/plain", "");
-  });
+  server.on("/mqtt", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/tcp", HTTP_GET, []() {
+    sendHeadersForCORS();
     String out = wifi.getInfoTCP(clientTCP.connected());
     server.setContentLength(out.length());
     server.send(200, "application/json", out.c_str());
   });
   server.on("/tcp", HTTP_POST, tcpSetup);
+  server.on("/tcp", HTTP_OPTIONS, sendHeadersForOptions);
   server.on("/tcp", HTTP_DELETE, []() {
+    sendHeadersForCORS();
     clientTCP.stop();
     jsonStr = wifi.getInfoTCP(false);
     server.setContentLength(jsonStr.length());
@@ -668,25 +685,29 @@ void setup() {
     SPISlave.setData(wifi.passthroughBuffer, BYTES_PER_SPI_PACKET);
     returnOK();
   });
+  server.on("/stream/start", HTTP_OPTIONS, sendHeadersForOptions);
+
   server.on("/stream/stop", HTTP_GET, []() {
     if (!wifi.spiHasMaster()) return returnNoSPIMaster();
     wifi.passthroughCommands("s");
     SPISlave.setData(wifi.passthroughBuffer, BYTES_PER_SPI_PACKET);
     returnOK();
   });
+  server.on("/stream/stop", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/version", HTTP_GET, [](){
-    digitalWrite(LED_NOTIFY, LOW);
-    server.send(200, "text/plain", wifi.getVersion());
-    digitalWrite(LED_NOTIFY, HIGH);
+    returnOK(wifi.getVersion());
   });
+  server.on("/version", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/command", HTTP_POST, passthroughCommand);
+  server.on("/command", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/latency", HTTP_GET, [](){
     returnOK(String(wifi.getLatency()).c_str());
   });
   server.on("/latency", HTTP_POST, setLatency);
+  server.on("/latency", HTTP_OPTIONS, sendHeadersForOptions);
 
   if (!MDNS.begin(wifi.getName().c_str())) {
 #ifdef DEBUG
@@ -699,15 +720,12 @@ void setup() {
   }
 
   server.onNotFound([](){
-    // server.sendHeader("Access-Control-Allow-Origin", "*");
-    // server.sendHeader("Access-Control-Allow-Methods", "POST,DELETE,GET,OPTIONS");
-    // server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
-    server.send(404, "text/plain", "Route Not Found");
+    returnFail(404, "Route Not Found");
   });
-  // server.onNotFound(handleNotFound);
-  //
+
   //get heap status, analog input value and all GPIO statuses in one json call
   server.on("/all", HTTP_GET, [](){
+    sendHeadersForCORS();
     String output = wifi.getInfoAll();
     server.setContentLength(output.length());
     server.send(200, "text/json", output);
@@ -715,8 +733,10 @@ void setup() {
     Serial.println(output);
 #endif
   });
+  server.on("/all", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/board", HTTP_GET, [](){
+    sendHeadersForCORS();
     String output = wifi.getInfoBoard();
     server.setContentLength(output.length());
     server.send(200, "text/json", output);
@@ -724,11 +744,13 @@ void setup() {
     Serial.println(output);
 #endif
   });
+  server.on("/board", HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/wifi", HTTP_DELETE, []() {
     returnOK("Reseting wifi. Please power cycle your board in 10 seconds");
     wifiReset = true;
   });
+  server.on("/wifi", HTTP_OPTIONS, sendHeadersForOptions);
 
   httpUpdater.setup(&server);
 
