@@ -294,6 +294,7 @@ void passthroughCommand() {
 }
 
 void tcpSetup() {
+
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
   JsonObject& root = getArgFromArgs(7);
@@ -362,6 +363,7 @@ void tcpSetup() {
   // const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
   // DynamicJsonBuffer jsonBuffer(bufferSize);
   // JsonObject& rootOut = jsonBuffer.createObject();
+  sendHeadersForCORS();
   if (clientTCP.connect(wifi.tcpAddress, wifi.tcpPort)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
@@ -370,7 +372,6 @@ void tcpSetup() {
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
-    sendHeadersForCORS();
     server.setContentLength(jsonStr.length());
     return server.send(200, "text/json", jsonStr.c_str());
   } else {
@@ -380,7 +381,6 @@ void tcpSetup() {
     jsonStr = wifi.getInfoTCP(false);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
-    sendHeadersForCORS();
     server.setContentLength(jsonStr.length());
     return server.send(504, "text/json", jsonStr.c_str());
   }
@@ -391,7 +391,6 @@ void tcpSetup() {
  * {"username":"user_name", "password": "you_password", "broker_address": "/your.broker.com"}
  */
 void mqttSetup() {
-
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
   JsonObject& root = getArgFromArgs(20);
