@@ -341,7 +341,7 @@ uint8_t OpenBCI_Wifi_Class::getJSONMaxPackets(uint8_t numChannels) {
       return 6;
     case NUM_CHANNELS_CYTON:
     default:
-      return 8;
+      return 10;
   }
 }
 

@@ -709,7 +709,7 @@ void testGetJSONFromSamples() {
 void testGetJSONMaxPackets() {
   test.describe("getJSONMaxPackets");
 
-  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_GANGLION), 14, "should get the correct number for packets for ganglion", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_GANGLION), 10, "should get the correct number for packets for ganglion", __LINE__);
   test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON), 10, "should get the correct number for packets for cyton", __LINE__);
   test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON_DAISY), 6, "should get the correct number for packets for daisy cyton", __LINE__);
 }
@@ -916,7 +916,7 @@ void testReset() {
   test.assertEqual(wifi.timePassthroughBufferLoaded, (unsigned long)0, "should initialize the timeOfWifiTXBufferLoaded to 0");
   test.assertFalse(wifi.passthroughBufferLoaded, "should initialize the passthroughBuffer loaded", __LINE__);
   test.assertEqual(wifi.getHead(), 0, "should reset head to 0", __LINE__);
-  test.assertEqual(wifi.getJSONBufferSize(), (size_t)1876, "should reset jsonBufferSize to 0", __LINE__);
+  test.assertEqual(wifi.getJSONBufferSize(), (size_t)2556, "should reset jsonBufferSize to size with 8 channels", __LINE__);
   test.assertEqual(wifi.getLatency(), (unsigned long)DEFAULT_LATENCY, "should reset latency to default", __LINE__);
   test.assertEqual(wifi.getNTPOffset(), (unsigned long)0, "should reset ntpOffset to 0", __LINE__);
   test.assertEqual(wifi.getNumChannels(), 0, "should set numChannels to 0", __LINE__);
