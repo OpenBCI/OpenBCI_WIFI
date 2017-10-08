@@ -53,7 +53,7 @@ boolean mqttConnect(String username, String password) {
     Serial.println(JSON_CONNECTED);
 #endif
     // Once connected, publish an announcement...
-    clientMQTT.publish("openbci", "Will you Push The World?");
+    clientMQTT.publish("openbci:eeg", "Will you Push The World?");
     return true;
   } else {
     // Wait 5 seconds before retrying
@@ -68,7 +68,7 @@ boolean mqttConnect() {
     Serial.println(JSON_CONNECTED);
 #endif
     // Once connected, publish an announcement...
-    clientMQTT.publish("openbci", "Will you Push The World?");
+    clientMQTT.publish("openbci:egg", "Will you Push The World?");
     return true;
   } else {
     // Wait 5 seconds before retrying
@@ -944,7 +944,7 @@ void loop() {
         } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
           jsonStr = "";
           root.printTo(jsonStr);
-          clientMQTT.publish("openbci", jsonStr.c_str());
+          clientMQTT.publish("openbci:eeg", jsonStr.c_str());
           jsonStr = "";
         } else {
           root.printTo(jsonStr);
