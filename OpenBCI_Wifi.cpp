@@ -336,12 +336,12 @@ unsigned long OpenBCI_Wifi_Class::getLatency(void) {
 uint8_t OpenBCI_Wifi_Class::getJSONMaxPackets(uint8_t numChannels) {
   switch (numChannels) {
     case NUM_CHANNELS_GANGLION:
-      return 7; // Size of
+      return 10; // Size of
     case NUM_CHANNELS_CYTON_DAISY:
-      return 2;
+      return 6;
     case NUM_CHANNELS_CYTON:
     default:
-      return 5;
+      return 8;
   }
 }
 

@@ -697,18 +697,21 @@ void testGetJSONFromSamples() {
   test.detail("getJSONFromSamples");
   testGetJSONFromSamplesCytonSingle();
   testGetJSONFromSamplesCytonMax();
+  delay(100);
   testGetJSONFromSamplesCytonDaisySingle();
   testGetJSONFromSamplesCytonDaisyMax();
+  delay(100);
   testGetJSONFromSamplesGanglionSingle();
   testGetJSONFromSamplesGanglionMax();
+  delay(100);
 }
 
 void testGetJSONMaxPackets() {
   test.describe("getJSONMaxPackets");
 
-  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_GANGLION), 7, "should get the correct number for packets for ganglion", __LINE__);
-  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON), 5, "should get the correct number for packets for cyton", __LINE__);
-  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON_DAISY), 2, "should get the correct number for packets for daisy cyton", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_GANGLION), 14, "should get the correct number for packets for ganglion", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON), 10, "should get the correct number for packets for cyton", __LINE__);
+  test.assertEqual(wifi.getJSONMaxPackets(NUM_CHANNELS_CYTON_DAISY), 6, "should get the correct number for packets for daisy cyton", __LINE__);
 }
 
 void testGetJSON() {
