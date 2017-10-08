@@ -39,6 +39,7 @@
 #define LED_NOTIFY 5
 #define GANGLION_GAIN 51
 #define DEFAULT_LATENCY 10000
+#define DEFAULT_MQTT_PORT 1883
 // #define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
@@ -101,6 +102,7 @@
 #define JSON_MQTT_BROKER_ADDR "broker_address"
 #define JSON_MQTT_PASSWORD "password"
 #define JSON_MQTT_USERNAME "username"
+#define JSON_MQTT_PORT "port"
 #define JSON_NAME "name"
 #define JSON_NUM_CHANNELS "num_channels"
 #define JSON_SAMPLE_NUMBERS "sample_numbers"

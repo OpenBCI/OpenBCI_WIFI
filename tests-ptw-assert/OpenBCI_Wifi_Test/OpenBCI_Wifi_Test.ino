@@ -269,7 +269,7 @@ void testGetInfoMQTT() {
   boolean expected_connected = false;
   String actual_infoMqtt = wifi.getInfoMQTT(expected_connected);
 
-  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 270;
+  const size_t bufferSize = JSON_OBJECT_SIZE(7) + 1400;
   DynamicJsonBuffer jsonBuffer(bufferSize);
 
   // const char* json = "{\"broker_address\":\"mock.getcloudbrain.com\",\"connected\":false,\"username\":\"/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573\",\"password\":\"\"}";
@@ -286,12 +286,18 @@ void testGetInfoMQTT() {
   test.assertEqual(password, "", "should be an empty password", __LINE__);
   unsigned long latency = root["latency"];
   test.assertEqual(latency, (unsigned long)DEFAULT_LATENCY, "should get the default latency", __LINE__);
+  int port = root["port"];
+  test.assertEqual(port, (int)DEFAULT_MQTT_PORT, "should get the default port", __LINE__);
 
   String expected_brokerAddress = "mock.getcloudbrain.com";
   String expected_username = "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573";
   String expected_password = "";
+  int expected_port = 687;
 
-  wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password);
+  Serial.print("expected username1 "); Serial.println(expected_username);
+
+
+  wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password, expected_port);
   wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
   expected_connected = true;
   actual_infoMqtt = wifi.getInfoMQTT(expected_connected);
@@ -306,11 +312,14 @@ void testGetInfoMQTT() {
   output = root1.get<String>("output"); // "json"
   test.assertEqual(output, "json", "should switch to json", __LINE__);
   username = root1.get<String>("username"); // "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573"
+  Serial.print("expected username "); Serial.println(expected_username);
   test.assertEqual(username, expected_username, "should get username", __LINE__);
   password = root1.get<String>("password"); // ""
   test.assertEqual(password, expected_password, "should get password", __LINE__);
-  latency = root.get<unsigned long>("latency");
+  latency = root1.get<unsigned long>("latency");
   test.assertEqual(latency, (unsigned long)DEFAULT_LATENCY, "should get the default latency", __LINE__);
+  port = root1.get<int>("port");
+  test.assertEqual(port, (int)expected_port, "should get the new port number", __LINE__);
 }
 
 void testGetInfoTCP() {
@@ -908,6 +917,7 @@ void testReset() {
   test.assertEqual(wifi.mqttBrokerAddress, "", "should initialize mqttBrokerAddress to empty string", __LINE__);
   test.assertEqual(wifi.mqttUsername, "", "should initialize mqttUsername to empty string", __LINE__);
   test.assertEqual(wifi.mqttPassword, "", "should initialize mqttPassword to empty string", __LINE__);
+  test.assertEqual(wifi.mqttPort, DEFAULT_MQTT_PORT, "should initialize mqtt port to 1883", __LINE__);
   test.assertEqual(wifi.outputString, "", "should initialize outputString to empty string", __LINE__);
   test.assertEqual(wifi.passthroughPosition, 0, "should initialize the passthroughPosition to 0", __LINE__);
   test.assertEqual(wifi.tcpAddress.toString(), "0.0.0.0", "should initialize tcpAddress to empty string", __LINE__);
@@ -960,12 +970,14 @@ void testSetInfoMQTT() {
   String expected_brokerAddress = "mock.getcloudbrain.com";
   String expected_username = "/a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573:a253c7a141daca0dc6bfe5f51bee7ef5f1ca4b9cb9807ff0ea1f1737f771f573";
   String expected_password = "the password is not password";
+  int expected_port = 883;
 
-  wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password);
+  wifi.setInfoMQTT(expected_brokerAddress, expected_username, expected_password, expected_port);
   test.assertEqual((int)wifi.curOutputProtocol, (int)wifi.OUTPUT_PROTOCOL_MQTT, "should have set the output protocol to MQTT", __LINE__);
   test.assertEqual(wifi.mqttBrokerAddress, expected_brokerAddress, "should set mqttBrokerAddress", __LINE__);
   test.assertEqual(wifi.mqttUsername, expected_username, "should be able to set mqttUsername", __LINE__);
   test.assertEqual(wifi.mqttPassword, expected_password, "should be able to set mqttPassword", __LINE__);
+  test.assertEqual(wifi.mqttPort, (int)expected_port, "should be able to set mqttPort", __LINE__);
 }
 
 void testSetInfoTCP() {
@@ -2219,12 +2231,12 @@ void go() {
   test.begin();
   digitalWrite(ledPin, HIGH);
   testGetters();
-  delay(200);
+  delay(500);
   digitalWrite(ledPin, LOW);
-  testSetters();
-  delay(200);
+  // testSetters();
+  delay(500);
   digitalWrite(ledPin, HIGH);
-  testUtils();
+  // testUtils();
   test.end();
   digitalWrite(ledPin, LOW);
 }

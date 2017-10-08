@@ -139,7 +139,7 @@ public:
   void sampleReset(Sample *, uint8_t);
   void setGains(uint8_t *);
   void setGains(uint8_t *, uint8_t *);
-  void setInfoMQTT(String, String, String);
+  void setInfoMQTT(String, String, String, int);
   void setInfoTCP(String, int, boolean);
   void setLatency(unsigned long);
   void setNumChannels(uint8_t);
@@ -169,6 +169,7 @@ public:
 
   IPAddress tcpAddress;
 
+  int mqttPort;
   int tcpPort;
 
   OUTPUT_MODE curOutputMode;

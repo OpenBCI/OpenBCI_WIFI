@@ -73,6 +73,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   head = 0;
   lastSampleNumber = 0;
   lastTimeWasPolled = 0;
+  mqttPort = DEFAULT_MQTT_PORT;
   passthroughPosition = 0;
   tail = 0;
   tcpPort = 80;
@@ -222,7 +223,7 @@ String OpenBCI_Wifi_Class::getInfoBoard(void) {
 }
 
 String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
-  const size_t bufferSize = JSON_OBJECT_SIZE(6) + 1400;
+  const size_t bufferSize = JSON_OBJECT_SIZE(7) + 2000;
   StaticJsonBuffer<bufferSize> jsonBuffer;
   String json;
   JsonObject& root = jsonBuffer.createObject();
@@ -231,6 +232,7 @@ String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
   root[JSON_MQTT_USERNAME] = String(mqttUsername);
   root[JSON_TCP_OUTPUT] = getCurOutputModeString();
   root[JSON_LATENCY] = getLatency();
+  root[JSON_MQTT_PORT] = mqttPort;
   root.printTo(json);
   return json;
 }
@@ -616,10 +618,11 @@ void OpenBCI_Wifi_Class::setGains(uint8_t *raw) {
  * @param username      {String} - The username for the MQTT broker to user
  * @param password      {String} - The password for you to connect to
  */
-void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, String password) {
+void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, String password, int port) {
   mqttBrokerAddress = brokerAddress;
   mqttUsername = username;
   mqttPassword = password;
+  mqttPort = port;
   setOutputProtocol(OUTPUT_PROTOCOL_MQTT);
 }
 

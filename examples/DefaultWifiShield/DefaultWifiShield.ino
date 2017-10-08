@@ -393,7 +393,7 @@ void tcpSetup() {
 void mqttSetup() {
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs(20);
+  JsonObject& root = getArgFromArgs(25);
   //
   // size_t argBufferSize = JSON_OBJECT_SIZE(3) + 220;
   // DynamicJsonBuffer jsonBuffer(argBufferSize);
@@ -407,6 +407,14 @@ void mqttSetup() {
   String mqttPassword = "";
   if (root.containsKey(JSON_MQTT_PASSWORD)) {
     mqttPassword = root.get<String>(JSON_MQTT_PASSWORD);
+  }
+
+  int mqttPort = wifi.mqttPort;
+  if (root.containsKey(JSON_MQTT_PORT)) {
+    mqttPort = root.get<int>(JSON_MQTT_PORT);
+#ifdef DEBUG
+    Serial.print("Set mqtt port to "); Serial.println(wifi.mqttPort);
+#endif
   }
 
   if (root.containsKey(JSON_LATENCY)) {
@@ -454,8 +462,8 @@ void mqttSetup() {
   Serial.println("About to try and connect to cloudbrain MQTT server");
 #endif
 
-  wifi.setInfoMQTT(mqttBrokerAddress, mqttUsername, mqttPassword);
-  clientMQTT.setServer(wifi.mqttBrokerAddress.c_str(), 1883);
+  wifi.setInfoMQTT(mqttBrokerAddress, mqttUsername, mqttPassword, mqttPort);
+  clientMQTT.setServer(wifi.mqttBrokerAddress.c_str(), wifi.mqttPort);
   boolean connected = false;
   if (mqttUsername.equals("")) {
 #ifdef DEBUG
