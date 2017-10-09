@@ -4,7 +4,7 @@
 #include <WiFiClient.h>
 #include <Print.h>
 
-template<size_t BUFFER_SIZE = MAX_JSON_BUFFER_SIZE>
+template<size_t BUFFER_SIZE = 1440>
 class WiFiClientPrint : public Print
 {
   public:

@@ -16,6 +16,7 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <WiFiClientPrint.h>
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
@@ -41,6 +42,7 @@ unsigned long ntpLastTimeSeconds;
 
 WiFiClient clientTCP;
 WiFiClient espClient;
+WiFiClientPrint<> wifiPrinter(clientTCP);
 PubSubClient clientMQTT(espClient);
 
 ///////////////////////////////////////////
@@ -939,21 +941,23 @@ void loop() {
 
 
         if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
-          // root.printTo(Serial);
-          // WiFiClientPrint<> p(clientTCP);
-          root.printTo(jsonStr);
-          // root.printTo(p);
-          // p.flush();
-          clientTCP.write(jsonStr.c_str());
+          // root.printTo(jsonStr);
+          // clientTCP.write(jsonStr.c_str());
+          // jsonStr = "";
+          root.printTo(wifiPrinter);
           if (wifi.tcpDelimiter) {
-            clientTCP.write("\r\n");
+            wifiPrinter.write('\r');
+            wifiPrinter.write('\n');
           }
-          jsonStr = "";
+          wifiPrinter.flush();
         } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
           jsonStr = "";
           root.printTo(jsonStr);
           clientMQTT.publish("openbci:eeg", jsonStr.c_str());
           jsonStr = "";
+
+          // root.printTo(wifiPrinter);
+          // wifiPrinter.flush();
         } else {
           root.printTo(jsonStr);
           jsonStr = "";
