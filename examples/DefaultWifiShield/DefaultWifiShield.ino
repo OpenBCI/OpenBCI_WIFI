@@ -370,7 +370,8 @@ void tcpSetup() {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
-    clientTCP.setNoDelay(1);
+    // clientTCP.setNoDelay(1);
+    wifiPrinter.setClient(clientTCP);
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
@@ -943,6 +944,9 @@ void loop() {
         if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
           // root.printTo(jsonStr);
           // clientTCP.write(jsonStr.c_str());
+          // if (wifi.tcpDelimiter) {
+          //   clientTCP.write("\r\n");
+          // }
           // jsonStr = "";
           root.printTo(wifiPrinter);
           if (wifi.tcpDelimiter) {
