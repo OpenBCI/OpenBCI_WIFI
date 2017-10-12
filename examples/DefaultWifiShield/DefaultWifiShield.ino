@@ -16,7 +16,7 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <WiFiClientPrint.h>
+// #include <WiFiClientPrint.h>
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
@@ -42,7 +42,7 @@ unsigned long ntpLastTimeSeconds;
 
 WiFiClient clientTCP;
 WiFiClient espClient;
-WiFiClientPrint<> wifiPrinter(clientTCP);
+// WiFiClientPrint<> wifiPrinter(clientTCP);
 PubSubClient clientMQTT(espClient);
 
 ///////////////////////////////////////////
@@ -370,8 +370,8 @@ void tcpSetup() {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
-    // clientTCP.setNoDelay(1);
-    wifiPrinter.setClient(clientTCP);
+    clientTCP.setNoDelay(1);
+    // wifiPrinter.setClient(clientTCP);
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
@@ -942,18 +942,18 @@ void loop() {
 
 
         if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
-          // root.printTo(jsonStr);
-          // clientTCP.write(jsonStr.c_str());
-          // if (wifi.tcpDelimiter) {
-          //   clientTCP.write("\r\n");
-          // }
-          // jsonStr = "";
-          root.printTo(wifiPrinter);
+          root.printTo(jsonStr);
+          clientTCP.write(jsonStr.c_str());
           if (wifi.tcpDelimiter) {
-            wifiPrinter.write('\r');
-            wifiPrinter.write('\n');
+            clientTCP.write("\r\n");
           }
-          wifiPrinter.flush();
+          jsonStr = "";
+          // root.printTo(wifiPrinter);
+          // if (wifi.tcpDelimiter) {
+          //   wifiPrinter.write('\r');
+          //   wifiPrinter.write('\n');
+          // }
+          // wifiPrinter.flush();
         } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
           jsonStr = "";
           root.printTo(jsonStr);
