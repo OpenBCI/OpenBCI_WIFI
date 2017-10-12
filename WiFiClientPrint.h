@@ -4,7 +4,7 @@
 #include <WiFiClient.h>
 #include <Print.h>
 
-template<size_t BUFFER_SIZE = 2000>
+template<size_t BUFFER_SIZE = 5000>
 class WiFiClientPrint : public Print
 {
   public:
