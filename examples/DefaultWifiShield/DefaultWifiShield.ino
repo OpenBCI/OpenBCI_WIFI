@@ -16,7 +16,6 @@
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-// #include <WiFiClientPrint.h>
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
@@ -42,7 +41,6 @@ unsigned long ntpLastTimeSeconds;
 
 WiFiClient clientTCP;
 WiFiClient espClient;
-// WiFiClientPrint<> wifiPrinter(clientTCP);
 PubSubClient clientMQTT(espClient);
 
 ///////////////////////////////////////////
@@ -525,7 +523,7 @@ void setup() {
   initializeVariables();
 
 #ifdef DEBUG
-  Serial.begin(115200);
+  Serial.begin(230400);
   Serial.setDebugOutput(true);
   Serial.println("Serial started");
 #endif
@@ -915,7 +913,11 @@ void loop() {
           } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
             clientMQTT.publish("openbci:eeg",(const char*)(wifi.rawBuffer + i)->data);
           } else {
-            Serial.println((const char*)(wifi.rawBuffer + i)->data);
+#ifdef DEBUG
+            for (int j = 0; j < (wifi.rawBuffer + i)->positionWrite; j++) {
+              Serial.write((wifi.rawBuffer + i)->data[j]);
+            }
+#endif
           }
           wifi.rawBufferReset(wifi.rawBuffer + i);
           lastSendToClient = micros();
@@ -976,5 +978,4 @@ void loop() {
     }
   }
   // delay(0);
-
 }
