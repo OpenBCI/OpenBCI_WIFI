@@ -49,9 +49,11 @@ void OpenBCI_Wifi_Class::initArrays(void) {
 */
 void OpenBCI_Wifi_Class::initObjects(void) {
   setNumChannels(0);
+#ifdef RAW_TO_JSON
   for (size_t i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
     wifi.sampleReset(sampleBuffer + i);
   }
+#endif
   for (size_t i = 0; i < NUM_RAW_BUFFERS; i++) {
     wifi.rawBufferReset(rawBuffer + i);
   }
@@ -82,9 +84,11 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   _latency = DEFAULT_LATENCY;
   _ntpOffset = 0;
 
+#ifdef MQTT
   mqttBrokerAddress = "";
   mqttUsername = "";
   mqttPassword = "";
+#endif
   outputString = "";
 
   tcpAddress = IPAddress();
@@ -222,6 +226,7 @@ String OpenBCI_Wifi_Class::getInfoBoard(void) {
   return output;
 }
 
+#ifdef MQTT
 String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
   const size_t bufferSize = JSON_OBJECT_SIZE(7) + 2000;
   StaticJsonBuffer<bufferSize> jsonBuffer;
@@ -236,6 +241,7 @@ String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
   root.printTo(json);
   return json;
 }
+#endif
 
 String OpenBCI_Wifi_Class::getInfoTCP(boolean clientTCPConnected) {
   const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
@@ -275,7 +281,7 @@ int OpenBCI_Wifi_Class::getJSONAdditionalBytes(uint8_t numChannels) {
 size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
   return _jsonBufferSize;
 }
-
+#ifdef RAW_TO_JSON
 /**
  * Used to pack Samples into a single JSON chunk to be sent out to client. The
  *
@@ -323,7 +329,7 @@ void OpenBCI_Wifi_Class::getJSONFromSamples(JsonObject& root, uint8_t numChannel
   // root.printTo(returnStr);
   // return returnStr;
 }
-
+#endif
 /**
  * Gets the latency
  * @return  {unsigned long} - The latency of the system
@@ -612,6 +618,7 @@ void OpenBCI_Wifi_Class::setGains(uint8_t *raw) {
   setGains(raw, _gains);
 }
 
+#ifdef RAW_TO_JSON
 /**
  * Used to set the information required for a succesful MQTT communication
  * @param brokerAddress {String} - A string such as 'mock.getcloudbrain.com'
@@ -625,7 +632,7 @@ void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, Stri
   mqttPort = port;
   setOutputProtocol(OUTPUT_PROTOCOL_MQTT);
 }
-
+#endif
 /**
  * Used to configure the requried internal variables for TCP communication
  * @param address   {IPAddress} - The ip address in string form: "192.168.0.1"
@@ -692,6 +699,7 @@ void OpenBCI_Wifi_Class::setOutputProtocol(OUTPUT_PROTOCOL newOutputProtocol) {
 ////////////////////////////
 ////////////////////////////
 
+#ifdef RAW_TO_JSON
 /**
  * Return true if the channel data array is full
  * @param arr           {uint8_t *] - 32 byte array from Cyton or Ganglion
@@ -724,6 +732,7 @@ void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, uint8_t *gains, Sample
     transformRawsToScaledCyton(temp_raw, gains, packetOffset, sample->channelData);
   }
 }
+#endif
 
 /**
  * Used to print out a long long number
@@ -1052,7 +1061,7 @@ void OpenBCI_Wifi_Class::rawBufferReset(RawBuffer *buf) {
   buf->gotAllPackets = false;
   buf->positionWrite = 0;
 }
-
+#ifdef RAW_TO_JSON
 /**
  * Resets all the samples assuming 16 channels
  */
@@ -1082,7 +1091,7 @@ void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
   sample->sampleNumber = 0;
   sample->timestamp = 0;
 }
-
+#endif
 /**
  * Has the SPI Master polled this device in the past SPI_MASTER_POLL_TIMEOUT_MS
  * @returns [boolean] True if SPI Master has polled within timeout.
@@ -1129,6 +1138,7 @@ void OpenBCI_Wifi_Class::spiProcessPacketGain(uint8_t *data) {
   }
 }
 
+#ifdef RAW_TO_JSON
 void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
   if (getNumChannels() > MAX_CHANNELS_PER_PACKET) {
     // DO DAISY
@@ -1154,17 +1164,22 @@ void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
     head++;
   }
 }
+#endif
 
 void OpenBCI_Wifi_Class::spiProcessPacketStreamRaw(uint8_t *data) {
   rawBufferProcessPacket(data);
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {
+#ifdef RAW_TO_JSON
   if (curOutputMode == OUTPUT_MODE_JSON) {
     spiProcessPacketStreamJSON(data);
   } else {
     spiProcessPacketStreamRaw(data);
   }
+#else
+  spiProcessPacketStreamRaw(data);
+#endif
 }
 
 /**

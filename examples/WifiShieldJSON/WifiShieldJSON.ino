@@ -2,6 +2,7 @@
 #define ARDUINOJSON_USE_DOUBLE 1
 #define ARDUINO_ARCH_ESP8266
 #define ESP8266
+// #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #include <time.h>
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -12,10 +13,8 @@
 #include "SPISlave.h"
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
+#include <PubSubClient.h>
 #include <ArduinoJson.h>
-#ifdef MQTT
-  #include <PubSubClient.h>
-#endif
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
@@ -40,17 +39,13 @@ unsigned long lastMQTTConnectAttempt;
 unsigned long ntpLastTimeSeconds;
 
 WiFiClient clientTCP;
-
-#ifdef RAW_TO_JSON
 WiFiClient espClient;
 PubSubClient clientMQTT(espClient);
-#endif
 
 ///////////////////////////////////////////
 // Utility functions
 ///////////////////////////////////////////
 
-#ifdef RAW_TO_JSON
 boolean mqttConnect(String username, String password) {
   if (clientMQTT.connect(wifi.getName().c_str(), username.c_str(), password.c_str())) {
 #ifdef DEBUG
@@ -80,7 +75,6 @@ boolean mqttConnect() {
     return false;
   }
 }
-#endif
 
 void printWifiStatus() {
   // print the SSID of the network you're attached to:
@@ -97,7 +91,7 @@ void printWifiStatus() {
 // NTP BEGIN
 ///////////////////////////////////////////
 
-#ifdef RAW_TO_JSON
+
 /**
  * Use this to start the sntp time sync
  * @type {Number}
@@ -108,14 +102,12 @@ void ntpStart() {
 #endif
   configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 }
-#endif
 
 
 ///////////////////////////////////////////////////
 // MQTT
 ///////////////////////////////////////////////////
 
-#ifdef RAW_TO_JSON
 void callbackMQTT(char* topic, byte* payload, unsigned int length) {
 
 #ifdef DEBUG
@@ -128,7 +120,7 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   Serial.println();
 #endif
 }
-#endif
+
 /**
  * Used when
  */
@@ -352,11 +344,11 @@ void tcpSetup() {
   // DynamicJsonBuffer jsonBuffer(bufferSize);
   // JsonObject& rootOut = jsonBuffer.createObject();
   sendHeadersForCORS();
-  clientTCP.setNoDelay(1);
   if (clientTCP.connect(wifi.tcpAddress, wifi.tcpPort)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
+    clientTCP.setNoDelay(0);
     // wifiPrinter.setClient(clientTCP);
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
@@ -375,7 +367,6 @@ void tcpSetup() {
   }
 }
 
-#ifdef RAW_TO_JSON
 /**
  * Function called on route `/mqtt` with HTTP_POST with body
  * {"username":"user_name", "password": "you_password", "broker_address": "/your.broker.com"}
@@ -473,7 +464,6 @@ void mqttSetup() {
     return server.send(505, RETURN_TEXT_JSON, wifi.getInfoMQTT(false));
   }
 }
-#endif
 
 void removeWifiAPInfo() {
   // wifi.curClientResponse = wifi.CLIENT_RESPONSE_OUTPUT_STRING;
@@ -500,9 +490,7 @@ void rawBufferFlush(uint8_t bufNum) {
       clientTCP.write("\r\n");
     }
   } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
-#ifdef RAW_TO_JSON
     clientMQTT.publish(MQTT_ROUTE_KEY, (const char*)(wifi.rawBuffer + bufNum)->data);
-#endif
   } else {
 #ifdef DEBUG
     for (int j = 0; j < (wifi.rawBuffer + bufNum)->positionWrite; j++) {
@@ -646,12 +634,8 @@ void setup() {
   server.on(HTTP_ROUTE_YT, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_OUTPUT_JSON, HTTP_GET, [](){
-#ifdef RAW_TO_JSON
     wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
     returnOK();
-#else
-    returnFail(555, "Using default firmware optimized for raw, please update to JSON/MQTT firmware!");
-#endif
   });
   server.on(HTTP_ROUTE_OUTPUT_JSON, HTTP_OPTIONS, sendHeadersForOptions);
 
@@ -661,20 +645,12 @@ void setup() {
   });
   server.on(HTTP_ROUTE_OUTPUT_RAW, HTTP_OPTIONS, sendHeadersForOptions);
 
-#ifdef RAW_TO_JSON
+
   server.on(HTTP_ROUTE_MQTT, HTTP_GET, []() {
     sendHeadersForCORS();
     server.send(200, RETURN_TEXT_JSON, wifi.getInfoMQTT(clientMQTT.connected()));
   });
   server.on(HTTP_ROUTE_MQTT, HTTP_POST, mqttSetup);
-#else
-  server.on(HTTP_ROUTE_MQTT, HTTP_GET, []() {
-    returnFail(555, "Using default firmware optimized for raw, please update to JSON/MQTT firmware!");
-  });
-  server.on(HTTP_ROUTE_MQTT, HTTP_POST, []() {
-    returnFail(555, "Using default firmware optimized for raw, please update to JSON/MQTT firmware!");
-  });
-#endif
   server.on(HTTP_ROUTE_MQTT, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_TCP, HTTP_GET, []() {
@@ -789,9 +765,7 @@ void setup() {
     ntpLastTimeSeconds = millis();
   }
 
-#ifdef RAW_TO_JSON
   clientMQTT.setCallback(callbackMQTT);
-#endif
 
 #ifdef DEBUG
   Serial.println("Spi has master: " + String(wifi.spiHasMaster() ? "true" : "false"));
@@ -816,7 +790,6 @@ void loop() {
     delay(1000);
   }
 
-#ifdef RAW_TO_JSON
   if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
     if (clientMQTT.connected()) {
       clientMQTT.loop();
@@ -857,7 +830,6 @@ void loop() {
       ntpLastTimeSeconds = millis();
     }
   }
-#endif JSON
 
   if (wifi.clientWaitingForResponseFullfilled) {
     wifi.clientWaitingForResponseFullfilled = false;
@@ -882,86 +854,85 @@ void loop() {
 #endif
   }
 
-  if ((micros() > (lastSendToClient + wifi.getLatency()))) {
-#ifdef RAW_TO_JSON
-    if((clientTCP.connected() || clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL)) {
-      if (wifi.curOutputMode == wifi.OUTPUT_MODE_RAW) {
-        // If the first buffer is being loaded
-        if (wifi.curRawBuffer == wifi.rawBuffer) {
-          // Does the other raw buffer have data in it? Maybe it's ready to flush?
-          if (wifi.rawBufferHasData(wifi.rawBuffer + 1)) {
-            rawBufferFlush(1);
-          }
-        // So curRawBuffer is the second buffer...
-        } else {
-          // Does the first raw buffer have data in it?
-          if (wifi.rawBufferHasData(wifi.rawBuffer)) {
-            rawBufferFlush(0);
-          }
-        }
-      } else { // output mode is JSON
-        if (packetsToSend < 0) {
-          packetsToSend = NUM_PACKETS_IN_RING_BUFFER_JSON + packetsToSend; // for wrap around
-        }
-        if (packetsToSend > wifi.getJSONMaxPackets()) {
-          packetsToSend = wifi.getJSONMaxPackets();
-        }
-
-        if (packetsToSend > 0) {
-          digitalWrite(LED_NOTIFY, LOW);
-
-          DynamicJsonBuffer jsonSampleBuffer(wifi.getJSONBufferSize());
-          JsonObject& root = jsonSampleBuffer.createObject();
-
-          wifi.getJSONFromSamples(root, wifi.getNumChannels(), packetsToSend);
-
-          if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
-            root.printTo(jsonStr);
-            clientTCP.write(jsonStr.c_str());
-            if (wifi.tcpDelimiter) {
-              clientTCP.write("\r\n");
-            }
-            jsonStr = "";
-          } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
-            jsonStr = "";
-            root.printTo(jsonStr);
-            clientMQTT.publish(MQTT_ROUTE_KEY, jsonStr.c_str());
-            jsonStr = "";
-
-            // root.printTo(wifiPrinter);
-            // wifiPrinter.flush();
-          } else {
-            root.printTo(jsonStr);
-            jsonStr = "";
-            // root.printTo(Serial);
-  #ifdef DEBUG
-            Serial.println();
-  #endif
-          }
-          lastSendToClient = micros();
-          digitalWrite(LED_NOTIFY, HIGH);
-        }
-      }
-    }
-#else
-    if((clientTCP.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL)) {
+  if((clientTCP.connected() || clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL) && (micros() > (lastSendToClient + wifi.getLatency()))) {
+    if (wifi.curOutputMode == wifi.OUTPUT_MODE_RAW) {
+      // If the first buffer is being loaded
+      unsigned long nowish = millis();
       if (wifi.curRawBuffer == wifi.rawBuffer) {
         // Does the other raw buffer have data in it? Maybe it's ready to flush?
         if (wifi.rawBufferHasData(wifi.rawBuffer + 1)) {
           rawBufferFlush(1);
-        } else if (wifi.rawBufferHasData(wifi.rawBuffer)) {
-          rawBufferFlush(0);
+          Serial.printf("t-1: %lu\n",millis()-nowish);
         }
+
+        // Welp... might as well see if this buffer has data in it...
+        // } else if (wifi.rawBufferHasData(wifi.rawBuffer)) {
+          // rawBufferFlush(0);
+        // }
       // So curRawBuffer is the second buffer...
       } else {
         // Does the first raw buffer have data in it?
         if (wifi.rawBufferHasData(wifi.rawBuffer)) {
           rawBufferFlush(0);
-        } else if (wifi.rawBufferHasData(wifi.rawBuffer + 1)) {
-          rawBufferFlush(1);
+          Serial.printf("t-0: %lu\n",millis()-nowish);
         }
+
+        // Crap, so the current buffer.. maybe there is data in it?
+        // } else if (wifi.rawBufferHasData(wifi.rawBuffer)) {
+          // rawBufferFlush(1);
+        // }
+      }
+    } else { // output mode is JSON
+      int packetsToSend = wifi.head - wifi.tail;
+      if (packetsToSend < 0) {
+        packetsToSend = NUM_PACKETS_IN_RING_BUFFER_JSON + packetsToSend; // for wrap around
+      }
+      if (packetsToSend > wifi.getJSONMaxPackets()) {
+        packetsToSend = wifi.getJSONMaxPackets();
+      }
+
+      if (packetsToSend > 0) {
+        digitalWrite(LED_NOTIFY, LOW);
+
+        DynamicJsonBuffer jsonSampleBuffer(wifi.getJSONBufferSize());
+        JsonObject& root = jsonSampleBuffer.createObject();
+
+        wifi.getJSONFromSamples(root, wifi.getNumChannels(), packetsToSend);
+
+
+        if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
+          root.printTo(jsonStr);
+          clientTCP.write(jsonStr.c_str());
+          if (wifi.tcpDelimiter) {
+            clientTCP.write("\r\n");
+          }
+          jsonStr = "";
+          // root.printTo(wifiPrinter);
+          // if (wifi.tcpDelimiter) {
+          //   wifiPrinter.write('\r');
+          //   wifiPrinter.write('\n');
+          // }
+          // wifiPrinter.flush();
+        } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
+          jsonStr = "";
+          root.printTo(jsonStr);
+          clientMQTT.publish(MQTT_ROUTE_KEY, jsonStr.c_str());
+          jsonStr = "";
+
+          // root.printTo(wifiPrinter);
+          // wifiPrinter.flush();
+        } else {
+          root.printTo(jsonStr);
+          jsonStr = "";
+          // root.printTo(Serial);
+#ifdef DEBUG
+          Serial.println();
+#endif
+        }
+        lastSendToClient = micros();
+        digitalWrite(LED_NOTIFY, HIGH);
       }
     }
-#endif
   }
+  // delay(0);
 }
