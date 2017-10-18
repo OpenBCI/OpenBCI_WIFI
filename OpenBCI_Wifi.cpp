@@ -77,6 +77,8 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   lastTimeWasPolled = 0;
   mqttPort = DEFAULT_MQTT_PORT;
   passthroughPosition = 0;
+  rawBufferHead = 0;
+  rawBufferTail = 0;
   tail = 0;
   tcpPort = 80;
   timePassthroughBufferLoaded = 0;
@@ -95,7 +97,6 @@ void OpenBCI_Wifi_Class::initVariables(void) {
 
   curOutputMode = OUTPUT_MODE_RAW;
   curOutputProtocol = OUTPUT_PROTOCOL_NONE;
-  curRawBuffer = rawBuffer;
 }
 
 void OpenBCI_Wifi_Class::reset(void) {
@@ -917,7 +918,7 @@ double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
 * @author AJ Keller (@pushtheworldllc)
 */
 boolean OpenBCI_Wifi_Class::rawBufferAddStreamPacket(RawBuffer *buf, uint8_t *data) {
-  // Serial.print("Pos write "); Serial.println(curRawBuffer->positionWrite);
+  // Serial.print("Pos write "); Serial.println(buf->positionWrite);
   if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - BYTES_PER_OBCI_PACKET)) {
     buf->gotAllPackets = true;
     return false;
@@ -960,25 +961,25 @@ boolean OpenBCI_Wifi_Class::rawBufferHasData(RawBuffer *buf) {
 
 byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data) {
   // Current buffer has no data
-  if (rawBufferReadyForNewPage(curRawBuffer)) {
+  if (rawBufferReadyForNewPage(rawBuffer + rawBufferHead)) {
     // Serial.println("Not last packet / Current buffer has no data");
     // Take it, not last
-    if (rawBufferAddStreamPacket(curRawBuffer,data)) {
+    if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
       // Return that a packet that was not last was added
       return PROCESS_RAW_PASS_FIRST;
     } else {
-      // Return that packet failed to be added on teh first time, i.e. length
+      // Return that packet failed to be added on the first time, i.e. length
       //  `len` was greater than the length of the whole rawBuffer->buf
       return PROCESS_RAW_FAIL_OVERFLOW_FIRST;
     }
   // Current buffer has data
   } else {
     // Current buffer has all packets, is in a locked state
-    if (curRawBuffer->gotAllPackets || curRawBuffer->flushing) {
+    if ((rawBuffer + rawBufferHead)->gotAllPackets || (rawBuffer + rawBufferHead)->flushing) {
       // Can switch to other buffer
       if (rawBufferSwitchToOtherBuffer()) {
         // Take it! Not last
-        if (rawBufferAddStreamPacket(curRawBuffer,data)) {
+        if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
           // Return that a packet was added
           return PROCESS_RAW_PASS_SWITCH;
         } else {
@@ -995,7 +996,7 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data) {
       // Current buffer does not have all packets
     } else {
       // Take it! Not last.
-      if (rawBufferAddStreamPacket(curRawBuffer,data)) {
+      if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
         // Return that a packet that was not first was added
         return PROCESS_RAW_PASS_MIDDLE;
       } else {
@@ -1025,22 +1026,12 @@ boolean OpenBCI_Wifi_Class::rawBufferReadyForNewPage(RawBuffer *buf) {
 * @author AJ Keller (@pushtheworldllc)
 */
 boolean OpenBCI_Wifi_Class::rawBufferSwitchToOtherBuffer(void) {
-  if (NUM_RAW_BUFFERS == 2) {
-    // current radio buffer is set to the first one
-    if (curRawBuffer == rawBuffer) {
-      if (rawBufferReadyForNewPage(rawBuffer + 1)) {
-        curRawBuffer++;
-        return true;
-      }
-      // current radio buffer is set to the second one
-    } else {
-      if (rawBufferReadyForNewPage(rawBuffer)) {
-        curRawBuffer--;
-        return true;
-      }
-    }
+  rawBufferHead++;
+  if (rawBufferHead >= NUM_RAW_BUFFERS) {
+    rawBufferHead = 0;
   }
-  return false;
+  // Does the new head have data? This means we wrapped around :( if true.
+  return !rawBufferHasData(rawBuffer + rawBufferHead);
 }
 
 /**

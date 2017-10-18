@@ -352,11 +352,11 @@ void tcpSetup() {
   // DynamicJsonBuffer jsonBuffer(bufferSize);
   // JsonObject& rootOut = jsonBuffer.createObject();
   sendHeadersForCORS();
-  clientTCP.setNoDelay(1);
   if (clientTCP.connect(wifi.tcpAddress, wifi.tcpPort)) {
 #ifdef DEBUG
     Serial.println("Connected to server");
 #endif
+    clientTCP.setNoDelay(1);
     // wifiPrinter.setClient(clientTCP);
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
@@ -886,17 +886,13 @@ void loop() {
 #ifdef RAW_TO_JSON
     if((clientTCP.connected() || clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL)) {
       if (wifi.curOutputMode == wifi.OUTPUT_MODE_RAW) {
-        // If the first buffer is being loaded
-        if (wifi.curRawBuffer == wifi.rawBuffer) {
-          // Does the other raw buffer have data in it? Maybe it's ready to flush?
-          if (wifi.rawBufferHasData(wifi.rawBuffer + 1)) {
-            rawBufferFlush(1);
+        while (wifi.rawBufferTail != wifi.rawBufferHead) {
+          if (wifi.rawBufferHasData(wifi.rawBuffer + wifi.rawBufferTail)) {
+            rawBufferFlush(wifi.rawBufferTail);
           }
-        // So curRawBuffer is the second buffer...
-        } else {
-          // Does the first raw buffer have data in it?
-          if (wifi.rawBufferHasData(wifi.rawBuffer)) {
-            rawBufferFlush(0);
+          wifi.rawBufferTail++;
+          if (wifi.rawBufferTail > NUM_RAW_BUFFERS) {
+            wifi.rawBufferTail = 0;
           }
         }
       } else { // output mode is JSON
@@ -945,21 +941,12 @@ void loop() {
     }
 #else
     if((clientTCP.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL)) {
-      if (wifi.curRawBuffer == wifi.rawBuffer) {
-        // Does the other raw buffer have data in it? Maybe it's ready to flush?
-        if (wifi.rawBufferHasData(wifi.rawBuffer + 1)) {
-          rawBufferFlush(1);
-        } else if (wifi.rawBufferHasData(wifi.rawBuffer)) {
-          rawBufferFlush(0);
-        }
-      // So curRawBuffer is the second buffer...
-      } else {
-        // Does the first raw buffer have data in it?
-        if (wifi.rawBufferHasData(wifi.rawBuffer)) {
-          rawBufferFlush(0);
-        } else if (wifi.rawBufferHasData(wifi.rawBuffer + 1)) {
-          rawBufferFlush(1);
-        }
+      if (wifi.rawBufferHasData(wifi.rawBuffer + wifi.rawBufferTail)) {
+        rawBufferFlush(wifi.rawBufferTail);
+      }
+      wifi.rawBufferTail++;
+      if (wifi.rawBufferTail >= NUM_RAW_BUFFERS) {
+        wifi.rawBufferTail = 0;
       }
     }
 #endif

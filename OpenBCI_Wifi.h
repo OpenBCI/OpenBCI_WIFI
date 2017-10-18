@@ -55,8 +55,8 @@ public:
     CYTON_GAIN_24
   };
 
-#ifdef RAW_TO_JSON
   // STRUCTS
+#ifdef RAW_TO_JSON
   typedef struct {
     double channelData[NUM_CHANNELS_CYTON_DAISY];
     unsigned long long timestamp;
@@ -185,7 +185,6 @@ public:
   OUTPUT_MODE curOutputMode;
   OUTPUT_PROTOCOL curOutputProtocol;
 
-  RawBuffer *curRawBuffer;
   RawBuffer rawBuffer[NUM_RAW_BUFFERS];
 
 #ifdef RAW_TO_JSON
@@ -208,6 +207,8 @@ public:
 
   volatile uint8_t head;
   volatile uint8_t tail;
+  volatile uint8_t rawBufferHead;
+  volatile uint8_t rawBufferTail;
 
 private:
   // Functions
