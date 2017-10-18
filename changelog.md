@@ -1,3 +1,12 @@
+# v1.2.0
+
+### Bug Fixes
+
+* Allow for CORS on HTTP server for every call. Closes #41
+* Extend max tcp packets per send
+* Optimize JSON packet streaming for better performance, allows for latency up to 39ms for 8 channel and 4 channel and 25ms for 16 channel when streaming out JSON
+* Changed return of route of /cloud
+
 # v1.1.4
 
 ### Bug Fixes
