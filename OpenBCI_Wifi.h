@@ -39,6 +39,7 @@ public:
   typedef enum OUTPUT_PROTOCOL {
     OUTPUT_PROTOCOL_NONE,
     OUTPUT_PROTOCOL_TCP,
+    OUTPUT_PROTOCOL_UDP,
     OUTPUT_PROTOCOL_MQTT,
     OUTPUT_PROTOCOL_WEB_SOCKETS,
     OUTPUT_PROTOCOL_SERIAL,
@@ -141,6 +142,7 @@ public:
   void setGains(uint8_t *);
   void setGains(uint8_t *, uint8_t *);
   void setInfoMQTT(String, String, String, int);
+  void setInfoUDP(String, int, boolean);
   void setInfoTCP(String, int, boolean);
   void setLatency(unsigned long);
   void setNumChannels(uint8_t);

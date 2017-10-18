@@ -26,6 +26,9 @@ boolean syncingNtp;
 boolean waitingOnNTP;
 boolean wifiReset;
 
+int udpPort;
+IPAddress udpAddress;
+
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 
@@ -39,6 +42,7 @@ unsigned long lastHeadMove;
 unsigned long lastMQTTConnectAttempt;
 unsigned long ntpLastTimeSeconds;
 
+WiFiUDP clientUDP;
 WiFiClient clientTCP;
 WiFiClient espClient;
 PubSubClient clientMQTT(espClient);
@@ -387,6 +391,75 @@ void tcpSetup() {
   }
 }
 
+void udpSetup() {
+
+  // Parse args
+  if(noBodyInParam()) return returnNoBodyInPost(); // no body
+  JsonObject& root = getArgFromArgs(7);
+  if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
+  String tempAddr = root[JSON_TCP_IP];
+  IPAddress tempIPAddr;
+  if (!tempIPAddr.fromString(tempAddr)) {
+    return returnFail(505, "Error: unable to parse ip address. Please send as string in octets i.e. xxx.xxx.xxx.xxx");
+  }
+  if (!root.containsKey(JSON_TCP_PORT)) return returnMissingRequiredParam(JSON_TCP_PORT);
+  int port = root[JSON_TCP_PORT];
+  if (root.containsKey(JSON_TCP_OUTPUT)) {
+    String outputModeStr = root[JSON_TCP_OUTPUT];
+    if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW))) {
+      wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
+    } else if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON))) {
+      wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
+    } else {
+      return returnFail(506, "Error: '" + String(JSON_TCP_OUTPUT) + "' must be either " + wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW)+" or " + wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON));
+    }
+#ifdef DEBUG
+    Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
+#endif
+  }
+
+  if (root.containsKey(JSON_LATENCY)) {
+    int latency = root[JSON_LATENCY];
+    wifi.setLatency(latency);
+#ifdef DEBUG
+    Serial.print("Set latency to "); Serial.print(wifi.getLatency()); Serial.println(" uS");
+#endif
+  }
+
+  boolean tcpDelimiter = wifi.tcpDelimiter;
+  if (root.containsKey(JSON_TCP_DELIMITER)) {
+    tcpDelimiter = root[JSON_TCP_DELIMITER];
+#ifdef DEBUG
+    Serial.print("Will use delimiter:"); Serial.println(wifi.tcpDelimiter ? "true" : "false");
+#endif
+  }
+  wifi.setInfoUDP(tempAddr, port, tcpDelimiter);
+
+  if (root.containsKey(JSON_SAMPLE_NUMBERS)) {
+    wifi.jsonHasSampleNumbers = root[JSON_SAMPLE_NUMBERS];
+#ifdef DEBUG
+    Serial.print("Set jsonHasSampleNumbers to "); Serial.println(wifi.jsonHasSampleNumbers ? String("true") : String("false"));
+#endif
+  }
+
+  if (root.containsKey(JSON_TIMESTAMPS)) {
+    wifi.jsonHasTimeStamps = root[JSON_TIMESTAMPS];
+#ifdef DEBUG
+    Serial.print("Set jsonHasTimeStamps to "); Serial.println(wifi.jsonHasTimeStamps ? String("true") : String("false"));
+#endif
+  }
+
+#ifdef DEBUG
+  Serial.print("Got ip: "); Serial.println(wifi.tcpAddress.toString());
+  Serial.print("Got port: "); Serial.println(wifi.tcpPort);
+  Serial.print("Current uri: "); Serial.println(server.uri());
+  Serial.print("Ready to write to: "); Serial.print(wifi.tcpAddress.toString()); Serial.print(" on port: "); Serial.println(wifi.tcpPort);
+#endif
+
+  sendHeadersForCORS();
+  return server.send(200, "text/json", jsonStr.c_str());
+}
+
 /**
  * Function called on route `/mqtt` with HTTP_POST with body
  * {"username":"user_name", "password": "you_password", "broker_address": "/your.broker.com"}
@@ -680,6 +753,18 @@ void setup() {
   server.on("/tcp", HTTP_DELETE, []() {
     sendHeadersForCORS();
     clientTCP.stop();
+    wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_NONE);
+    jsonStr = wifi.getInfoTCP(false);
+    server.setContentLength(jsonStr.length());
+    server.send(200, "text/json", jsonStr.c_str());
+    jsonStr = "";
+  });
+
+  server.on("/udp", HTTP_POST, udpSetup);
+  server.on("/udp", HTTP_OPTIONS, sendHeadersForOptions);
+  server.on("/udp", HTTP_DELETE, []() {
+    sendHeadersForCORS();
+    wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_NONE);
     jsonStr = wifi.getInfoTCP(false);
     server.setContentLength(jsonStr.length());
     server.send(200, "text/json", jsonStr.c_str());
@@ -897,7 +982,7 @@ void loop() {
 #endif
   }
 
-  if((clientTCP.connected() || clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL) && (micros() > (lastSendToClient + wifi.getLatency()))) {
+  if((clientTCP.connected() || clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) && (micros() > (lastSendToClient + wifi.getLatency()))) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cTCP: "); Serial.print(clientTCP.connected()); Serial.print(" cMQTT: "); Serial.println(clientMQTT.connected());
 
     if (wifi.curOutputMode == wifi.OUTPUT_MODE_RAW) {
@@ -910,6 +995,34 @@ void loop() {
             if (wifi.tcpDelimiter) {
               clientTCP.write("\r\n");
             }
+          } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) {
+            clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
+            clientUDP.write((wifi.rawBuffer + i)->data, (wifi.rawBuffer + i)->positionWrite);
+            if (wifi.tcpDelimiter) {
+              clientUDP.write("\r\n");
+            }
+            clientUDP.endPacket();
+            delay(1);
+            clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
+            clientUDP.write((wifi.rawBuffer + i)->data, (wifi.rawBuffer + i)->positionWrite);
+            if (wifi.tcpDelimiter) {
+              clientUDP.write("\r\n");
+            }
+            clientUDP.endPacket();
+            delay(1);
+            clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
+            clientUDP.write((wifi.rawBuffer + i)->data, (wifi.rawBuffer + i)->positionWrite);
+            if (wifi.tcpDelimiter) {
+              clientUDP.write("\r\n");
+            }
+            clientUDP.endPacket();
+            delay(1);
+            clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
+            clientUDP.write((wifi.rawBuffer + i)->data, (wifi.rawBuffer + i)->positionWrite);
+            if (wifi.tcpDelimiter) {
+              clientUDP.write("\r\n");
+            }
+            clientUDP.endPacket();
           } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
             clientMQTT.publish("openbci:eeg",(const char*)(wifi.rawBuffer + i)->data);
           } else {

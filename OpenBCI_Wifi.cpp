@@ -640,6 +640,19 @@ void OpenBCI_Wifi_Class::setInfoTCP(String address, int port, boolean delimiter)
 }
 
 /**
+ * Used to configure the requried internal variables for TCP communication
+ * @param address   {IPAddress} - The ip address in string form: "192.168.0.1"
+ * @param port      {int} - The port number as an int
+ * @param delimiter {boolean} - Include the tcpDelimiter '\r\n'?
+ */
+void OpenBCI_Wifi_Class::setInfoUDP(String address, int port, boolean delimiter) {
+  tcpAddress.fromString(address);
+  tcpDelimiter = delimiter;
+  tcpPort = port;
+  setOutputProtocol(OUTPUT_PROTOCOL_UDP);
+}
+
+/**
  * Sets the latency
  * @param latency {unsigned long} - The latency of the system
  */
