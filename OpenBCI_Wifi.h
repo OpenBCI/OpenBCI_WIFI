@@ -57,11 +57,13 @@ public:
   };
 
   // STRUCTS
+#ifdef RAW_TO_JSON
   typedef struct {
     double channelData[NUM_CHANNELS_CYTON_DAISY];
     unsigned long long timestamp;
     uint8_t sampleNumber;
   } Sample;
+#endif
 
   typedef struct {
     boolean flushing;
@@ -73,7 +75,9 @@ public:
   // Functions and Methods
   OpenBCI_Wifi_Class();
   void begin(void);
+#ifdef RAW_TO_JSON
   void channelDataCompute(uint8_t *, uint8_t *, Sample *, uint8_t, uint8_t);
+#endif
   void debugPrintLLNumber(long long);
   void debugPrintLLNumber(long long, uint8_t);
   void debugPrintLLNumber(unsigned long long);
@@ -90,7 +94,9 @@ public:
   uint8_t getHead(void);
   String getInfoAll(void);
   String getInfoBoard(void);
+#ifdef MQTT
   String getInfoMQTT(boolean);
+#endif
   String getInfoTCP(boolean);
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
@@ -118,7 +124,6 @@ public:
   int32_t int24To32(uint8_t *);
   boolean isAStreamByte(uint8_t);
   void loop(void);
-  boolean mqttConnect(void);
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
@@ -136,11 +141,14 @@ public:
   boolean rawBufferSwitchToOtherBuffer(void);
   double rawToScaled(int32_t, double);
   void reset(void);
+#ifdef RAW_TO_JSON
   void sampleReset(void);
   void sampleReset(Sample *);
   void sampleReset(Sample *, uint8_t);
+#endif
   void setGains(uint8_t *);
   void setGains(uint8_t *, uint8_t *);
+#ifdef MQTT
   void setInfoMQTT(String, String, String, int);
   void setInfoUDP(String, int, boolean);
   void setInfoTCP(String, int, boolean);
@@ -178,14 +186,17 @@ public:
   OUTPUT_MODE curOutputMode;
   OUTPUT_PROTOCOL curOutputProtocol;
 
-  RawBuffer *curRawBuffer;
   RawBuffer rawBuffer[NUM_RAW_BUFFERS];
 
+#ifdef RAW_TO_JSON
   Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
+#endif
 
+#ifdef MQTT
   String mqttBrokerAddress;
   String mqttUsername;
   String mqttPassword;
+#endif
   String outputString;
 
   uint8_t lastSampleNumber;
@@ -197,6 +208,8 @@ public:
 
   volatile uint8_t head;
   volatile uint8_t tail;
+  volatile uint8_t rawBufferHead;
+  volatile uint8_t rawBufferTail;
 
 private:
   // Functions

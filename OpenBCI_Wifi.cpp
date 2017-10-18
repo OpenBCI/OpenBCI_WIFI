@@ -49,9 +49,11 @@ void OpenBCI_Wifi_Class::initArrays(void) {
 */
 void OpenBCI_Wifi_Class::initObjects(void) {
   setNumChannels(0);
+#ifdef RAW_TO_JSON
   for (size_t i = 0; i < NUM_PACKETS_IN_RING_BUFFER_JSON; i++) {
     wifi.sampleReset(sampleBuffer + i);
   }
+#endif
   for (size_t i = 0; i < NUM_RAW_BUFFERS; i++) {
     wifi.rawBufferReset(rawBuffer + i);
   }
@@ -75,6 +77,8 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   lastTimeWasPolled = 0;
   mqttPort = DEFAULT_MQTT_PORT;
   passthroughPosition = 0;
+  rawBufferHead = 0;
+  rawBufferTail = 0;
   tail = 0;
   tcpPort = 80;
   timePassthroughBufferLoaded = 0;
@@ -82,16 +86,17 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   _latency = DEFAULT_LATENCY;
   _ntpOffset = 0;
 
+#ifdef MQTT
   mqttBrokerAddress = "";
   mqttUsername = "";
   mqttPassword = "";
+#endif
   outputString = "";
 
   tcpAddress = IPAddress();
 
   curOutputMode = OUTPUT_MODE_RAW;
   curOutputProtocol = OUTPUT_PROTOCOL_NONE;
-  curRawBuffer = rawBuffer;
 }
 
 void OpenBCI_Wifi_Class::reset(void) {
@@ -222,6 +227,7 @@ String OpenBCI_Wifi_Class::getInfoBoard(void) {
   return output;
 }
 
+#ifdef MQTT
 String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
   const size_t bufferSize = JSON_OBJECT_SIZE(7) + 2000;
   StaticJsonBuffer<bufferSize> jsonBuffer;
@@ -236,6 +242,7 @@ String OpenBCI_Wifi_Class::getInfoMQTT(boolean clientMQTTConnected) {
   root.printTo(json);
   return json;
 }
+#endif
 
 String OpenBCI_Wifi_Class::getInfoTCP(boolean clientTCPConnected) {
   const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
@@ -275,7 +282,7 @@ int OpenBCI_Wifi_Class::getJSONAdditionalBytes(uint8_t numChannels) {
 size_t OpenBCI_Wifi_Class::getJSONBufferSize() {
   return _jsonBufferSize;
 }
-
+#ifdef RAW_TO_JSON
 /**
  * Used to pack Samples into a single JSON chunk to be sent out to client. The
  *
@@ -323,7 +330,7 @@ void OpenBCI_Wifi_Class::getJSONFromSamples(JsonObject& root, uint8_t numChannel
   // root.printTo(returnStr);
   // return returnStr;
 }
-
+#endif
 /**
  * Gets the latency
  * @return  {unsigned long} - The latency of the system
@@ -612,6 +619,7 @@ void OpenBCI_Wifi_Class::setGains(uint8_t *raw) {
   setGains(raw, _gains);
 }
 
+#ifdef RAW_TO_JSON
 /**
  * Used to set the information required for a succesful MQTT communication
  * @param brokerAddress {String} - A string such as 'mock.getcloudbrain.com'
@@ -625,7 +633,7 @@ void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, Stri
   mqttPort = port;
   setOutputProtocol(OUTPUT_PROTOCOL_MQTT);
 }
-
+#endif
 /**
  * Used to configure the requried internal variables for TCP communication
  * @param address   {IPAddress} - The ip address in string form: "192.168.0.1"
@@ -705,6 +713,7 @@ void OpenBCI_Wifi_Class::setOutputProtocol(OUTPUT_PROTOCOL newOutputProtocol) {
 ////////////////////////////
 ////////////////////////////
 
+#ifdef RAW_TO_JSON
 /**
  * Return true if the channel data array is full
  * @param arr           {uint8_t *] - 32 byte array from Cyton or Ganglion
@@ -737,6 +746,7 @@ void OpenBCI_Wifi_Class::channelDataCompute(uint8_t *arr, uint8_t *gains, Sample
     transformRawsToScaledCyton(temp_raw, gains, packetOffset, sample->channelData);
   }
 }
+#endif
 
 /**
  * Used to print out a long long number
@@ -921,7 +931,7 @@ double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
 * @author AJ Keller (@pushtheworldllc)
 */
 boolean OpenBCI_Wifi_Class::rawBufferAddStreamPacket(RawBuffer *buf, uint8_t *data) {
-  // Serial.print("Pos write "); Serial.println(curRawBuffer->positionWrite);
+  // Serial.print("Pos write "); Serial.println(buf->positionWrite);
   if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - BYTES_PER_OBCI_PACKET)) {
     buf->gotAllPackets = true;
     return false;
@@ -964,25 +974,25 @@ boolean OpenBCI_Wifi_Class::rawBufferHasData(RawBuffer *buf) {
 
 byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data) {
   // Current buffer has no data
-  if (rawBufferReadyForNewPage(curRawBuffer)) {
+  if (rawBufferReadyForNewPage(rawBuffer + rawBufferHead)) {
     // Serial.println("Not last packet / Current buffer has no data");
     // Take it, not last
-    if (rawBufferAddStreamPacket(curRawBuffer,data)) {
+    if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
       // Return that a packet that was not last was added
       return PROCESS_RAW_PASS_FIRST;
     } else {
-      // Return that packet failed to be added on teh first time, i.e. length
+      // Return that packet failed to be added on the first time, i.e. length
       //  `len` was greater than the length of the whole rawBuffer->buf
       return PROCESS_RAW_FAIL_OVERFLOW_FIRST;
     }
   // Current buffer has data
   } else {
     // Current buffer has all packets, is in a locked state
-    if (curRawBuffer->gotAllPackets || curRawBuffer->flushing) {
+    if ((rawBuffer + rawBufferHead)->gotAllPackets || (rawBuffer + rawBufferHead)->flushing) {
       // Can switch to other buffer
       if (rawBufferSwitchToOtherBuffer()) {
         // Take it! Not last
-        if (rawBufferAddStreamPacket(curRawBuffer,data)) {
+        if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
           // Return that a packet was added
           return PROCESS_RAW_PASS_SWITCH;
         } else {
@@ -999,7 +1009,7 @@ byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data) {
       // Current buffer does not have all packets
     } else {
       // Take it! Not last.
-      if (rawBufferAddStreamPacket(curRawBuffer,data)) {
+      if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
         // Return that a packet that was not first was added
         return PROCESS_RAW_PASS_MIDDLE;
       } else {
@@ -1029,22 +1039,12 @@ boolean OpenBCI_Wifi_Class::rawBufferReadyForNewPage(RawBuffer *buf) {
 * @author AJ Keller (@pushtheworldllc)
 */
 boolean OpenBCI_Wifi_Class::rawBufferSwitchToOtherBuffer(void) {
-  if (NUM_RAW_BUFFERS == 2) {
-    // current radio buffer is set to the first one
-    if (curRawBuffer == rawBuffer) {
-      if (rawBufferReadyForNewPage(rawBuffer + 1)) {
-        curRawBuffer++;
-        return true;
-      }
-      // current radio buffer is set to the second one
-    } else {
-      if (rawBufferReadyForNewPage(rawBuffer)) {
-        curRawBuffer--;
-        return true;
-      }
-    }
+  rawBufferHead++;
+  if (rawBufferHead >= NUM_RAW_BUFFERS) {
+    rawBufferHead = 0;
   }
-  return false;
+  // Does the new head have data? This means we wrapped around :( if true.
+  return !rawBufferHasData(rawBuffer + rawBufferHead);
 }
 
 /**
@@ -1065,7 +1065,7 @@ void OpenBCI_Wifi_Class::rawBufferReset(RawBuffer *buf) {
   buf->gotAllPackets = false;
   buf->positionWrite = 0;
 }
-
+#ifdef RAW_TO_JSON
 /**
  * Resets all the samples assuming 16 channels
  */
@@ -1095,7 +1095,7 @@ void OpenBCI_Wifi_Class::sampleReset(Sample *sample, uint8_t numChannels) {
   sample->sampleNumber = 0;
   sample->timestamp = 0;
 }
-
+#endif
 /**
  * Has the SPI Master polled this device in the past SPI_MASTER_POLL_TIMEOUT_MS
  * @returns [boolean] True if SPI Master has polled within timeout.
@@ -1142,6 +1142,7 @@ void OpenBCI_Wifi_Class::spiProcessPacketGain(uint8_t *data) {
   }
 }
 
+#ifdef RAW_TO_JSON
 void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
   if (getNumChannels() > MAX_CHANNELS_PER_PACKET) {
     // DO DAISY
@@ -1167,17 +1168,22 @@ void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
     head++;
   }
 }
+#endif
 
 void OpenBCI_Wifi_Class::spiProcessPacketStreamRaw(uint8_t *data) {
   rawBufferProcessPacket(data);
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {
+#ifdef RAW_TO_JSON
   if (curOutputMode == OUTPUT_MODE_JSON) {
     spiProcessPacketStreamJSON(data);
   } else {
     spiProcessPacketStreamRaw(data);
   }
+#else
+  spiProcessPacketStreamRaw(data);
+#endif
 }
 
 /**
