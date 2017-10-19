@@ -585,6 +585,14 @@ void rawBufferFlush(uint8_t bufNum) {
       clientUDP.write("\r\n");
     }
     clientUDP.endPacket();
+    delay(1);
+
+    clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
+    clientUDP.write((wifi.rawBuffer + bufNum)->data, (wifi.rawBuffer + bufNum)->positionWrite);
+    if (wifi.tcpDelimiter) {
+      clientUDP.write("\r\n");
+    }
+    clientUDP.endPacket();
   } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
 #ifdef MQTT
     clientMQTT.publish(MQTT_ROUTE_KEY, (const char*)(wifi.rawBuffer + bufNum)->data);
@@ -985,6 +993,13 @@ void loop() {
 #ifdef RAW_TO_JSON
   if((clientTCP.connected() || clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) && (micros() > (lastSendToClient + wifi.getLatency()))) {
     // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cTCP: "); Serial.print(clientTCP.connected()); Serial.print(" cMQTT: "); Serial.println(clientMQTT.connected());
+    int packetsToSend = wifi.head - wifi.tail;
+    if (packetsToSend < 0) {
+      packetsToSend = NUM_PACKETS_IN_RING_BUFFER_JSON + packetsToSend; // for wrap around
+    }
+    if (packetsToSend > wifi.getJSONMaxPackets()) {
+      packetsToSend = wifi.getJSONMaxPackets();
+    }
     if (packetsToSend > 0) {
       digitalWrite(LED_NOTIFY, LOW);
 

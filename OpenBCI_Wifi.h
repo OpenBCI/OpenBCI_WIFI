@@ -150,6 +150,7 @@ public:
   void setGains(uint8_t *, uint8_t *);
 #ifdef MQTT
   void setInfoMQTT(String, String, String, int);
+#endif
   void setInfoUDP(String, int, boolean);
   void setInfoTCP(String, int, boolean);
   void setLatency(unsigned long);
