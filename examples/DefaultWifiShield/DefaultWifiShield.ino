@@ -1,3 +1,7 @@
+// #define RAW_TO_JSON
+// #define MQTT
+// #define UDP
+// #define TCP
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_USE_DOUBLE 1
 #define ARDUINO_ARCH_ESP8266
@@ -578,15 +582,6 @@ void rawBufferFlush(uint8_t bufNum) {
       clientUDP.write("\r\n");
     }
     clientUDP.endPacket();
-    delay(1);
-    clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
-    clientUDP.write((wifi.rawBuffer + bufNum)->data, (wifi.rawBuffer + bufNum)->positionWrite);
-    if (wifi.tcpDelimiter) {
-      clientUDP.write("\r\n");
-    }
-    clientUDP.endPacket();
-    delay(1);
-
     clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
     clientUDP.write((wifi.rawBuffer + bufNum)->data, (wifi.rawBuffer + bufNum)->positionWrite);
     if (wifi.tcpDelimiter) {

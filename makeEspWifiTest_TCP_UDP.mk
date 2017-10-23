@@ -1,6 +1,6 @@
 # My makefile
 LIBARAIES_DIR = $(HOME)/Documents/Arduino/libraries
-SKETCH = $(LIBARAIES_DIR)/OpenBCI_Wifi/tests-ptw-assert/OpenBCI_Wifi_Test/OpenBCI_Wifi_Test.ino
+SKETCH = $(LIBARAIES_DIR)/OpenBCI_Wifi/tests-ptw-assert/OpenBCI_Wifi_Test_TCP_UDP/OpenBCI_Wifi_Test_TCP_UDP.ino
 OPENBCI_WIFI_DIR = $(LIBARAIES_DIR)/OpenBCI_Wifi
 
 UPLOAD_PORT = /dev/cu.usbserial-A104JV88
