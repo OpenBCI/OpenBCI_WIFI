@@ -65,13 +65,6 @@ public:
   } Sample;
 #endif
 
-  typedef struct {
-    boolean flushing;
-    boolean gotAllPackets;
-    uint8_t data[BYTES_PER_RAW_BUFFER];
-    int     positionWrite;
-  } RawBuffer;
-
   // Functions and Methods
   OpenBCI_Wifi_Class();
   void begin(void);
@@ -131,14 +124,6 @@ public:
   void passthroughBufferClear(void);
   uint8_t passthroughCommands(String);
   String perfectPrintByteHex(uint8_t);
-  boolean rawBufferAddStreamPacket(RawBuffer *, uint8_t *);
-  void rawBufferClean(RawBuffer *);
-  boolean rawBufferHasData(RawBuffer *);
-  byte rawBufferProcessPacket(uint8_t *);
-  boolean rawBufferReadyForNewPage(RawBuffer *);
-  void rawBufferReset(void);
-  void rawBufferReset(RawBuffer *);
-  boolean rawBufferSwitchToOtherBuffer(void);
   double rawToScaled(int32_t, double);
   void reset(void);
 #ifdef RAW_TO_JSON
@@ -187,7 +172,7 @@ public:
   OUTPUT_MODE curOutputMode;
   OUTPUT_PROTOCOL curOutputProtocol;
 
-  RawBuffer rawBuffer[NUM_RAW_BUFFERS];
+  uint8_t rawBuffer[NUM_PACKETS_IN_RING_BUFFER_RAW][BYTES_PER_SPI_PACKET];
 
 #ifdef RAW_TO_JSON
   Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
@@ -209,8 +194,8 @@ public:
 
   volatile uint8_t head;
   volatile uint8_t tail;
-  volatile uint8_t rawBufferHead;
-  volatile uint8_t rawBufferTail;
+  volatile uint32_t rawBufferHead;
+  volatile uint32_t rawBufferTail;
 
 private:
   // Functions

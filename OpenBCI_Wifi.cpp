@@ -40,7 +40,6 @@ void OpenBCI_Wifi_Class::initArduino(void) {
 */
 void OpenBCI_Wifi_Class::initArrays(void) {
   gainReset();
-  rawBufferReset();
 }
 
 /**
@@ -54,9 +53,6 @@ void OpenBCI_Wifi_Class::initObjects(void) {
     wifi.sampleReset(sampleBuffer + i);
   }
 #endif
-  for (size_t i = 0; i < NUM_RAW_BUFFERS; i++) {
-    wifi.rawBufferReset(rawBuffer + i);
-  }
 }
 
 /**
@@ -921,150 +917,6 @@ double OpenBCI_Wifi_Class::rawToScaled(int32_t raw, double scaleFactor) {
   return scaleFactor * raw * NANO_VOLTS_IN_VOLTS;
 }
 
-/**
-* @description Used to add a char data array to the the radio buffer. Always
-*      skips the fist
-* @param buf  {RawBuffer *} - A raw buffer to store into
-* @param data {uint8_t *} - An array from RFduinoGZLL_onReceive
-* @return {boolean} - True if the data was added to the buffer, false if the
-*      buffer was overflowed.
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::rawBufferAddStreamPacket(RawBuffer *buf, uint8_t *data) {
-  // Serial.print("Pos write "); Serial.println(buf->positionWrite);
-  if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - BYTES_PER_OBCI_PACKET)) {
-    buf->gotAllPackets = true;
-    return false;
-  }
-  uint8_t stopByte = data[0];
-  buf->data[buf->positionWrite++] = STREAM_PACKET_BYTE_START;
-  for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
-    buf->data[buf->positionWrite++] = data[i];
-  }
-  buf->data[buf->positionWrite++] = stopByte;
-  if (buf->positionWrite > (BYTES_PER_RAW_BUFFER - BYTES_PER_OBCI_PACKET)) {
-    buf->gotAllPackets = true;
-  }
-  return true;
-}
-
-/**
-* @description Used to fill the buffer with all zeros. Should be used as
-*      frequently as possible. This is very useful if you need to ensure that
-*      no bad data is sent over the serial port.
-* @param `buf` {RawBuffer *} - The buffer to clean.
-* @author AJ Keller (@pushtheworldllc)
-*/
-void OpenBCI_Wifi_Class::rawBufferClean(RawBuffer *buf) {
-  for (int i = 0; i < BYTES_PER_RAW_BUFFER; i++) {
-    buf->data[i] = 0;
-  }
-}
-
-/**
-* @description Used to determine if there is data in the radio buffer. Most
-*  likely this data needs to be cleared.
-* @param `buf` {RawBuffer *} - The buffer to examine.
-* @returns {boolean} - `true` if the radio buffer has data, `false` if not...
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::rawBufferHasData(RawBuffer *buf) {
-  return buf->positionWrite > 0;
-}
-
-byte OpenBCI_Wifi_Class::rawBufferProcessPacket(uint8_t *data) {
-  // Current buffer has no data
-  if (rawBufferReadyForNewPage(rawBuffer + rawBufferHead)) {
-    // Serial.println("Not last packet / Current buffer has no data");
-    // Take it, not last
-    if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
-      // Return that a packet that was not last was added
-      return PROCESS_RAW_PASS_FIRST;
-    } else {
-      // Return that packet failed to be added on the first time, i.e. length
-      //  `len` was greater than the length of the whole rawBuffer->buf
-      return PROCESS_RAW_FAIL_OVERFLOW_FIRST;
-    }
-  // Current buffer has data
-  } else {
-    // Current buffer has all packets, is in a locked state
-    if ((rawBuffer + rawBufferHead)->gotAllPackets || (rawBuffer + rawBufferHead)->flushing) {
-      // Can switch to other buffer
-      if (rawBufferSwitchToOtherBuffer()) {
-        // Take it! Not last
-        if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
-          // Return that a packet was added
-          return PROCESS_RAW_PASS_SWITCH;
-        } else {
-          // Return that packet failed to be added on the first time, i.e. length
-          //  `len` was greater than the length of the whole rawBuffer->buf
-          //  also this was after a switch
-          return PROCESS_RAW_FAIL_OVERFLOW_FIRST_AFTER_SWITCH;
-        }
-      // Cannot switch to other buffer
-      } else {
-        // Reject it!
-        return PROCESS_RAW_FAIL_SWITCH;
-      }
-      // Current buffer does not have all packets
-    } else {
-      // Take it! Not last.
-      if (rawBufferAddStreamPacket(rawBuffer + rawBufferHead, data)) {
-        // Return that a packet that was not first was added
-        return PROCESS_RAW_PASS_MIDDLE;
-      } else {
-        // Return that a packet was not able to be added
-        return PROCESS_RAW_FAIL_OVERFLOW_MIDDLE;
-      }
-
-    }
-  }
-}
-
-/**
-* @description Used to determing if the output buffer `buf` is in a locked state.
-* @param `buf` {RawBuffer *} - The buffer to examine.
-* @returns {boolen} - `true` if there is no lock on `buf`
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::rawBufferReadyForNewPage(RawBuffer *buf) {
-  return !buf->flushing && !rawBufferHasData(buf);
-}
-
-
-/**
-* @description Used to safely swap the global buffers!
-* @returns {boolean} - `true` if the current buffer has been swapped,
-*  `false` if the swap was not able to occur.
-* @author AJ Keller (@pushtheworldllc)
-*/
-boolean OpenBCI_Wifi_Class::rawBufferSwitchToOtherBuffer(void) {
-  rawBufferHead++;
-  if (rawBufferHead >= NUM_RAW_BUFFERS) {
-    rawBufferHead = 0;
-  }
-  // Does the new head have data? This means we wrapped around :( if true.
-  return !rawBufferHasData(rawBuffer + rawBufferHead);
-}
-
-/**
- * Resets all the raw buffers
- */
-void OpenBCI_Wifi_Class::rawBufferReset(void) {
-  for (uint8_t i = 0; i < NUM_RAW_BUFFERS; i++) {
-    rawBufferReset(rawBuffer + i);
-  }
-}
-
-/**
- * Resets the raw buffer
- * @param buf      {RawBuffer} - the buffer struct
- */
-void OpenBCI_Wifi_Class::rawBufferReset(RawBuffer *buf) {
-  buf->flushing = false;
-  buf->gotAllPackets = false;
-  buf->positionWrite = 0;
-}
 #ifdef RAW_TO_JSON
 /**
  * Resets all the samples assuming 16 channels
@@ -1171,7 +1023,22 @@ void OpenBCI_Wifi_Class::spiProcessPacketStreamJSON(uint8_t *data) {
 #endif
 
 void OpenBCI_Wifi_Class::spiProcessPacketStreamRaw(uint8_t *data) {
-  rawBufferProcessPacket(data);
+  int newHead = rawBufferHead + 1;
+  if (newHead >= NUM_PACKETS_IN_RING_BUFFER_RAW) {
+    newHead = 0;
+  }
+  memcpy(rawBuffer + newHead, data, BYTES_PER_SPI_PACKET);
+  rawBufferHead = newHead;
+//   // Are we about to wrap around and over write the tail?
+//   if (newHead == rawBufferTail) {
+// #ifdef DEBUG
+//     Serial.println("FAIL FAIL FAIL");
+// #endif
+//     return; // don't do that, ditch this packet
+//   } else {
+//     memcpy(rawBuffer + newHead, data, BYTES_PER_SPI_PACKET);
+//     rawBufferHead = newHead;
+//   }
 }
 
 void OpenBCI_Wifi_Class::spiProcessPacketStream(uint8_t *data) {

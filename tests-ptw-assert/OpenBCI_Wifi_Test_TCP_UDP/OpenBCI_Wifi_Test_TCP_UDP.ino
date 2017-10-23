@@ -381,8 +381,6 @@ void testSetLatency() {
 
 
 void testSetters() {
-  testReset();
-  testSetGain();
   testSetInfo();
   testSetLatency();
 }
@@ -397,9 +395,7 @@ void testIsAStreamByte() {
 
 
 void testUtilisForJSON() {
-
   testIsAStreamByte();
-
 }
 
 void testPassthroughCommands() {
@@ -472,11 +468,11 @@ void testUtilsForPassthrough() {
 }
 
 void testRawBufferCleanUp() {
-  wifi.rawBufferReset(wifi.rawBuffer);
-  wifi.rawBufferClean(wifi.rawBuffer);
-  wifi.rawBufferReset(wifi.rawBuffer + 1);
-  wifi.rawBufferClean(wifi.rawBuffer + 1);
-  (wifi.rawBuffer + wifi.rawBufferHead) = wifi.rawBuffer;
+  wifi.rawBufferHead = 0;
+  for (int i = 0; i < NUM_RAW_BUFFERS; i++) {
+    wifi.rawBufferReset(wifi.rawBuffer + i);
+    wifi.rawBufferClean(wifi.rawBuffer + i);
+  }
 }
 
 void testRawBufferAddStreamPacket() {
@@ -604,11 +600,11 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
   test.assertEqualBuffer((wifi.rawBuffer + wifi.rawBufferHead)->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer into the buffer curRawBuffer points to", __LINE__);
 
 
-  // Do it again in reverse, where the second buffer is full
+  // Do it again in reverse, where the last buffer is full
   // So clear the first buffer and point to the second
-  test.it("should switch to first buffer when second buffer is full and id last packet");
+  test.it("should switch to first buffer when last buffer is full and id last packet");
   testRawBufferCleanUp();
-  (wifi.rawBuffer + wifi.rawBufferHead) = wifi.rawBuffer + 1;
+  wifi.rawBufferHead = NUM_RAW_BUFFERS - 1;
   for (uint8_t i = 0; i < MAX_PACKETS_PER_SEND_TCP; i++) {
     wifi.rawBufferProcessPacket(bufferRaw);
   }
@@ -622,9 +618,9 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
   test.assertEqual(wifi.rawBuffer->positionWrite, BYTES_PER_OBCI_PACKET, "should set the positionWrite to size of cali buffer", __LINE__);
   test.assertEqualBuffer(wifi.rawBuffer->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded cali buffer in the second buffer correctly", __LINE__);
 
-  // Verify that both of the buffers are full
-  test.assertBoolean((wifi.rawBuffer + 1)->gotAllPackets, true, "should still have a full first buffer after switch", __LINE__);
-  test.assertEqual((wifi.rawBuffer + 1)->positionWrite,BYTES_PER_RAW_BUFFER,"first buffer should still have correct size", __LINE__);
+  // Verify that both of the buffers have data
+  test.assertBoolean((wifi.rawBuffer + NUM_RAW_BUFFERS - 1)->gotAllPackets, true, "should still have a full first buffer after switch", __LINE__);
+  test.assertEqual((wifi.rawBuffer + NUM_RAW_BUFFERS - 1)->positionWrite,BYTES_PER_RAW_BUFFER,"first buffer should still have correct size", __LINE__);
 
   test.assertBoolean((wifi.rawBuffer + wifi.rawBufferHead)->gotAllPackets, false, "should set got all packets false on curRawBuffer", __LINE__);
   test.assertEqual((wifi.rawBuffer + wifi.rawBufferHead)->positionWrite, BYTES_PER_OBCI_PACKET, "should set positionWrite of curRawBuffer to that of the second buffer", __LINE__);
@@ -658,7 +654,7 @@ void testRawBuffer_PROCESS_RAW_PASS_SWITCH() {
   // Second buffer flushing, first empty
   testRawBufferCleanUp();
   // Load the cali buffer into the second buffer
-  (wifi.rawBuffer + wifi.rawBufferHead) = wifi.rawBuffer + 1;
+  wifi.rawBufferHead = 1;
   test.assertEqualHex(wifi.rawBufferProcessPacket(bufferRaw), PROCESS_RAW_PASS_FIRST);
   test.assertFalse((wifi.rawBuffer + 1)->gotAllPackets, "should set gotAllPackets to false for first buffer", __LINE__);
   test.assertEqualBuffer((wifi.rawBuffer + 1)->data, expected_buffer, BYTES_PER_OBCI_PACKET, "should have loaded data buffer in the first buffer correctly", __LINE__);
@@ -892,39 +888,48 @@ void testRawBufferSwitchToOtherBuffer() {
   test.it("should return true if buffer 2 does not have data and should move the pointer");
   wifi.rawBufferHead = 0;
   test.assertTrue(wifi.rawBufferSwitchToOtherBuffer(), "can switch to other empty buffer", __LINE__);
-  test.assertEqual(wifi.rawBufferHead, 1, "curRawBuffer points to second buffer", __LINE__);
+  test.assertEqual(wifi.rawBufferHead, 1, "head points to second buffer", __LINE__);
+
+  testRawBufferCleanUp();
 
   test.it("should return true if buffer 1 does not have data and should move the pointer");
-  (wifi.rawBuffer + wifi.rawBufferHead) = wifi.rawBuffer + 1;
-  test.assertTrue(wifi.rawBufferSwitchToOtherBuffer(), "can switch to other empty buffer", __LINE__);
-  test.assertTrue((wifi.rawBuffer + wifi.rawBufferHead) == wifi.rawBuffer, "curRawBuffer points to first buffer", __LINE__);
+  wifi.rawBufferHead = NUM_RAW_BUFFERS - 2;
+  test.assertTrue(wifi.rawBufferSwitchToOtherBuffer(), "can switch to 3rd other empty buffer", __LINE__);
+  test.assertEqual(wifi.rawBufferHead, NUM_RAW_BUFFERS - 1, "head points to last buffer", __LINE__);
+
+  testRawBufferCleanUp();
+
+  test.it("should return true if first buffer does not have data");
+  wifi.rawBufferHead = NUM_RAW_BUFFERS - 1;
+  test.assertTrue(wifi.rawBufferSwitchToOtherBuffer(), "can switch to 1st buffer", __LINE__);
+  test.assertEqual(wifi.rawBufferHead, 0, "head points to first buffer", __LINE__);
 
   // # CLEANUP
   testRawBufferCleanUp();
 
-  test.it("should return false when currently pointed at buf 1 and buf 2 has data");
-  (wifi.rawBuffer + wifi.rawBufferHead) = wifi.rawBuffer;
+  test.it("should return false when currently pointed at 1st buf AND next buf has data");
+  wifi.rawBufferHead = 0;
   wifi.rawBufferAddStreamPacket(wifi.rawBuffer + 1, bufferRaw);
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(), "cannot switch to buffer with data", __LINE__);
-  test.assertTrue((wifi.rawBuffer + wifi.rawBufferHead) == wifi.rawBuffer, "curRawBuffer still points to first buffer", __LINE__);
+  test.assertEqual(wifi.rawBufferHead, 0, "head still points to first buffer", __LINE__);
 
   // # CLEANUP
   testRawBufferCleanUp();
 
-  test.it("should return false when currently pointed at buf 2 and buf 1 has data");
-  (wifi.rawBuffer + wifi.rawBufferHead) = wifi.rawBuffer + 1;
+  test.it("should return false when currently pointed at last buf and 1st buf has data");
+  wifi.rawBufferHead = NUM_RAW_BUFFERS - 1;
   wifi.rawBufferAddStreamPacket(wifi.rawBuffer, bufferRaw);
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"cannot switch to buffer with data", __LINE__);
-  test.assertTrue((wifi.rawBuffer + wifi.rawBufferHead) == wifi.rawBuffer + 1, "curRawBuffer still points to second buffer", __LINE__);
+  test.assertEqual(wifi.rawBufferHead, NUM_RAW_BUFFERS - 1, "head still points to last buffer", __LINE__);
 
   // # CLEANUP
   testRawBufferCleanUp();
 
-  test.it("should return false when both buffers have data");
-  wifi.rawBufferAddStreamPacket(wifi.rawBuffer, bufferRaw);
-  wifi.rawBufferAddStreamPacket(wifi.rawBuffer + 1, bufferRaw);
+  test.it("should return false when all buffers have data");
+  for (int i = 0; i < NUM_RAW_BUFFERS; i++) {
+    wifi.rawBufferAddStreamPacket(wifi.rawBuffer + i, bufferRaw);
+  }
   test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to second", __LINE__);
-  test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch back to first", __LINE__);
 
   // # CLEANUP
   testRawBufferCleanUp();
@@ -940,7 +945,7 @@ void testRawBufferSwitchToOtherBuffer() {
   test.it("should not switch when buffers are flushing");
   wifi.rawBuffer->flushing = true; // don't add data, just set it to flushing
   (wifi.rawBuffer + 1)->flushing = true; // don't add data, just set it to flushing
-  test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to any buffer", __LINE__);
+  test.assertFalse(wifi.rawBufferSwitchToOtherBuffer(),"can't switch to other buffer", __LINE__);
 }
 
 void testUtilisForRaw() {

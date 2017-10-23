@@ -20,6 +20,7 @@
 #ifdef MQTT
 #include <PubSubClient.h>
 #endif
+#include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
@@ -48,6 +49,8 @@ unsigned long ntpLastTimeSeconds;
 
 WiFiUDP clientUDP;
 WiFiClient clientTCP;
+
+WiFiClientPrint<> wifiPrinter(clientTCP);
 
 #ifdef RAW_TO_JSON
 WiFiClient espClient;
@@ -365,7 +368,7 @@ void tcpSetup() {
     Serial.println("Connected to server");
   #endif
     clientTCP.setNoDelay(1);
-    // wifiPrinter.setClient(clientTCP);
+    wifiPrinter.setClient(clientTCP);
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
     // rootOut.printTo(jsonStr);
@@ -446,6 +449,8 @@ void udpSetup() {
   Serial.print("Current uri: "); Serial.println(server.uri());
   Serial.print("Ready to write to: "); Serial.print(wifi.tcpAddress.toString()); Serial.print(" on port: "); Serial.println(wifi.tcpPort);
 #endif
+
+  wifiPrinter.setClient(clientUDP);
 
   sendHeadersForCORS();
   return server.send(200, "text/json", jsonStr.c_str());
@@ -565,44 +570,6 @@ void removeWifiAPInfo() {
   delay(1000);
   ESP.reset();
   delay(1000);
-}
-
-void rawBufferFlush(uint8_t bufNum) {
-  (wifi.rawBuffer + bufNum)->flushing = true;
-  digitalWrite(LED_NOTIFY, LOW);
-  if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
-    clientTCP.write((wifi.rawBuffer + bufNum)->data, (wifi.rawBuffer + bufNum)->positionWrite);
-    if (wifi.tcpDelimiter) {
-      clientTCP.write("\r\n");
-    }
-  } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) {
-    clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
-    clientUDP.write((wifi.rawBuffer + bufNum)->data, (wifi.rawBuffer + bufNum)->positionWrite);
-    if (wifi.tcpDelimiter) {
-      clientUDP.write("\r\n");
-    }
-    clientUDP.endPacket();
-    clientUDP.beginPacket(wifi.tcpAddress, wifi.tcpPort);
-    clientUDP.write((wifi.rawBuffer + bufNum)->data, (wifi.rawBuffer + bufNum)->positionWrite);
-    if (wifi.tcpDelimiter) {
-      clientUDP.write("\r\n");
-    }
-    clientUDP.endPacket();
-  } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
-#ifdef MQTT
-    clientMQTT.publish(MQTT_ROUTE_KEY, (const char*)(wifi.rawBuffer + bufNum)->data);
-#endif
-  } else {
-#ifdef DEBUG
-    for (int j = 0; j < (wifi.rawBuffer + bufNum)->positionWrite; j++) {
-      Serial.write((wifi.rawBuffer + bufNum)->data[j]);
-    }
-#endif
-  }
-  wifi.rawBufferReset(wifi.rawBuffer + bufNum);
-  lastSendToClient = micros();
-  digitalWrite(LED_NOTIFY, HIGH);
-  (wifi.rawBuffer + bufNum)->flushing = false;
 }
 
 void initializeVariables() {
@@ -1026,13 +993,37 @@ void loop() {
       digitalWrite(LED_NOTIFY, HIGH);
     }
 #else
-  if(clientTCP.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) {
-    if (wifi.rawBufferHasData(wifi.rawBuffer + wifi.rawBufferTail)) {
-      rawBufferFlush(wifi.rawBufferTail);
+  if((clientTCP.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) && (micros() > (lastSendToClient + wifi.getLatency())) && (wifi.rawBufferTail != wifi.rawBufferHead)) {
+    Serial.printf("LS2C: %lums H: %u T: %u", (micros() - lastSendToClient)/1000, wifi.rawBufferHead, wifi.rawBufferTail);
+
+    int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
+    if (packetsToSend < 0) {
+      packetsToSend = NUM_PACKETS_IN_RING_BUFFER_RAW + packetsToSend; // for wrap around
     }
-    wifi.rawBufferTail++;
-    if (wifi.rawBufferTail >= NUM_RAW_BUFFERS) {
-      wifi.rawBufferTail = 0;
+    if (packetsToSend > MAX_PACKETS_PER_SEND_TCP) {
+      packetsToSend = MAX_PACKETS_PER_SEND_TCP;
+    }
+    Serial.printf(" P2S: %d\n", packetsToSend);
+
+    if (packetsToSend > 0) {
+      digitalWrite(LED_NOTIFY, LOW);
+
+      for (uint8_t i = 0; i < packetsToSend; i++) {
+        if (wifi.rawBufferTail >= NUM_PACKETS_IN_RING_BUFFER_RAW) {
+          wifi.rawBufferTail = 0;
+        }
+        uint8_t *buf = wifi.rawBuffer[wifi.rawBufferTail];
+        uint8_t stopByte = buf[0];
+        wifiPrinter.write(STREAM_PACKET_BYTE_START);
+        for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+          wifiPrinter.write(buf[i]);
+        }
+        wifiPrinter.write(stopByte);
+        wifi.rawBufferTail += 1;
+      }
+      lastSendToClient = micros();
+      wifiPrinter.flush();
+      digitalWrite(LED_NOTIFY, HIGH);
     }
   }
 #endif

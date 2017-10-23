@@ -7,7 +7,7 @@ UPLOAD_PORT = /dev/cu.usbserial-AI02BAAJ
 ESP_ROOT = $(HOME)/esp8266
 ESP_LIBS = $(ESP_ROOT)/libraries
 
-HTTP_ADDR=OpenBCI-2114.local
+HTTP_ADDR=OpenBCI-E218.local
 # BOARD = openbci
 BOARD = huzzah
 
