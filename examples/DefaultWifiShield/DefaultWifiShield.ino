@@ -367,7 +367,7 @@ void tcpSetup() {
   #ifdef DEBUG
     Serial.println("Connected to server");
   #endif
-    clientTCP.setNoDelay(1);
+    // clientTCP.setNoDelay(1);
     wifiPrinter.setClient(clientTCP);
     jsonStr = wifi.getInfoTCP(true);
     // jsonStr = "";
@@ -993,38 +993,37 @@ void loop() {
       digitalWrite(LED_NOTIFY, HIGH);
     }
 #else
-  if((clientTCP.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) && (micros() > (lastSendToClient + wifi.getLatency())) && (wifi.rawBufferTail != wifi.rawBufferHead)) {
-    Serial.printf("LS2C: %lums H: %u T: %u", (micros() - lastSendToClient)/1000, wifi.rawBufferHead, wifi.rawBufferTail);
+  int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
+  if (packetsToSend < 0) {
+    packetsToSend = NUM_PACKETS_IN_RING_BUFFER_RAW + packetsToSend; // for wrap around
+  }
+  if (packetsToSend > MAX_PACKETS_PER_SEND_TCP) {
+    packetsToSend = MAX_PACKETS_PER_SEND_TCP;
+  }
+  if((clientTCP.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) && (micros() > (lastSendToClient + wifi.getLatency()) || packetsToSend == MAX_PACKETS_PER_SEND_TCP) && (packetsToSend > 0)) {
+    Serial.printf("LS2C: %lums H: %u T: %u P2S: %d\n", (micros() - lastSendToClient)/1000, wifi.rawBufferHead, wifi.rawBufferTail, packetsToSend);
+    digitalWrite(LED_NOTIFY, LOW);
 
-    int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
-    if (packetsToSend < 0) {
-      packetsToSend = NUM_PACKETS_IN_RING_BUFFER_RAW + packetsToSend; // for wrap around
-    }
-    if (packetsToSend > MAX_PACKETS_PER_SEND_TCP) {
-      packetsToSend = MAX_PACKETS_PER_SEND_TCP;
-    }
-    Serial.printf(" P2S: %d\n", packetsToSend);
-
-    if (packetsToSend > 0) {
-      digitalWrite(LED_NOTIFY, LOW);
-
-      for (uint8_t i = 0; i < packetsToSend; i++) {
-        if (wifi.rawBufferTail >= NUM_PACKETS_IN_RING_BUFFER_RAW) {
-          wifi.rawBufferTail = 0;
-        }
-        uint8_t *buf = wifi.rawBuffer[wifi.rawBufferTail];
-        uint8_t stopByte = buf[0];
-        wifiPrinter.write(STREAM_PACKET_BYTE_START);
-        for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
-          wifiPrinter.write(buf[i]);
-        }
-        wifiPrinter.write(stopByte);
-        wifi.rawBufferTail += 1;
+    uint32_t taily = wifi.rawBufferTail;
+    for (uint8_t i = 0; i < packetsToSend; i++) {
+      if (taily >= NUM_PACKETS_IN_RING_BUFFER_RAW) {
+        taily = 0;
       }
-      lastSendToClient = micros();
-      wifiPrinter.flush();
-      digitalWrite(LED_NOTIFY, HIGH);
+      uint8_t *buf = wifi.rawBuffer[taily];
+      uint8_t stopByte = buf[0];
+      wifiPrinter.write(STREAM_PACKET_BYTE_START);
+      for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
+        wifiPrinter.write(buf[i]);
+      }
+      wifiPrinter.write(stopByte);
+      taily += 1;
     }
+    lastSendToClient = micros();
+    wifiPrinter.flush();
+    if (micros() - lastSendToClient < 5000) {
+      wifi.rawBufferTail = taily;
+    }
+    digitalWrite(LED_NOTIFY, HIGH);
   }
 #endif
 }
