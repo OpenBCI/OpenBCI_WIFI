@@ -1,3 +1,26 @@
+# v1.3.0
+
+At this time, can no longer support both RAW and JSON modes with a single binary file. Need optimized builds. We ended up having two modes that didnt work that well instead of highly optimized builds for the different operating modes.
+
+### Breaking Changes
+
+* For RAW only (can't do Raw to JSON or MQTT) - upload the binary for `DefaultWifiShield_v1.3.0.bin`
+  * This is the default firmware to be shipped with WiFi Shields
+  * Sample rates of 1000Hz with Cyton (with or without Daisy) possible
+  * Use the OpenBCI_GUI/OpenBCIHub
+* For JSON over (TCP/MQTT) (can't use OpenBCI GUI) - upload the binary for `WifiShield_RawToJSON_v1.3.0.bin`
+  * Only tested with 200Hz with Ganglion
+  * Only tested with 250Hz with Cyton
+
+# v1.2.0
+
+### Bug Fixes
+
+* Allow for CORS on HTTP server for every call. Closes #41
+* Extend max tcp packets per send
+* Optimize JSON packet streaming for better performance, allows for latency up to 39ms for 8 channel and 4 channel and 25ms for 16 channel when streaming out JSON
+* Changed return of route of /cloud
+
 # v1.1.4
 
 ### Bug Fixes

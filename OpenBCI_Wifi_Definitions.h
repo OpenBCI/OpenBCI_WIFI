@@ -9,7 +9,7 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
-#define SOFTWARE_VERSION "v1.1.3"
+#define SOFTWARE_VERSION "v1.3.0"
 
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
@@ -20,12 +20,9 @@
 // #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define BYTES_PER_CHANNEL 3
-// #define NUM_PACKETS_IN_RING_BUFFER 45
-#define NUM_PACKETS_IN_RING_BUFFER 2000
-#define NUM_PACKETS_IN_RING_BUFFER_JSON 20
+#define NUM_PACKETS_IN_RING_BUFFER_JSON 1
 #define NUM_RAW_BUFFERS 2
-// #define MAX_PACKETS_PER_SEND_TCP 20
-#define MAX_PACKETS_PER_SEND_TCP 30
+#define MAX_PACKETS_PER_SEND_TCP 50
 #define BYTES_PER_RAW_BUFFER MAX_PACKETS_PER_SEND_TCP * BYTES_PER_OBCI_PACKET
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
@@ -39,6 +36,7 @@
 #define LED_NOTIFY 5
 #define GANGLION_GAIN 51
 #define DEFAULT_LATENCY 10000
+#define DEFAULT_MQTT_PORT 1883
 // #define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 // Arduino JSON needs bytes for duplication
 // to recalculate visit:
@@ -57,7 +55,7 @@
 #define CLIENT_RESPONSE_NO_BODY_IN_POST 402
 #define CLIENT_RESPONSE_MISSING_REQUIRED_CMD 403
 #define NANO_VOLTS_IN_VOLTS 1000000000.0
-#define MAX_JSON_BUFFER_SIZE 3000
+#define MAX_JSON_BUFFER_SIZE 4000
 
 #define ADS_GAIN_1 1
 #define ADS_GAIN_2 2
@@ -101,6 +99,7 @@
 #define JSON_MQTT_BROKER_ADDR "broker_address"
 #define JSON_MQTT_PASSWORD "password"
 #define JSON_MQTT_USERNAME "username"
+#define JSON_MQTT_PORT "port"
 #define JSON_NAME "name"
 #define JSON_NUM_CHANNELS "num_channels"
 #define JSON_SAMPLE_NUMBERS "sample_numbers"
