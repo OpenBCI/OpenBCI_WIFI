@@ -65,6 +65,7 @@ void OpenBCI_Wifi_Class::initVariables(void) {
   jsonHasSampleNumbers = false;
   jsonHasTimeStamps = true;
   passthroughBufferLoaded = false;
+  redundancy = false;
   tcpDelimiter = false;
 
   curNumChannels = 0;

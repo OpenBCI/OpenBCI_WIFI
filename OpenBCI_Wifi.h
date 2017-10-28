@@ -160,6 +160,7 @@ public:
   boolean passthroughBufferLoaded;
   boolean jsonHasSampleNumbers;
   boolean jsonHasTimeStamps;
+  boolean redundancy;
   boolean tcpDelimiter;
 
   CLIENT_RESPONSE curClientResponse;

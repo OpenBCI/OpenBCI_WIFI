@@ -296,7 +296,7 @@ void tcpSetup() {
 
   // Parse args
   if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs(7);
+  JsonObject& root = getArgFromArgs(8);
   if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
   String tempAddr = root[JSON_TCP_IP];
   IPAddress tempIPAddr;
@@ -316,6 +316,13 @@ void tcpSetup() {
     }
 #ifdef DEBUG
     Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
+#endif
+  }
+
+  if (root.containsKey(JSON_REDUNDANCY)) {
+    wifi.redundancy = root[JSON_REDUNDANCY];
+#ifdef DEBUG
+    Serial.print("Set redundancy to "); Serial.println(wifi.redundancy);
 #endif
   }
 
@@ -410,6 +417,14 @@ void udpSetup() {
   #ifdef DEBUG
     Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
   #endif
+  }
+
+
+  if (root.containsKey(JSON_REDUNDANCY)) {
+    wifi.redundancy = root[JSON_REDUNDANCY];
+#ifdef DEBUG
+    Serial.print("Set redundancy to "); Serial.println(wifi.redundancy);
+#endif
   }
 
   if (root.containsKey(JSON_LATENCY)) {
@@ -1020,7 +1035,7 @@ void loop() {
     }
     lastSendToClient = micros();
     wifiPrinter.flush();
-    if (micros() - lastSendToClient < 5000) {
+    if (micros() - lastSendToClient < 5000 && wifi.redundancy) {
       wifi.rawBufferTail = taily;
     }
     digitalWrite(LED_NOTIFY, HIGH);

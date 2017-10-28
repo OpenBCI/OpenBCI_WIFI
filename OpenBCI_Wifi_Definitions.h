@@ -9,7 +9,7 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
-#define SOFTWARE_VERSION "v1.3.0.1"
+#define SOFTWARE_VERSION "v1.3.0.2"
 
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
@@ -104,6 +104,7 @@
 #define JSON_MQTT_PORT "port"
 #define JSON_NAME "name"
 #define JSON_NUM_CHANNELS "num_channels"
+#define JSON_REDUNDANCY "redundancy"
 #define JSON_SAMPLE_NUMBERS "sample_numbers"
 #define JSON_SAMPLE_NUMBER "sampleNumber"
 #define JSON_TCP_DELIMITER "delimiter"
