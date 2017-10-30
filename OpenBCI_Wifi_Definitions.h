@@ -9,7 +9,7 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
-#define SOFTWARE_VERSION "v1.3.0.2"
+#define SOFTWARE_VERSION "v1.4.0.0"
 
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
@@ -22,6 +22,7 @@
 #define BYTES_PER_CHANNEL 3
 #ifdef RAW_TO_JSON
   #define NUM_PACKETS_IN_RING_BUFFER_JSON 28
+  #define NUM_PACKETS_IN_RING_BUFFER_RAW 1
 #else
   #define NUM_PACKETS_IN_RING_BUFFER_RAW 200
   #define MAX_PACKETS_PER_SEND_TCP 20

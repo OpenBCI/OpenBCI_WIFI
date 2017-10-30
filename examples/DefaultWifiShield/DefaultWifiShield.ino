@@ -1,5 +1,6 @@
-// #define RAW_TO_JSON
-// #define MQTT
+#define RAW_TO_JSON
+#define MQTT
+#define MQTT_SECURE
 // #define UDP
 // #define TCP
 #define ARDUINOJSON_USE_LONG_LONG 1
@@ -19,6 +20,9 @@
 #include <ArduinoJson.h>
 #ifdef MQTT
 #include <PubSubClient.h>
+#endif
+#ifdef MQTT_SECURE
+#include <WiFiClientSecure.h>
 #endif
 #include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
@@ -52,9 +56,14 @@ WiFiClient clientTCP;
 
 WiFiClientPrint<> wifiPrinter(clientTCP);
 
-#ifdef RAW_TO_JSON
+#ifdef MQTT
+#ifdef MQTT_SECURE
+WiFiClientSecure espClient;
+PubSubClient clientMQTT(espClient);
+#else
 WiFiClient espClient;
 PubSubClient clientMQTT(espClient);
+#endif
 #endif
 
 ///////////////////////////////////////////
@@ -1007,6 +1016,7 @@ void loop() {
       lastSendToClient = micros();
       digitalWrite(LED_NOTIFY, HIGH);
     }
+  }
 #else
   int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
   if (packetsToSend < 0) {

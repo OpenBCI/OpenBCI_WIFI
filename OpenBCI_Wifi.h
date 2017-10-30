@@ -10,10 +10,13 @@
 */
 #define ARDUINOJSON_USE_LONG_LONG 1
 #define ARDUINOJSON_USE_DOUBLE 1
-
+#define RAW_TO_JSON
+#define MQTT
+#define MQTT_SECURE
 
 #ifndef __OpenBCI_Wifi__
 #define __OpenBCI_Wifi__
+
 #include <Arduino.h>
 #include <time.h>
 #include <ESP8266WiFi.h>
