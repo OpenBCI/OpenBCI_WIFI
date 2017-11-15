@@ -9,7 +9,7 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
-#define SOFTWARE_VERSION "v1.4.0.0"
+#define SOFTWARE_VERSION "v1.4.0.1"
 
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
@@ -17,7 +17,7 @@
 #define ADC_24BIT_MAX_VAL_NANO_VOLT 8388607000000000.0
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-#define DEBUG 1
+// #define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define BYTES_PER_CHANNEL 3
 #ifdef RAW_TO_JSON

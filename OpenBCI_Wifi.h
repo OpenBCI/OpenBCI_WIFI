@@ -8,11 +8,11 @@
 *
 * Author: Push The World LLC (AJ Keller)
 */
-#define ARDUINOJSON_USE_LONG_LONG 1
-#define ARDUINOJSON_USE_DOUBLE 1
-#define RAW_TO_JSON
-#define MQTT
-#define MQTT_SECURE
+// #define ARDUINOJSON_USE_LONG_LONG 1
+// #define ARDUINOJSON_USE_DOUBLE 1
+// #define RAW_TO_JSON
+// #define MQTT
+// #define MQTT_SECURE
 
 #ifndef __OpenBCI_Wifi__
 #define __OpenBCI_Wifi__
@@ -62,7 +62,7 @@ public:
   // STRUCTS
 #ifdef RAW_TO_JSON
   typedef struct {
-    double channelData[NUM_CHANNELS_CYTON_DAISY];
+    double channelData[NUM_CHANNELS_GANGLION];
     unsigned long long timestamp;
     uint8_t sampleNumber;
   } Sample;

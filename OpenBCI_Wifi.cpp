@@ -616,7 +616,7 @@ void OpenBCI_Wifi_Class::setGains(uint8_t *raw) {
   setGains(raw, _gains);
 }
 
-// #ifdef MQTT
+#ifdef MQTT
 /**
  * Used to set the information required for a succesful MQTT communication
  * @param brokerAddress {String} - A string such as 'mock.getcloudbrain.com'
@@ -630,7 +630,7 @@ void OpenBCI_Wifi_Class::setInfoMQTT(String brokerAddress, String username, Stri
   mqttPort = port;
   setOutputProtocol(OUTPUT_PROTOCOL_MQTT);
 }
-// #endif
+#endif
 /**
  * Used to configure the requried internal variables for TCP communication
  * @param address   {IPAddress} - The ip address in string form: "192.168.0.1"
