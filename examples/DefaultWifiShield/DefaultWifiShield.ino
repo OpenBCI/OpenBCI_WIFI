@@ -542,7 +542,8 @@ void setup() {
 #ifdef DEBUG
   Serial.println("Wifi manager started...");
 #endif
-  wifiManager.autoConnect(wifi.getName().c_str());
+  // TODO: allow for password protected AP for: https://github.com/OpenBCI/OpenBCI_WIFI/issues/9 
+  wifiManager.autoConnect(wifi.getName().c_str()); 
 
 #ifdef DEBUG
   Serial.printf("Turning LED Notify light on\nStarting ntp...\n");
