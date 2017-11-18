@@ -146,9 +146,10 @@
 #define HTTP_ROUTE_COMMAND "/command"
 #define HTTP_ROUTE_LATENCY "/latency"
 #define HTTP_ROUTE_ALL "/all"
-#define HTTP_AP "/ap"
 #define HTTP_ROUTE_BOARD "/board"
 #define HTTP_ROUTE_WIFI "/wifi"
+#define HTTP_ROUTE_WIFI_CONFIG "/wifi/config"
+#define HTTP_ROUTE_WIFI_DELETE "/wifi/delete"
 
 #define RETURN_TEXT_JSON "text/json"
 

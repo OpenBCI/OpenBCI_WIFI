@@ -15,7 +15,7 @@
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
-boolean setAP;
+boolean startWifiManager;
 boolean underSelfTest;
 boolean wifiReset;
 
@@ -148,6 +148,15 @@ bool readRequest(WiFiClient& client) {
     }
   }
   return false;
+}
+
+void requestWifiManager() {
+  startWifiManager = true;
+#ifdef DEBUG
+  Serial.println("/wifi or /wifi/configure");
+#endif
+  sendHeadersForCORS();
+  server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
 }
 
 JsonObject& getArgFromArgs(int args) {
@@ -387,7 +396,7 @@ void removeWifiAPInfo() {
 }
 
 void initializeVariables() {
-  setAP = false;
+  startWifiManager = false;
   underSelfTest = false;
   wifiReset = false;
 
@@ -462,18 +471,11 @@ void setup() {
   printWifiStatus();
   Serial.printf("Starting HTTP...\n");
 #endif
+
   server.on(HTTP_ROUTE, HTTP_GET, [](){
-    returnOK("Push The World - Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests");
+    server.send(200, "text/html", "<h1>Push The World</h1> <p> Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests</p><p><a href='http://192.168.4.1/wifi'>Configure Wifi</a></p>");
   });
   server.on(HTTP_ROUTE, HTTP_OPTIONS, sendHeadersForOptions);
-
-  server.on(HTTP_ROUTE_CLOUD, HTTP_GET, [](){
-    digitalWrite(LED_NOTIFY, LOW);
-    sendHeadersForCORS();
-    server.send(200, "text/html", "<!DOCTYPE html> html lang=\"en\"> <head><meta http-equiv=\"refresh\"content=\"0; url=https://app.exocortex.ai\"/><title>Redirecting ...</title></head></html>");
-    digitalWrite(LED_NOTIFY, HIGH);
-  });
-  server.on(HTTP_ROUTE_CLOUD, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on("/index.html", HTTP_GET, [](){
     returnOK("Push The World - OpenBCI - Wifi bridge - is up and running woo");
@@ -605,22 +607,21 @@ void setup() {
   });
   server.on(HTTP_ROUTE_BOARD, HTTP_OPTIONS, sendHeadersForOptions);
 
+  server.on(HTTP_ROUTE_WIFI, HTTP_GET, requestWifiManager);
   server.on(HTTP_ROUTE_WIFI, HTTP_DELETE, []() {
     returnOK("Reseting wifi. Please power cycle your board in 10 seconds");
     wifiReset = true;
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_AP, HTTP_GET, []() {
-    setAP = true;
-#ifdef DEBUG
-    Serial.println("/ap GET");
-#endif
-    sendHeadersForCORS();
-    server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
-    // returnOK("About to start wifi portal");
+  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, requestWifiManager);
+  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_OPTIONS, sendHeadersForOptions);
+
+  server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_GET, []() {
+    returnOK("Reseting wifi. Please power cycle your board in 10 seconds");
+    wifiReset = true;
   });
-  server.on(HTTP_AP, HTTP_OPTIONS, sendHeadersForOptions);
+  server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_OPTIONS, sendHeadersForOptions);
 
   httpUpdater.setup(&server);
 
@@ -674,8 +675,8 @@ void loop() {
 #endif
   }
   boolean restartServer = false;
-  if (setAP) {
-    setAP = false;
+  if (startWifiManager) {
+    startWifiManager = false;
 
 #ifdef DEBUG
     Serial.printf("%d bytes on heap before stopping local server\n", ESP.getFreeHeap());
