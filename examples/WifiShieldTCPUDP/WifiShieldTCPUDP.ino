@@ -472,6 +472,13 @@ void setup() {
   Serial.printf("Starting HTTP...\n");
 #endif
 
+  if (WiFi.SSID().equals("")) {
+    WiFi.mode(WIFI_AP);
+  #ifdef DEBUG
+    Serial.println("Turning wifi into access point");
+  #endif
+  }
+
   server.on(HTTP_ROUTE, HTTP_GET, [](){
     server.send(200, "text/html", "<!DOCTYPE html><html lang=\"en\"><h1>Push The World</h1> <p> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p><p><a href='http://192.168.4.1/wifi'>Click to Configure Wifi</a></p></html>");
   });
