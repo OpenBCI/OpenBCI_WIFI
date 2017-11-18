@@ -473,7 +473,7 @@ void setup() {
 #endif
 
   server.on(HTTP_ROUTE, HTTP_GET, [](){
-    server.send(200, "text/html", "<h1>Push The World</h1> <p> Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests</p><p><a href='http://192.168.4.1/wifi'>Configure Wifi</a></p>");
+    server.send(200, "text/html", "<h1>Push The World</h1><p>Please visit https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0 for the latest HTTP requests</p><p><a href='http://192.168.4.1/wifi'>Configure Wifi</a></p>");
   });
   server.on(HTTP_ROUTE, HTTP_OPTIONS, sendHeadersForOptions);
 
