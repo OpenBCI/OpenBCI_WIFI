@@ -535,14 +535,30 @@ void setup() {
   WiFiManager wifiManager;
   WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
   wifiManager.addParameter(&custom_text);
-
+  wifiManager.setConfigPortalTimeout(30);
   wifiManager.setAPCallback(configModeCallback);
 
   //and goes into a blocking loop awaiting configuration
 #ifdef DEBUG
   Serial.println("Wifi manager started...");
 #endif
-  wifiManager.autoConnect(wifi.getName().c_str());
+  // TODO: allow for password protected AP, which would be cool
+  // would have to pass second arg to autoConnect ()
+
+  // to avoid the blocking loop, use startConfigPortal()
+  // example:
+  // void loop() {
+  //   // is configuration portal requested?
+  //   if ( digitalRead(TRIGGER_PIN) == LOW ) {
+  //     WiFiManager wifiManager;
+  //     wifiManager.startConfigPortal("OnDemandAP");
+  //     Serial.println("connected...yeey :)");
+  //   }
+  // }
+  // this would have to happen in the main loop function
+  // not sure where to configure a boolean for this process. 
+  // an api endpoint for both AP and Client for switching to and from
+  wifiManager.autoConnect(wifi.getName().c_str()); 
 
 #ifdef DEBUG
   Serial.printf("Turning LED Notify light on\nStarting ntp...\n");
