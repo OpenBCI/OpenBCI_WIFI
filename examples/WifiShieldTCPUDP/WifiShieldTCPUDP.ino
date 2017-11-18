@@ -2,7 +2,6 @@
 #define ESP8266
 #define BUFFER_SIZE 1440
 
-#include <time.h>
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
@@ -16,6 +15,7 @@
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
+boolean setAP;
 boolean underSelfTest;
 boolean wifiReset;
 
@@ -387,6 +387,7 @@ void removeWifiAPInfo() {
 }
 
 void initializeVariables() {
+  setAP = false;
   underSelfTest = false;
   wifiReset = false;
 
@@ -406,20 +407,6 @@ void setup() {
   #endif
 
   wifi.begin();
-
-  //WiFiManager
-  //Local intialization. Once its business is done, there is no need to keep it around
-  WiFiManager wifiManager;
-  WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
-  wifiManager.addParameter(&custom_text);
-
-  wifiManager.setAPCallback(configModeCallback);
-
-  //and goes into a blocking loop awaiting configuration
-#ifdef DEBUG
-  Serial.println("Wifi manager started...");
-#endif
-  wifiManager.autoConnect(wifi.getName().c_str());
 
 #ifdef DEBUG
   Serial.printf("Turning LED Notify light on\nStarting ntp...\n");
@@ -624,6 +611,15 @@ void setup() {
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
+  server.on(HTTP_AP, HTTP_GET, []() {
+    setAP = true;
+#ifdef DEBUG
+    Serial.println("/ap GET");
+#endif
+    returnOK("About to start wifi portal");
+  });
+  server.on(HTTP_AP, HTTP_OPTIONS, sendHeadersForOptions);
+
   httpUpdater.setup(&server);
 
   server.begin();
@@ -674,6 +670,47 @@ void loop() {
 #ifdef DEBUG
     Serial.println("Failed to get response in 1000ms");
 #endif
+  }
+  boolean restartServer = false;
+  if (setAP) {
+    setAP = false;
+
+#ifdef DEBUG
+    Serial.printf("%d bytes on heap before stopping local server\n", ESP.getFreeHeap());
+#endif
+    server.stop();
+#ifdef DEBUG
+    Serial.printf("%d bytes on after stopping local server\n", ESP.getFreeHeap());
+#endif
+
+    //WiFiManager
+    //Local intialization. Once its business is done, there is no need to keep it around
+    WiFiManager wifiManager;
+    // WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
+    // wifiManager.addParameter(&custom_text);
+    // wifiManager.setConfigPortalTimeout(10);
+    // WiFiManager wifiManager;
+#ifdef DEBUG
+    Serial.printf("Start WiFi Config Portal on WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
+#endif
+    if (!wifiManager.startConfigPortal(wifi.getName().c_str())) {
+      Serial.println("failed to connect and hit timeout");
+      delay(3000);
+      //reset and try again, or maybe put it to deep sleep
+      ESP.reset();
+      delay(5000);
+    }
+
+#ifdef DEBUG
+    Serial.printf("Stop WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
+#endif
+    restartServer = true;
+
+  }
+
+  if (restartServer) {
+    // restartServer = false;
+    server.begin();
   }
 
   int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
