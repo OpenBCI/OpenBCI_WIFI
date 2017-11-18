@@ -616,7 +616,9 @@ void setup() {
 #ifdef DEBUG
     Serial.println("/ap GET");
 #endif
-    returnOK("About to start wifi portal");
+    sendHeadersForCORS();
+    server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
+    // returnOK("About to start wifi portal");
   });
   server.on(HTTP_AP, HTTP_OPTIONS, sendHeadersForOptions);
 
