@@ -535,7 +535,7 @@ void setup() {
   WiFiManager wifiManager;
   WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
   wifiManager.addParameter(&custom_text);
-
+  wifiManager.setConfigPortalTimeout(30);
   wifiManager.setAPCallback(configModeCallback);
 
   //and goes into a blocking loop awaiting configuration
