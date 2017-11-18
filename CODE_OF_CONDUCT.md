@@ -2,7 +2,7 @@
 
 ## Purpose
 
-It is our hope that any one is able to contribute to OpenBCI WiFi NodeJS regardless of their background. Thus, we hope to provide a safe, welcoming, and warmly geeky environment for everybody, regardless of gender, sexual orientation, ability, ethnicity, socioeconomic status, and religion (or lack thereof).
+It is our hope that any one is able to contribute to OpenBCI WiFi Shield Library regardless of their background. Thus, we hope to provide a safe, welcoming, and warmly geeky environment for everybody, regardless of gender, sexual orientation, ability, ethnicity, socioeconomic status, and religion (or lack thereof).
 
 ## Our Standards
 

@@ -1,7 +1,7 @@
 # OpenBCI WiFi Shield Library
 
 <p align="center">
-  <img alt="banner" src="/images/WiFi_front_product.jpg/" width="600">
+  <img alt="banner" src="/images/WiFi_front_product.jpg/" width="400">
 </p>
 <p align="center" href="">
   Make programming with OpenBCI reliable, easy, research grade and fun!
@@ -21,7 +21,6 @@ This document (the README file) is a hub to give you some information about the 
 * [How can you get involved?](#get-involved)
 * [Get in touch](#contact-us)
 * [Find out more](#find-out-more)
-* [Understand the jargon](#glossary)
 
 ## What are we doing?
 
@@ -36,9 +35,8 @@ This document (the README file) is a hub to give you some information about the 
 * Bluetooth on Ganglion requires low level drivers to use computers bluetooth hardware.
 * The OpenBCI Cyton and Ganglion must transmit data to another computer over Bluetooth before going to the cloud for storage or analytics
 * OpenBCI Cyton Dongle FTDI virtual comm port drivers have high latency by default which limits the rate at which new data is made available to your application to twice a second when it should get data as close to 250 times a second.
-* Using Cyton or Ganglion NodeJS drivers requires the use of [_native C++ modules_](https://nodejs.org/api/addons.html) which continuously confuse developers of all levels.
 
-So, if even the very best developers integrate the current easy to use Cyton and Ganglion NodeJS drivers, they are still burdened by the limitations of the physical hardware on the OpenBCI system.
+So, if even the very best developers integrate the current easy to use Cyton and Ganglion, they are still burdened by the limitations of the physical hardware on the OpenBCI system.
 
 ### The solution
 
@@ -111,12 +109,11 @@ Thank you so much (Danke schön! Merci beaucoup!) for visiting the project and w
 ---
 
 1. [Installation](#install)
+2. [Running](#running)
 2. [License](#license)
 
 
 ### <a name="install"></a> Installation:
-
-## Developing and Building
 
 Use the `WifiShieldTCPUDP.ino` in examples!
 
@@ -130,18 +127,25 @@ The ESP8266 runs arduino as well so there are several installs that need to happ
 
 The library we are interested in using is the [`SPISlave`](https://github.com/esp8266/Arduino/tree/master/libraries/SPISlave).
 
-## Pin mappings
 
-The pin mappings for the ESP8266 are:
+### <a name="running"></a> Running:
 
-Pin Name | GPIO# | HSPI Function
---- | --- | ---
-MTDI | GPIO12 | MISO (DIN)
-MTCK | GPIO13 | MOSI (DOUT)
-MTMS | GPIO14 | CLOCK
-MTDO | GPIO15 | CS / SS
+There are two modes that the OpenBCI WiFi shield can run in
 
-## <a name="license"></a> License:
+<p align="center">
+  <img alt="soft-ap" src="/images/wifi_flow_softap.png/" width="500">
+</p>
+<p align="center" href="">
+  WiFi Direct Mode (WiFi<->Computer)
+</p>
+<p align="center">
+  <img alt="soft-ap" src="/images/wifi_flow_station.png/" width="500">
+</p>
+<p align="center" href="">
+  WiFi Station Mode (WiFi<->Router<->Any Internet Device)
+</p>
+
+### <a name="license"></a> License:
 
 MIT
 
