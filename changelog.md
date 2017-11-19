@@ -1,3 +1,23 @@
+<<<<<<< HEAD
+# v2.0.0
+
+### New Features
+
+* UDP support
+* WiFi Direct default support (thanks @jnaulty)
+* New docs (code of conduct, roadmap, contributing, readme)
+* Now visit `http://192.168.4.1/wifi` in your browser to connect wifi shield to a new network
+
+### Breaking Changes
+
+* No longer doing captive portal by default
+
+### Work In Progress
+
+* MQTT Secure
+
+=======
+>>>>>>> 5ee1d6f84bb31998753aa78f787f8a443e041474
 # v1.3.0
 
 At this time, can no longer support both RAW and JSON modes with a single binary file. Need optimized builds. We ended up having two modes that didnt work that well instead of highly optimized builds for the different operating modes.

@@ -9,7 +9,7 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
-#define SOFTWARE_VERSION "v1.3.0"
+#define SOFTWARE_VERSION "v2.0.0.0"
 
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
@@ -17,13 +17,16 @@
 #define ADC_24BIT_MAX_VAL_NANO_VOLT 8388607000000000.0
 #define BYTES_PER_SPI_PACKET 32
 #define BYTES_PER_OBCI_PACKET 33
-// #define DEBUG 1
+#define DEBUG 1
 #define MAX_SRV_CLIENTS 2
 #define BYTES_PER_CHANNEL 3
-#define NUM_PACKETS_IN_RING_BUFFER_JSON 1
-#define NUM_RAW_BUFFERS 2
-#define MAX_PACKETS_PER_SEND_TCP 50
-#define BYTES_PER_RAW_BUFFER MAX_PACKETS_PER_SEND_TCP * BYTES_PER_OBCI_PACKET
+#ifdef RAW_TO_JSON
+  #define NUM_PACKETS_IN_RING_BUFFER_JSON 28
+  #define NUM_PACKETS_IN_RING_BUFFER_RAW 1
+#else
+  #define NUM_PACKETS_IN_RING_BUFFER_RAW 200
+  #define MAX_PACKETS_PER_SEND_TCP 42
+#endif
 #define WIFI_SPI_MSG_LAST 0x01
 #define WIFI_SPI_MSG_MULTI 0x02
 #define WIFI_SPI_MSG_GAINS 0x03
@@ -102,6 +105,7 @@
 #define JSON_MQTT_PORT "port"
 #define JSON_NAME "name"
 #define JSON_NUM_CHANNELS "num_channels"
+#define JSON_REDUNDANCY "redundancy"
 #define JSON_SAMPLE_NUMBERS "sample_numbers"
 #define JSON_SAMPLE_NUMBER "sampleNumber"
 #define JSON_TCP_DELIMITER "delimiter"
@@ -125,5 +129,28 @@
 #define PROCESS_RAW_PASS_MIDDLE 0x06
 #define STREAM_PACKET_BYTE_START 0xA0
 #define STREAM_PACKET_BYTE_STOP 0xC0
+
+#define MQTT_ROUTE_KEY "openbci:eeg"
+
+#define HTTP_ROUTE_MQTT "/mqtt"
+#define HTTP_ROUTE_TCP "/tcp"
+#define HTTP_ROUTE_UDP "/udp"
+#define HTTP_ROUTE "/"
+#define HTTP_ROUTE_CLOUD "/cloud"
+#define HTTP_ROUTE_YT "/yt"
+#define HTTP_ROUTE_OUTPUT_JSON "/output/json"
+#define HTTP_ROUTE_OUTPUT_RAW "/output/raw"
+#define HTTP_ROUTE_STREAM_START "/stream/start"
+#define HTTP_ROUTE_STREAM_STOP "/stream/stop"
+#define HTTP_ROUTE_VERSION "/version"
+#define HTTP_ROUTE_COMMAND "/command"
+#define HTTP_ROUTE_LATENCY "/latency"
+#define HTTP_ROUTE_ALL "/all"
+#define HTTP_ROUTE_BOARD "/board"
+#define HTTP_ROUTE_WIFI "/wifi"
+#define HTTP_ROUTE_WIFI_CONFIG "/wifi/config"
+#define HTTP_ROUTE_WIFI_DELETE "/wifi/delete"
+
+#define RETURN_TEXT_JSON "text/json"
 
 #endif

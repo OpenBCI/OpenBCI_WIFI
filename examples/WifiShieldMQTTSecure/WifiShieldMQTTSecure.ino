@@ -11,35 +11,23 @@
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
-#include <ESP8266HTTPUpdateServer.h>
-#include <ESP8266SSDP.h>
-#include <WiFiManager.h>
+// #include <ESP8266HTTPUpdateServer.h>
 #include "SPISlave.h"
 #include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
 #include <ArduinoJson.h>
-#ifdef MQTT
 #include <PubSubClient.h>
-#endif
-#ifdef MQTT_SECURE
 #include <WiFiClientSecure.h>
-#endif
-#include "WiFiClientPrint.h"
 #include "OpenBCI_Wifi_Definitions.h"
 #include "OpenBCI_Wifi.h"
 
 boolean isWaitingOnResetConfirm;
 boolean ntpOffsetSet;
-boolean underSelfTest;
 boolean syncingNtp;
 boolean waitingOnNTP;
 boolean wifiReset;
 
-int udpPort;
-IPAddress udpAddress;
-
 ESP8266WebServer server(80);
-ESP8266HTTPUpdateServer httpUpdater;
+// ESP8266HTTPUpdateServer httpUpdater;
 
 String jsonStr;
 
@@ -51,20 +39,11 @@ unsigned long lastHeadMove;
 unsigned long lastMQTTConnectAttempt;
 unsigned long ntpLastTimeSeconds;
 
-WiFiUDP clientUDP;
-WiFiClient clientTCP;
-
-WiFiClientPrint<> wifiPrinter(clientTCP);
-
-#ifdef MQTT
-#ifdef MQTT_SECURE
 WiFiClientSecure espClient;
 PubSubClient clientMQTT(espClient);
-#else
-WiFiClient espClient;
-PubSubClient clientMQTT(espClient);
-#endif
-#endif
+
+const char* ssid = "***";
+const char* password = "***";
 
 ///////////////////////////////////////////
 // Utility functions
@@ -149,16 +128,6 @@ void callbackMQTT(char* topic, byte* payload, unsigned int length) {
   #endif
 }
 #endif
-/**
-* Used when
-*/
-void configModeCallback (WiFiManager *myWiFiManager) {
-  #ifdef DEBUG
-  Serial.println(WiFi.softAPIP());
-  Serial.println(myWiFiManager->getConfigPortalSSID());
-  #endif
-}
-
 
 ///////////////////////////////////////////////////
 // HTTP Rest Helpers
@@ -301,185 +270,6 @@ void passthroughCommand() {
   }
 }
 
-void tcpSetup() {
-
-  // Parse args
-  if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs(8);
-  if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
-  String tempAddr = root[JSON_TCP_IP];
-  IPAddress tempIPAddr;
-  if (!tempIPAddr.fromString(tempAddr)) {
-    return returnFail(505, "Error: unable to parse ip address. Please send as string in octets i.e. xxx.xxx.xxx.xxx");
-  }
-  if (!root.containsKey(JSON_TCP_PORT)) return returnMissingRequiredParam(JSON_TCP_PORT);
-  int port = root[JSON_TCP_PORT];
-  if (root.containsKey(JSON_TCP_OUTPUT)) {
-    String outputModeStr = root[JSON_TCP_OUTPUT];
-    if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW))) {
-      wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
-    } else if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON))) {
-      wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
-    } else {
-      return returnFail(506, "Error: '" + String(JSON_TCP_OUTPUT) + "' must be either " + wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW)+" or " + wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON));
-    }
-#ifdef DEBUG
-    Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
-#endif
-  }
-
-  if (root.containsKey(JSON_REDUNDANCY)) {
-    wifi.redundancy = root[JSON_REDUNDANCY];
-#ifdef DEBUG
-    Serial.print("Set redundancy to "); Serial.println(wifi.redundancy);
-#endif
-  }
-
-  if (root.containsKey(JSON_LATENCY)) {
-    int latency = root[JSON_LATENCY];
-    wifi.setLatency(latency);
-#ifdef DEBUG
-    Serial.print("Set latency to "); Serial.print(wifi.getLatency()); Serial.println(" uS");
-#endif
-  }
-
-  boolean tcpDelimiter = wifi.tcpDelimiter;
-  if (root.containsKey(JSON_TCP_DELIMITER)) {
-    tcpDelimiter = root[JSON_TCP_DELIMITER];
-#ifdef DEBUG
-    Serial.print("Will use delimiter:"); Serial.println(wifi.tcpDelimiter ? "true" : "false");
-#endif
-  }
-  wifi.setInfoTCP(tempAddr, port, tcpDelimiter);
-
-  if (root.containsKey(JSON_SAMPLE_NUMBERS)) {
-    wifi.jsonHasSampleNumbers = root[JSON_SAMPLE_NUMBERS];
-#ifdef DEBUG
-    Serial.print("Set jsonHasSampleNumbers to "); Serial.println(wifi.jsonHasSampleNumbers ? String("true") : String("false"));
-#endif
-  }
-
-  if (root.containsKey(JSON_TIMESTAMPS)) {
-    wifi.jsonHasTimeStamps = root[JSON_TIMESTAMPS];
-#ifdef DEBUG
-    Serial.print("Set jsonHasTimeStamps to "); Serial.println(wifi.jsonHasTimeStamps ? String("true") : String("false"));
-#endif
-  }
-
-#ifdef DEBUG
-  Serial.print("Got ip: "); Serial.println(wifi.tcpAddress.toString());
-  Serial.print("Got port: "); Serial.println(wifi.tcpPort);
-  Serial.print("Current uri: "); Serial.println(server.uri());
-  Serial.print("Starting socket to host: "); Serial.print(wifi.tcpAddress.toString()); Serial.print(" on port: "); Serial.println(wifi.tcpPort);
-#endif
-
-  wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_TCP);
-
-  // const size_t bufferSize = JSON_OBJECT_SIZE(6) + 40*6;
-  // DynamicJsonBuffer jsonBuffer(bufferSize);
-  // JsonObject& rootOut = jsonBuffer.createObject();
-  sendHeadersForCORS();
-  if (clientTCP.connect(wifi.tcpAddress, wifi.tcpPort)) {
-  #ifdef DEBUG
-    Serial.println("Connected to server");
-  #endif
-    // clientTCP.setNoDelay(1);
-    wifiPrinter.setClient(clientTCP);
-    jsonStr = wifi.getInfoTCP(true);
-    // jsonStr = "";
-    // rootOut.printTo(jsonStr);
-    server.setContentLength(jsonStr.length());
-    return server.send(200, RETURN_TEXT_JSON, jsonStr.c_str());
-  } else {
-  #ifdef DEBUG
-    Serial.println("Failed to connect to server");
-  #endif
-    jsonStr = wifi.getInfoTCP(false);
-    // jsonStr = "";
-    // rootOut.printTo(jsonStr);
-    server.setContentLength(jsonStr.length());
-    return server.send(504, RETURN_TEXT_JSON, jsonStr.c_str());
-  }
-}
-
-void udpSetup() {
-  // Parse args
-  if(noBodyInParam()) return returnNoBodyInPost(); // no body
-  JsonObject& root = getArgFromArgs(7);
-  if (!root.containsKey(JSON_TCP_IP)) return returnMissingRequiredParam(JSON_TCP_IP);
-  String tempAddr = root[JSON_TCP_IP];
-  IPAddress tempIPAddr;
-  if (!tempIPAddr.fromString(tempAddr)) {
-    return returnFail(505, "Error: unable to parse ip address. Please send as string in octets i.e. xxx.xxx.xxx.xxx");
-  }
-  if (!root.containsKey(JSON_TCP_PORT)) return returnMissingRequiredParam(JSON_TCP_PORT);
-  int port = root[JSON_TCP_PORT];
-  if (root.containsKey(JSON_TCP_OUTPUT)) {
-    String outputModeStr = root[JSON_TCP_OUTPUT];
-    if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW))) {
-      wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
-    } else if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON))) {
-      wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
-    } else {
-      return returnFail(506, "Error: '" + String(JSON_TCP_OUTPUT) + "' must be either " + wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW)+" or " + wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON));
-    }
-  #ifdef DEBUG
-    Serial.print("Set output mode to "); Serial.println(wifi.getCurOutputModeString());
-  #endif
-  }
-
-
-  if (root.containsKey(JSON_REDUNDANCY)) {
-    wifi.redundancy = root[JSON_REDUNDANCY];
-#ifdef DEBUG
-    Serial.print("Set redundancy to "); Serial.println(wifi.redundancy);
-#endif
-  }
-
-  if (root.containsKey(JSON_LATENCY)) {
-    int latency = root[JSON_LATENCY];
-    wifi.setLatency(latency);
-  #ifdef DEBUG
-    Serial.print("Set latency to "); Serial.print(wifi.getLatency()); Serial.println(" uS");
-  #endif
-  }
-
-  boolean tcpDelimiter = wifi.tcpDelimiter;
-  if (root.containsKey(JSON_TCP_DELIMITER)) {
-    tcpDelimiter = root[JSON_TCP_DELIMITER];
-  #ifdef DEBUG
-    Serial.print("Will use delimiter:"); Serial.println(wifi.tcpDelimiter ? "true" : "false");
-  #endif
-  }
-  wifi.setInfoUDP(tempAddr, port, tcpDelimiter);
-
-  if (root.containsKey(JSON_SAMPLE_NUMBERS)) {
-    wifi.jsonHasSampleNumbers = root[JSON_SAMPLE_NUMBERS];
-#ifdef DEBUG
-    Serial.print("Set jsonHasSampleNumbers to "); Serial.println(wifi.jsonHasSampleNumbers ? String("true") : String("false"));
-#endif
-  }
-
-  if (root.containsKey(JSON_TIMESTAMPS)) {
-    wifi.jsonHasTimeStamps = root[JSON_TIMESTAMPS];
-#ifdef DEBUG
-    Serial.print("Set jsonHasTimeStamps to "); Serial.println(wifi.jsonHasTimeStamps ? String("true") : String("false"));
-#endif
-  }
-
-#ifdef DEBUG
-  Serial.print("Got ip: "); Serial.println(wifi.tcpAddress.toString());
-  Serial.print("Got port: "); Serial.println(wifi.tcpPort);
-  Serial.print("Current uri: "); Serial.println(server.uri());
-  Serial.print("Ready to write to: "); Serial.print(wifi.tcpAddress.toString()); Serial.print(" on port: "); Serial.println(wifi.tcpPort);
-#endif
-
-  wifiPrinter.setClient(clientUDP);
-
-  sendHeadersForCORS();
-  return server.send(200, "text/json", jsonStr.c_str());
-}
-
 #ifdef MQTT
 /**
 * Function called on route `/mqtt` with HTTP_POST with body
@@ -573,9 +363,9 @@ void mqttSetup() {
   }
   sendHeadersForCORS();
   if (connected) {
-    return server.send(200, RETURN_TEXT_JSON, wifi.getInfoMQTT(true));
+    return server.send(200, RETURN_TEXT_JSON, "{\"connected\":true}");
   } else {
-    return server.send(505, RETURN_TEXT_JSON, wifi.getInfoMQTT(false));
+    return server.send(505, RETURN_TEXT_JSON, "{\"connected\":false}");
   }
 }
 #endif
@@ -599,7 +389,6 @@ void removeWifiAPInfo() {
 void initializeVariables() {
   isWaitingOnResetConfirm = false;
   ntpOffsetSet = false;
-  underSelfTest = false;
   syncingNtp = false;
   waitingOnNTP = false;
   wifiReset = false;
@@ -615,29 +404,25 @@ void initializeVariables() {
 }
 
 void setup() {
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+#ifdef DEBUG
+    Serial.print(".");
+#endif
+  }
+
   initializeVariables();
 
-  #ifdef DEBUG
+#ifdef DEBUG
   Serial.begin(230400);
   Serial.setDebugOutput(true);
   Serial.println("Serial started");
-  #endif
+#endif
 
   wifi.begin();
-
-  //WiFiManager
-  //Local intialization. Once its business is done, there is no need to keep it around
-  WiFiManager wifiManager;
-  WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
-  wifiManager.addParameter(&custom_text);
-
-  wifiManager.setAPCallback(configModeCallback);
-
-  //and goes into a blocking loop awaiting configuration
-#ifdef DEBUG
-  Serial.println("Wifi manager started...");
-#endif
-  wifiManager.autoConnect(wifi.getName().c_str());
 
 #ifdef DEBUG
   Serial.printf("Turning LED Notify light on\nStarting ntp...\n");
@@ -647,25 +432,7 @@ void setup() {
 
   wifi.ntpStart();
 
-#ifdef DEBUG
-  Serial.printf("Starting SSDP...\n");
-#endif
-  SSDP.setSchemaURL("description.xml");
-  SSDP.setHTTPPort(80);
-  SSDP.setName("PTW - OpenBCI Wifi Shield");
-  SSDP.setSerialNumber(wifi.getName());
-  SSDP.setURL("index.html");
-  SSDP.setModelName(wifi.getModelNumber());
-  SSDP.setModelNumber("929000226503");
-  SSDP.setModelURL("http://www.openbci.com");
-  SSDP.setManufacturer("Push The World LLC");
-  SSDP.setManufacturerURL("http://www.pushtheworldllc.com");
-  SSDP.begin();
 
-  // pinMode(0, INPUT);
-  // data has been received from the master. Beware that len is always 32
-  // and the buffer is autofilled with zeroes if data is less than 32 bytes long
-  // It's up to the user to implement protocol for handling data length
   SPISlave.onData([](uint8_t * data, size_t len) {
     wifi.spiProcessPacket(data);
   });
@@ -712,79 +479,12 @@ void setup() {
     returnOK("Push The World - OpenBCI - Wifi bridge - is up and running woo");
   });
 
-  server.on("/description.xml", HTTP_GET, [](){
-#ifdef DEBUG
-    Serial.println("SSDP HIT");
-#endif
-    digitalWrite(LED_NOTIFY, LOW);
-    SSDP.schema(server.client());
-    digitalWrite(LED_NOTIFY, HIGH);
-  });
-  server.on(HTTP_ROUTE_YT, HTTP_GET, [](){
-    returnOK("Keep going! Push The World!");
-  });
-  server.on(HTTP_ROUTE_YT, HTTP_OPTIONS, sendHeadersForOptions);
-
-  server.on(HTTP_ROUTE_OUTPUT_JSON, HTTP_GET, [](){
-#ifdef RAW_TO_JSON
-    wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
-    returnOK();
-#else
-    returnFail(555, "Using default firmware optimized for raw, please update to JSON/MQTT firmware!");
-#endif
-  });
-  server.on(HTTP_ROUTE_OUTPUT_JSON, HTTP_OPTIONS, sendHeadersForOptions);
-
-  server.on(HTTP_ROUTE_OUTPUT_RAW, HTTP_GET, [](){
-    wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
-    returnOK();
-  });
-  server.on(HTTP_ROUTE_OUTPUT_RAW, HTTP_OPTIONS, sendHeadersForOptions);
-
-#ifdef MQTT
   server.on(HTTP_ROUTE_MQTT, HTTP_GET, []() {
     sendHeadersForCORS();
     server.send(200, RETURN_TEXT_JSON, wifi.getInfoMQTT(clientMQTT.connected()));
   });
   server.on(HTTP_ROUTE_MQTT, HTTP_POST, mqttSetup);
-#else
-  server.on(HTTP_ROUTE_MQTT, HTTP_GET, []() {
-    returnFail(555, "Using default firmware optimized for raw, please update to JSON/MQTT firmware!");
-  });
-  server.on(HTTP_ROUTE_MQTT, HTTP_POST, []() {
-    returnFail(555, "Using default firmware optimized for raw, please update to JSON/MQTT firmware!");
-  });
-#endif
   server.on(HTTP_ROUTE_MQTT, HTTP_OPTIONS, sendHeadersForOptions);
-
-  server.on(HTTP_ROUTE_TCP, HTTP_GET, []() {
-    sendHeadersForCORS();
-    String out = wifi.getInfoTCP(clientTCP.connected());
-    server.setContentLength(out.length());
-    server.send(200, "application/json", out.c_str());
-  });
-  server.on(HTTP_ROUTE_TCP, HTTP_POST, tcpSetup);
-  server.on(HTTP_ROUTE_TCP, HTTP_OPTIONS, sendHeadersForOptions);
-  server.on(HTTP_ROUTE_TCP, HTTP_DELETE, []() {
-    sendHeadersForCORS();
-    clientTCP.stop();
-    wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_NONE);
-    jsonStr = wifi.getInfoTCP(false);
-    server.setContentLength(jsonStr.length());
-    server.send(200, "text/json", jsonStr.c_str());
-    jsonStr = "";
-  });
-
-  server.on(HTTP_ROUTE_UDP, HTTP_POST, udpSetup);
-  server.on(HTTP_ROUTE_UDP, HTTP_OPTIONS, sendHeadersForOptions);
-  server.on(HTTP_ROUTE_UDP, HTTP_DELETE, []() {
-    sendHeadersForCORS();
-    wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_NONE);
-    jsonStr = wifi.getInfoTCP(false);
-    server.setContentLength(jsonStr.length());
-    server.send(200, RETURN_TEXT_JSON, jsonStr.c_str());
-    jsonStr = "";
-  });
 
   // These could be helpful...
   server.on(HTTP_ROUTE_STREAM_START, HTTP_GET, []() {
@@ -860,11 +560,10 @@ void setup() {
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
-  httpUpdater.setup(&server);
+  // httpUpdater.setup(&server);
 
   server.begin();
   MDNS.addService("http", "tcp", 80);
-  MDNS.addService("ws", "tcp", 81);
 
 #ifdef DEBUG
   Serial.printf("Ready!\n");
@@ -881,9 +580,7 @@ void setup() {
     ntpLastTimeSeconds = millis();
   }
 
-#ifdef MQTT
   clientMQTT.setCallback(callbackMQTT);
-#endif
 
 #ifdef DEBUG
   Serial.println("Spi has master: " + String(wifi.spiHasMaster() ? "true" : "false"));
@@ -908,7 +605,6 @@ void loop() {
     delay(1000);
   }
 
-#ifdef MQTT
   if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
     if (clientMQTT.connected()) {
       clientMQTT.loop();
@@ -916,9 +612,7 @@ void loop() {
       mqttConnect(wifi.mqttUsername, wifi.mqttPassword);
     }
   }
-#endif
 
-#ifdef RAW_TO_JSON
   if (syncingNtp) {
     unsigned long long curTime = time(nullptr);
     if (ntpLastTimeSeconds == 0) {
@@ -951,7 +645,6 @@ void loop() {
       ntpLastTimeSeconds = millis();
     }
   }
-#endif
 
   if (wifi.clientWaitingForResponseFullfilled) {
     wifi.clientWaitingForResponseFullfilled = false;
@@ -976,9 +669,7 @@ void loop() {
 #endif
   }
 
-#ifdef RAW_TO_JSON
-  if((clientTCP.connected() || clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) && (micros() > (lastSendToClient + wifi.getLatency()))) {
-    // Serial.print("h: "); Serial.print(head); Serial.print(" t: "); Serial.print(tail); Serial.print(" cTCP: "); Serial.print(clientTCP.connected()); Serial.print(" cMQTT: "); Serial.println(clientMQTT.connected());
+  if((clientMQTT.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL) && (micros() > (lastSendToClient + wifi.getLatency()))) {
     int packetsToSend = wifi.head - wifi.tail;
     if (packetsToSend < 0) {
       packetsToSend = NUM_PACKETS_IN_RING_BUFFER_JSON + packetsToSend; // for wrap around
@@ -994,14 +685,7 @@ void loop() {
 
       wifi.getJSONFromSamples(root, wifi.getNumChannels(), packetsToSend);
 
-      if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_TCP) {
-        jsonStr = "";
-        root.printTo(jsonStr);
-        clientTCP.write(jsonStr.c_str());
-        if (wifi.tcpDelimiter) {
-          clientTCP.write("\r\n");
-        }
-      } else if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
+      if (wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_MQTT) {
         jsonStr = "";
         root.printTo(jsonStr);
         clientMQTT.publish(MQTT_ROUTE_KEY, jsonStr.c_str());
@@ -1017,38 +701,5 @@ void loop() {
       digitalWrite(LED_NOTIFY, HIGH);
     }
   }
-#else
-  int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
-  if (packetsToSend < 0) {
-    packetsToSend = NUM_PACKETS_IN_RING_BUFFER_RAW + packetsToSend; // for wrap around
-  }
-  if (packetsToSend > MAX_PACKETS_PER_SEND_TCP) {
-    packetsToSend = MAX_PACKETS_PER_SEND_TCP;
-  }
-  if((clientTCP.connected() || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_SERIAL || wifi.curOutputProtocol == wifi.OUTPUT_PROTOCOL_UDP) && (micros() > (lastSendToClient + wifi.getLatency()) || packetsToSend == MAX_PACKETS_PER_SEND_TCP) && (packetsToSend > 0)) {
-    Serial.printf("LS2C: %lums H: %u T: %u P2S: %d\n", (micros() - lastSendToClient)/1000, wifi.rawBufferHead, wifi.rawBufferTail, packetsToSend);
-    digitalWrite(LED_NOTIFY, LOW);
 
-    uint32_t taily = wifi.rawBufferTail;
-    for (uint8_t i = 0; i < packetsToSend; i++) {
-      if (taily >= NUM_PACKETS_IN_RING_BUFFER_RAW) {
-        taily = 0;
-      }
-      uint8_t *buf = wifi.rawBuffer[taily];
-      uint8_t stopByte = buf[0];
-      wifiPrinter.write(STREAM_PACKET_BYTE_START);
-      for (int i = 1; i < BYTES_PER_SPI_PACKET; i++) {
-        wifiPrinter.write(buf[i]);
-      }
-      wifiPrinter.write(stopByte);
-      taily += 1;
-    }
-    lastSendToClient = micros();
-    wifiPrinter.flush();
-    if (micros() - lastSendToClient < 5000 && wifi.redundancy) {
-      wifi.rawBufferTail = taily;
-    }
-    digitalWrite(LED_NOTIFY, HIGH);
-  }
-#endif
 }
