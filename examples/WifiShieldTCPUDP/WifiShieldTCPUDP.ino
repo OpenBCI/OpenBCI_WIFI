@@ -480,7 +480,7 @@ void setup() {
   }
 
   server.on(HTTP_ROUTE, HTTP_GET, [](){
-    server.send(200, "text/html", "<!DOCTYPE html><html lang=\"en\"><h1>Push The World</h1> <p> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p><p><a href='http://192.168.4.1/wifi'>Click to Configure Wifi</a></p></html>");
+    server.send(200, "text/html", "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1> <br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://192.168.4.1/wifi'>Click to Configure Wifi</a></p><br></html><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p>");
   });
   server.on(HTTP_ROUTE, HTTP_OPTIONS, sendHeadersForOptions);
 
