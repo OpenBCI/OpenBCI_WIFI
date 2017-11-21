@@ -10,8 +10,8 @@
 */
 // #define ARDUINOJSON_USE_LONG_LONG 1
 // #define ARDUINOJSON_USE_DOUBLE 1
-// #define RAW_TO_JSON
-// #define MQTT
+#define RAW_TO_JSON
+#define MQTT
 // #define MQTT_SECURE
 
 #ifndef __OpenBCI_Wifi__
