@@ -17,6 +17,7 @@
 
 boolean startWifiManager;
 boolean underSelfTest;
+boolean tryConnectToAP;
 boolean wifiReset;
 
 int udpPort;
@@ -29,6 +30,7 @@ String jsonStr;
 
 unsigned long lastSendToClient;
 unsigned long lastHeadMove;
+unsigned long wifiConnectTimeout;
 
 WiFiUDP clientUDP;
 WiFiClient clientTCP;
@@ -397,17 +399,23 @@ void removeWifiAPInfo() {
 
 void initializeVariables() {
   startWifiManager = false;
+  tryConnectToAP = false;
   underSelfTest = false;
   wifiReset = false;
 
   lastHeadMove = 0;
   lastSendToClient = 0;
+  wifiConnectTimeout = millis();
 
   jsonStr = "";
 }
 
 void setup() {
   initializeVariables();
+
+  WiFi.mode(WIFI_AP_STA);
+  // WiFi.mode(WIFI_STA);
+  // WiFi.mode(WIFI_AP);
 
   #ifdef DEBUG
   Serial.begin(230400);
@@ -472,13 +480,6 @@ void setup() {
   Serial.printf("Starting HTTP...\n");
 #endif
 
-  if (WiFi.SSID().equals("")) {
-    WiFi.mode(WIFI_AP);
-  #ifdef DEBUG
-    Serial.println("Turning wifi into access point");
-  #endif
-  }
-
   server.on(HTTP_ROUTE, HTTP_GET, [](){
     server.send(200, "text/html", "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1> <br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://192.168.4.1/wifi'>Click to Configure Wifi</a></p><br></html><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p>");
   });
@@ -500,16 +501,6 @@ void setup() {
     returnOK("Keep going! Push The World!");
   });
   server.on(HTTP_ROUTE_YT, HTTP_OPTIONS, sendHeadersForOptions);
-
-  server.on(HTTP_ROUTE_OUTPUT_JSON, HTTP_GET, [](){
-#ifdef RAW_TO_JSON
-    wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
-    returnOK();
-#else
-    returnFail(555, "Using default firmware optimized for raw, please update to JSON/MQTT firmware!");
-#endif
-  });
-  server.on(HTTP_ROUTE_OUTPUT_JSON, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_OUTPUT_RAW, HTTP_GET, [](){
     wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
@@ -630,15 +621,27 @@ void setup() {
   });
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_OPTIONS, sendHeadersForOptions);
 
-  httpUpdater.setup(&server);
-
-  server.begin();
-  MDNS.addService("http", "tcp", 80);
-
 #ifdef DEBUG
   Serial.printf("Ready!\n");
   Serial.println("Spi has master: " + String(wifi.spiHasMaster() ? "true" : "false"));
 #endif
+
+  if (WiFi.SSID().equals("")) {
+    WiFi.mode(WIFI_AP);
+#ifdef DEBUG
+    Serial.printf("No stored creds, turning wifi into access point with %d bytes on heap\n", ESP.getFreeHeap());
+#endif
+    httpUpdater.setup(&server);
+    server.begin();
+    MDNS.addService("http", "tcp", 80);
+  } else {
+    WiFi.begin();
+    wifiConnectTimeout = millis();
+    tryConnectToAP = true;
+#ifdef DEBUG
+    Serial.printf("Stored creds, with try to connect for 3 seconds with %d bytes on heap\n", ESP.getFreeHeap());
+#endif
+  }
 
 }
 
@@ -657,6 +660,30 @@ void loop() {
     delay(1000);
     ESP.reset();
     delay(1000);
+  }
+
+  if (tryConnectToAP) {
+    if (WiFi.status() == WL_CONNECTED) {
+#ifdef DEBUG
+      Serial.println("Connected to network");
+#endif
+      tryConnectToAP = false;
+      httpUpdater.setup(&server);
+      server.begin();
+      MDNS.addService("http", "tcp", 80);
+    } else if (millis() > (wifiConnectTimeout + 6000)) {
+#ifdef DEBUG
+      Serial.printf("Failed to connect to network with %d bytes on head\n", ESP.getFreeHeap());
+#endif
+      tryConnectToAP = false;
+      WiFi.mode(WIFI_AP);
+#ifdef DEBUG
+      Serial.printf("Started AP with %d bytes on head\n", ESP.getFreeHeap());
+#endif
+      httpUpdater.setup(&server);
+      server.begin();
+      MDNS.addService("http", "tcp", 80);
+    }
   }
 
   if (wifi.clientWaitingForResponseFullfilled) {
@@ -681,7 +708,6 @@ void loop() {
     Serial.println("Failed to get response in 1000ms");
 #endif
   }
-  boolean restartServer = false;
   if (startWifiManager) {
     startWifiManager = false;
 
@@ -689,38 +715,30 @@ void loop() {
     Serial.printf("%d bytes on heap before stopping local server\n", ESP.getFreeHeap());
 #endif
     server.stop();
+    delay(1);
 #ifdef DEBUG
     Serial.printf("%d bytes on after stopping local server\n", ESP.getFreeHeap());
 #endif
-
-    //WiFiManager
     //Local intialization. Once its business is done, there is no need to keep it around
     WiFiManager wifiManager;
-    // WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
-    // wifiManager.addParameter(&custom_text);
-    // wifiManager.setConfigPortalTimeout(10);
-    // WiFiManager wifiManager;
+    WiFiManagerParameter custom_text("<p>Powered by Push The World</p>");
+    wifiManager.addParameter(&custom_text);
 #ifdef DEBUG
     Serial.printf("Start WiFi Config Portal on WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
 #endif
-    if (!wifiManager.startConfigPortal(wifi.getName().c_str())) {
-      Serial.println("failed to connect and hit timeout");
-      delay(3000);
-      //reset and try again, or maybe put it to deep sleep
-      ESP.reset();
-      delay(5000);
+    boolean connected = wifiManager.startConfigPortal(wifi.getName().c_str());
+#ifdef DEBUG
+    if (connected) {
+      Serial.printf("Connected to with WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
+    } else {
+      Serial.printf("Failed to connect with WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
     }
+#endif
 
 #ifdef DEBUG
-    Serial.printf("Stop WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
+    Serial.println("Calling restart");
 #endif
-    restartServer = true;
-
-  }
-
-  if (restartServer) {
-    // restartServer = false;
-    server.begin();
+    ESP.restart();
   }
 
   int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
