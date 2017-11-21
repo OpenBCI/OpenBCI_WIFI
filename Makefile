@@ -1,4 +1,3 @@
-#!/usr/bin/make -f
 #########################################
 #                                       #
 #      Make OpenBCI Wifi Module         #
