@@ -109,8 +109,9 @@ Thank you so much (Danke schön! Merci beaucoup!) for visiting the project and w
 ---
 
 1. [Installation](#install)
-2. [Running](#running)
-2. [License](#license)
+2. [Building](#build)
+3. [Running](#running)
+4. [License](#license)
 
 
 ### <a name="install"></a> Installation:
@@ -127,6 +128,24 @@ The ESP8266 runs arduino as well so there are several installs that need to happ
 
 The library we are interested in using is the [`SPISlave`](https://github.com/esp8266/Arduino/tree/master/libraries/SPISlave).
 
+
+### <a name="build"></a> Building and Flashing:
+
+There are two steps to flashing code. Compiling the codebase, and then flashing it onto the wifi module.
+Makefiles make it a lot easier. Especially if you use [makeEspArduino](https://github.com/plerup/makeEspArduino). Follow the instructions from the project's github.
+
+The `make` command by default builds the default sketch in the `examples/` directory.
+
+To build *and* flash run:
+
+`make flash`
+
+To build a different sketch, provide the (full or relative) path to the sketch file, e.g.:
+
+`make SKETCH=examples/examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino`
+
+To build and flash:
+`make SKETCH=examples/examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino flash`
 
 ### <a name="running"></a> Running:
 
