@@ -134,18 +134,23 @@ The library we are interested in using is the [`SPISlave`](https://github.com/es
 There are two steps to flashing code. Compiling the codebase, and then flashing it onto the wifi module.
 Makefiles make it a lot easier. Especially if you use [makeEspArduino](https://github.com/plerup/makeEspArduino). Follow the instructions from the project's github.
 
-The `make` command by default builds the default sketch in the `examples/` directory.
+The `make` command runs the default commands from `makeEspArduino` with OpenBCI_Wifi specific variables provided in the `Makefile`. By default builds the default sketch in the `examples/` directory.
 
-To build *and* flash run:
+-   To build *and* flash run:
+    
+    `make flash`
 
-`make flash`
+-   To build a different sketch, provide the (full or relative) path to the sketch file, e.g.:
+    
+    `make SKETCH=examples/examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino`
 
-To build a different sketch, provide the (full or relative) path to the sketch file, e.g.:
+-   To build *and* flash with a specific sketch file:
+    
+    `make SKETCH=examples/examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino flash`
 
-`make SKETCH=examples/examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino`
-
-To build and flash:
-`make SKETCH=examples/examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino flash`
+-   If your board is *not using* port `/dev/ttyUSB0`, then pass the `UPLOAD_PORT` variable, e.g.:
+    
+    `make UPLOAD_PORT=/dev/cu.usbserial-AI02BAAJ`
 
 ### <a name="running"></a> Running:
 
