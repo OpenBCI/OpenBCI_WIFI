@@ -13,12 +13,12 @@ makeEspArduino = $(HOME)/makeEspArduino/makeEspArduino.mk
 #########################################
 #            Arduino Lib                #
 #########################################
-ARDUINO_LIBS = $(HOME)/Arduino/libraries
+ARDUINO_LIBS = $(HOME)/Documents/Arduino/libraries
 
 #########################################
 #            Arduino Sketch             #
 #########################################
-SKETCH = $(ARDUINO_LIBS)/OpenBCI_WIFI/examples/DefaultWifiShield/DefaultWifiShield.ino 
+SKETCH = $(ARDUINO_LIBS)/OpenBCI_WIFI/examples/DefaultWifiShield/DefaultWifiShield.ino
 
 #########################################
 #            OpenBCI Lib                #
@@ -62,7 +62,7 @@ LIBS = $(OPENBCI_WIFI_LIB) \
        $(ESP_LIBS)/SPISlave \
        $(ESP_LIBS)/ESP8266mDNS \
        $(ESP_LIBS)/ESP8266HTTPUpdateServer \
-       $(ESP_LIBS)/ArduinoOTA 
+       $(ESP_LIBS)/ArduinoOTA
 
 EXCLUDE_DIRS = $(ARDUINO_LIBS)/ArduinoJson/test \
 	       $(ARDUINO_LIBS)/ArduinoJson/third-party \
