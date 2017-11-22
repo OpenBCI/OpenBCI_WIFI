@@ -127,7 +127,7 @@ The library we are interested in using is the [`SPISlave`](https://github.com/es
 There are two steps to flashing code. Compiling the codebase, and then flashing it onto the wifi module.
 Makefiles make it a lot easier. Especially if you use [makeEspArduino](https://github.com/plerup/makeEspArduino). Follow the instructions from the project's github.
 
-The `make` command runs the default commands from `makeEspArduino` with OpenBCI_Wifi specific variables provided in the `Makefile`. By default builds the default sketch in the `examples/` directory.
+The `make` command runs the default commands from `makeEspArduino` with OpenBCI_Wifi specific variables provided in the `Makefile`. By default builds the default sketch in the `examples/` directory. (**Note**: Run `source env/linux.env` to override `make` variables for the build.
 
 -   To build *and* flash run:
 
