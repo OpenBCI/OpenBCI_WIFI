@@ -92,7 +92,7 @@ You can also hang out, ask questions and share stories in the [OpenBCI NodeJS ro
 You might be interested in:
 
 * Purchase a [WiFi Shield from OpenBCI](https://shop.openbci.com/collections/frontpage/products/wifi-shield?variant=44534009550)
-* An example of the WiFi Shield: [WifiShieldTCPUDP][link_wifi_tcp_udp]
+* An example of the WiFi Shield: [DefaultWifiShield][link_wifi_default]
 
 And of course, you'll want to know our:
 
@@ -116,7 +116,7 @@ Thank you so much (Danke schön! Merci beaucoup!) for visiting the project and w
 
 ### <a name="install"></a> Installation:
 
-Use the `WifiShieldTCPUDP.ino` in examples!
+Use the `DefaultWifiShield.ino` in examples.
 
 You need to clone the [ESP8266 library from github](https://github.com/esp8266/Arduino#using-git-version).
 
@@ -142,11 +142,11 @@ The `make` command runs the default commands from `makeEspArduino` with OpenBCI_
 
 -   To build a different sketch, provide the (full or relative) path to the sketch file, e.g.:
 
-    `make SKETCH=examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino`
+    `make SKETCH=examples/WifiShieldJSON/WifiShieldJSON.ino`
 
 -   To build *and* flash with a specific sketch file:
 
-    `make SKETCH=examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino flash`
+    `make SKETCH=examples/WifiShieldJSON/WifiShieldJSON.ino flash`
 
 -   If your board is *not using* port `/dev/ttyUSB0`, then pass the `UPLOAD_PORT` variable, e.g.:
 
@@ -154,7 +154,7 @@ The `make` command runs the default commands from `makeEspArduino` with OpenBCI_
 
 -   To build *and* flash if your board is *not using* port `/dev/ttyUSB0`, then pass the `UPLOAD_PORT` variable, e.g.:
 
-    `make SKETCH=examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino UPLOAD_PORT=/dev/cu.usbserial-AI02BAAJ flash`
+    `make SKETCH=examples/WifiShieldJSON/WifiShieldJSON.ino UPLOAD_PORT=/dev/cu.usbserial-AI02BAAJ flash`
 
 ### <a name="running"></a> Running:
 
@@ -185,6 +185,6 @@ MIT
 [link_ptw]: https://www.pushtheworldllc.com
 [link_openbci]: http://www.openbci.com
 [link_mozwow]: http://mozillascience.github.io/working-open-workshop/index.html
-[link_wifi_tcp_udp]: examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino
+[link_wifi_default]: examples/DefaultWifiShield/DefaultWifiShield.ino
 [link_openleaderscohort]: https://medium.com/@MozOpenLeaders
 [link_mozsci]: https://science.mozilla.org
