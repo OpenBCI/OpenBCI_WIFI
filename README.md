@@ -28,7 +28,7 @@ This document (the README file) is a hub to give you some information about the 
 
 * Users continuously struggle to get prerequisites properly installed to get current OpenBCI Cyton and Ganglion, hours/days/weeks are wasted just _trying to get the data_.
 * Bluetooth requires you to stay close to your computer, if you go to far, data is lost and the experiment is over.
-* Bluetooth is too slow for transmitting research grade EEG, researchers want 1000Hz (samples per second), bluetooth with 8 channels is limted to 250Hz and with 16 channels limited to 125Hz.
+* Bluetooth is too slow for transmitting research grade EEG, researchers want 1000Hz (samples per second), bluetooth with 8 channels is limited to 250Hz and with 16 channels limited to 125Hz.
 * Bluetooth is unreliable when many other Bluetooth devices are around, demo device or use in busy real life experiment is not reliable. (think grand central station at rush hour)
 * Bluetooth requires data to be sent to desktops in raw or compressed form, must use other node modules to parse complex byte streams, prevents from running in browser.
 * OpenBCI Cyton (8 and 16 channel) with Bluetooth cannot go to any mobile device because of required Bluetooth-to-USB "Dongle". Must use USB port on Desktop/Laptop computers.
@@ -52,7 +52,7 @@ Using WiFi physically solves limitations with the current state-of-the-art open 
 
 ## Who are we?
 
-The founder of the OpenBCI WiFi Shield Library is [AJ Keller][link_aj_keller] with [Push The World][link_ptw]. As we continue to stablize the hardware, the people contributing to this repo is the [OpenBCI][link_openbci] at large. WiFi library contributors want to stream data _fast_ from their bio-sensors.
+The founder of the OpenBCI WiFi Shield Library is [AJ Keller][link_aj_keller] with [Push The World][link_ptw]. As we continue to stabilize the hardware, the people contributing to this repo is the [OpenBCI][link_openbci] at large. WiFi library contributors want to stream data _fast_ from their bio-sensors.
 
 <a href="https://www.mozillascience.org/about">
   <img
@@ -92,7 +92,7 @@ You can also hang out, ask questions and share stories in the [OpenBCI NodeJS ro
 You might be interested in:
 
 * Purchase a [WiFi Shield from OpenBCI](https://shop.openbci.com/collections/frontpage/products/wifi-shield?variant=44534009550)
-* A NodeJS example for WiFi Shield: [getStreaming.js][link_wifi_tcp_udp]
+* An example of the WiFi Shield: [WifiShieldTCPUDP][link_wifi_tcp_udp]
 
 And of course, you'll want to know our:
 
@@ -109,8 +109,9 @@ Thank you so much (Danke schön! Merci beaucoup!) for visiting the project and w
 ---
 
 1. [Installation](#install)
-2. [Running](#running)
-2. [License](#license)
+2. [Building](#build)
+3. [Running](#running)
+4. [License](#license)
 
 
 ### <a name="install"></a> Installation:
@@ -127,6 +128,33 @@ The ESP8266 runs arduino as well so there are several installs that need to happ
 
 The library we are interested in using is the [`SPISlave`](https://github.com/esp8266/Arduino/tree/master/libraries/SPISlave).
 
+
+### <a name="build"></a> Building and Flashing:
+
+There are two steps to flashing code. Compiling the codebase, and then flashing it onto the wifi module.
+Makefiles make it a lot easier. Especially if you use [makeEspArduino](https://github.com/plerup/makeEspArduino). Follow the instructions from the project's github.
+
+The `make` command runs the default commands from `makeEspArduino` with OpenBCI_Wifi specific variables provided in the `Makefile`. By default builds the default sketch in the `examples/` directory.
+
+-   To build *and* flash run:
+
+    `make flash`
+
+-   To build a different sketch, provide the (full or relative) path to the sketch file, e.g.:
+
+    `make SKETCH=examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino`
+
+-   To build *and* flash with a specific sketch file:
+
+    `make SKETCH=examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino flash`
+
+-   If your board is *not using* port `/dev/ttyUSB0`, then pass the `UPLOAD_PORT` variable, e.g.:
+
+    `make UPLOAD_PORT=/dev/cu.usbserial-AI02BAAJ flash`
+
+-   To build *and* flash if your board is *not using* port `/dev/ttyUSB0`, then pass the `UPLOAD_PORT` variable, e.g.:
+
+    `make SKETCH=examples/WifiShieldTCPUDP/WifiShieldTCPUDP.ino UPLOAD_PORT=/dev/cu.usbserial-AI02BAAJ flash`
 
 ### <a name="running"></a> Running:
 
