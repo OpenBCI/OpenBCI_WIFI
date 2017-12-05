@@ -18,6 +18,12 @@
 * MQTT Secure
 * Stability of wifi shield #48
 
+## Beta 2
+
+### Bug Fixes
+
+* Switch to Station if connect to wifi network success.
+
 ## Beta 1
 
 ### Bug Fixes

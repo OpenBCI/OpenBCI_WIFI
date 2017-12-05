@@ -426,12 +426,6 @@ void setup() {
   wifi.begin();
 
 #ifdef DEBUG
-  Serial.printf("Turning LED Notify light on\nStarting ntp...\n");
-#endif
-
-  digitalWrite(LED_NOTIFY, HIGH);
-
-#ifdef DEBUG
   Serial.printf("Starting SSDP...\n");
 #endif
   SSDP.setSchemaURL("description.xml");
@@ -481,7 +475,18 @@ void setup() {
 #endif
 
   server.on(HTTP_ROUTE, HTTP_GET, [](){
-    server.send(200, "text/html", "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1> <br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://192.168.4.1/wifi'>Click to Configure Wifi</a></p><br></html><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p>");
+    String out = "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
+    out += WiFi.localIP().toString();
+    if (WiFi.localIP().toString().equals("192.168.4.1")) {
+      out += "/wifi";
+      out += "'>Click to Configure Wifi</a></p><br>";
+    } else {
+      out += "/wifi/delete";
+      out += "'>Click to Erase Wifi Credentials</a></p><br>";
+    }
+    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p></html>";
+
+    server.send(200, "text/html", out);
   });
   server.on(HTTP_ROUTE, HTTP_OPTIONS, sendHeadersForOptions);
 
@@ -618,6 +623,7 @@ void setup() {
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_GET, []() {
     returnOK("Reseting wifi. Please power cycle your board in 10 seconds");
     wifiReset = true;
+    digitalWrite(LED_NOTIFY, LOW);
   });
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_OPTIONS, sendHeadersForOptions);
 
@@ -634,12 +640,16 @@ void setup() {
     httpUpdater.setup(&server);
     server.begin();
     MDNS.addService("http", "tcp", 80);
+#ifdef DEBUG
+    Serial.printf("Turning LED Notify light on\nStarting ntp...\n");
+#endif
+    digitalWrite(LED_NOTIFY, HIGH);
   } else {
     WiFi.begin();
     wifiConnectTimeout = millis();
     tryConnectToAP = true;
 #ifdef DEBUG
-    Serial.printf("Stored creds, with try to connect for 3 seconds with %d bytes on heap\n", ESP.getFreeHeap());
+    Serial.printf("Stored creds, with try to connect for 6 seconds with %d bytes on heap\n", ESP.getFreeHeap());
 #endif
   }
 
@@ -664,13 +674,15 @@ void loop() {
 
   if (tryConnectToAP) {
     if (WiFi.status() == WL_CONNECTED) {
-#ifdef DEBUG
-      Serial.println("Connected to network");
-#endif
       tryConnectToAP = false;
+      WiFi.mode(WIFI_STA);
       httpUpdater.setup(&server);
       server.begin();
       MDNS.addService("http", "tcp", 80);
+      digitalWrite(LED_NOTIFY, HIGH);
+#ifdef DEBUG
+      Serial.println("Connected to network, switching to station mode.");
+#endif
     } else if (millis() > (wifiConnectTimeout + 6000)) {
 #ifdef DEBUG
       Serial.printf("Failed to connect to network with %d bytes on head\n", ESP.getFreeHeap());
