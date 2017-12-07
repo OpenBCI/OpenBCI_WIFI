@@ -158,7 +158,7 @@ void requestWifiManager() {
   Serial.println("/wifi or /wifi/configure");
 #endif
   sendHeadersForCORS();
-  server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
+  server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"2; URL='/'\" />");
 }
 
 JsonObject& getArgFromArgs(int args) {
@@ -476,12 +476,19 @@ void setup() {
 
   server.on(HTTP_ROUTE, HTTP_GET, [](){
     String out = "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
-    out += WiFi.localIP().toString();
-    if (WiFi.localIP().toString().equals("192.168.4.1")) {
-      out += "/wifi";
-      out += "'>Click to Configure Wifi</a></p><br>";
+    if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
+      if (WiFi.SSID().equals("")) {
+        out += "192.168.4.1";
+        out += HTTP_ROUTE_WIFI;
+        out += "'>Click to Configure Wifi</a></p><br>";
+      } else {
+        out += "192.168.4.1";
+        out += HTTP_ROUTE_WIFI_DELETE;
+        out += "'>Click to Erase Wifi Credentials</a></p><br>";
+      }
     } else {
-      out += "/wifi/delete";
+      out += WiFi.localIP().toString();
+      out += HTTP_ROUTE_WIFI_DELETE;
       out += "'>Click to Erase Wifi Credentials</a></p><br>";
     }
     out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p></html>";
@@ -617,7 +624,10 @@ void setup() {
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, requestWifiManager);
+  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, []() {
+    Serial.println("/wifi/config");
+    requestWifiManager();
+  });
   server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_GET, []() {
@@ -645,7 +655,7 @@ void setup() {
 #endif
     digitalWrite(LED_NOTIFY, HIGH);
   } else {
-    WiFi.begin();
+
     wifiConnectTimeout = millis();
     tryConnectToAP = true;
 #ifdef DEBUG
@@ -683,18 +693,29 @@ void loop() {
 #ifdef DEBUG
       Serial.println("Connected to network, switching to station mode.");
 #endif
-    } else if (millis() > (wifiConnectTimeout + 6000)) {
+  } else if (millis() > (wifiConnectTimeout + 10000)) {
 #ifdef DEBUG
       Serial.printf("Failed to connect to network with %d bytes on head\n", ESP.getFreeHeap());
 #endif
       tryConnectToAP = false;
       WiFi.mode(WIFI_AP);
+      WiFi.begin();
 #ifdef DEBUG
       Serial.printf("Started AP with %d bytes on head\n", ESP.getFreeHeap());
 #endif
       httpUpdater.setup(&server);
       server.begin();
       MDNS.addService("http", "tcp", 80);
+      digitalWrite(LED_NOTIFY, HIGH);
+      delay(250);
+      digitalWrite(LED_NOTIFY, LOW);
+      delay(250);
+      digitalWrite(LED_NOTIFY, HIGH);
+      delay(250);
+      digitalWrite(LED_NOTIFY, LOW);
+      delay(250);
+      digitalWrite(LED_NOTIFY, HIGH);
+      delay(250);
     }
   }
 
