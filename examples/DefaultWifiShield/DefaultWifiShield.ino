@@ -19,7 +19,11 @@ boolean startWifiManager;
 boolean underSelfTest;
 boolean tryConnectToAP;
 boolean wifiReset;
+boolean ledState;
 
+int ledFlashes;
+int ledInterval;
+unsigned long ledLastFlash;
 int udpPort;
 IPAddress udpAddress;
 
@@ -78,6 +82,18 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 */
 boolean noBodyInParam() {
   return server.args() == 0;
+}
+
+void debugPrintDelete() {
+  Serial.println("HTTP DELETE " + server.uri() + " HEAP: " + ESP.getFreeHeap());
+}
+
+void debugPrintGet() {
+  Serial.println("HTTP GET " + server.uri() + " HEAP: " + ESP.getFreeHeap());
+}
+
+void debugPrintPost() {
+  Serial.println("HTTP POST " + server.uri() + " HEAP: " + ESP.getFreeHeap());
 }
 
 void sendHeadersForCORS() {
@@ -153,12 +169,13 @@ bool readRequest(WiFiClient& client) {
 }
 
 void requestWifiManager() {
-  startWifiManager = true;
 #ifdef DEBUG
-  Serial.println("/wifi or /wifi/configure");
+  debugPrintGet();
+  Serial.println("requestWifiManager");
 #endif
+  startWifiManager = true;
   sendHeadersForCORS();
-  server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"2; URL='/'\" />");
+  server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
 }
 
 JsonObject& getArgFromArgs(int args) {
@@ -398,6 +415,7 @@ void removeWifiAPInfo() {
 }
 
 void initializeVariables() {
+  ledState = false;
   startWifiManager = false;
   tryConnectToAP = false;
   underSelfTest = false;
@@ -405,6 +423,9 @@ void initializeVariables() {
 
   lastHeadMove = 0;
   lastSendToClient = 0;
+  ledFlashes = 0;
+  ledInterval = 300;
+  ledLastFlash = millis();
   wifiConnectTimeout = millis();
 
   jsonStr = "";
@@ -475,6 +496,9 @@ void setup() {
 #endif
 
   server.on(HTTP_ROUTE, HTTP_GET, [](){
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     String out = "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
     if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
       if (WiFi.SSID().equals("")) {
@@ -497,10 +521,6 @@ void setup() {
   });
   server.on(HTTP_ROUTE, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on("/index.html", HTTP_GET, [](){
-    returnOK("Push The World - OpenBCI - Wifi bridge - is up and running woo");
-  });
-
   server.on("/description.xml", HTTP_GET, [](){
 #ifdef DEBUG
     Serial.println("SSDP HIT");
@@ -510,17 +530,17 @@ void setup() {
     digitalWrite(LED_NOTIFY, HIGH);
   });
   server.on(HTTP_ROUTE_YT, HTTP_GET, [](){
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     returnOK("Keep going! Push The World!");
   });
   server.on(HTTP_ROUTE_YT, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_OUTPUT_RAW, HTTP_GET, [](){
-    wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
-    returnOK();
-  });
-  server.on(HTTP_ROUTE_OUTPUT_RAW, HTTP_OPTIONS, sendHeadersForOptions);
-
   server.on(HTTP_ROUTE_TCP, HTTP_GET, []() {
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     sendHeadersForCORS();
     String out = wifi.getInfoTCP(clientTCP.connected());
     server.setContentLength(out.length());
@@ -529,6 +549,9 @@ void setup() {
   server.on(HTTP_ROUTE_TCP, HTTP_POST, tcpSetup);
   server.on(HTTP_ROUTE_TCP, HTTP_OPTIONS, sendHeadersForOptions);
   server.on(HTTP_ROUTE_TCP, HTTP_DELETE, []() {
+#ifdef DEBUG
+    debugPrintDelete();
+#endif
     sendHeadersForCORS();
     clientTCP.stop();
     wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_NONE);
@@ -541,6 +564,9 @@ void setup() {
   server.on(HTTP_ROUTE_UDP, HTTP_POST, udpSetup);
   server.on(HTTP_ROUTE_UDP, HTTP_OPTIONS, sendHeadersForOptions);
   server.on(HTTP_ROUTE_UDP, HTTP_DELETE, []() {
+#ifdef DEBUG
+    debugPrintDelete();
+#endif
     sendHeadersForCORS();
     wifi.setOutputProtocol(wifi.OUTPUT_PROTOCOL_NONE);
     jsonStr = wifi.getInfoTCP(false);
@@ -551,6 +577,9 @@ void setup() {
 
   // These could be helpful...
   server.on(HTTP_ROUTE_STREAM_START, HTTP_GET, []() {
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     if (!wifi.spiHasMaster()) return returnNoSPIMaster();
     wifi.passthroughCommands("b");
     SPISlave.setData(wifi.passthroughBuffer, BYTES_PER_SPI_PACKET);
@@ -559,6 +588,9 @@ void setup() {
   server.on(HTTP_ROUTE_STREAM_START, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_STREAM_STOP, HTTP_GET, []() {
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     if (!wifi.spiHasMaster()) return returnNoSPIMaster();
     wifi.passthroughCommands("s");
     SPISlave.setData(wifi.passthroughBuffer, BYTES_PER_SPI_PACKET);
@@ -567,6 +599,9 @@ void setup() {
   server.on(HTTP_ROUTE_STREAM_STOP, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_VERSION, HTTP_GET, [](){
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     returnOK(wifi.getVersion());
   });
   server.on(HTTP_ROUTE_VERSION, HTTP_OPTIONS, sendHeadersForOptions);
@@ -591,46 +626,52 @@ void setup() {
   }
 
   server.onNotFound([](){
+#ifdef DEBUG
+    Serial.println("HTTP NOT FOUND " + server.uri());
+#endif
     returnFail(404, "Route Not Found");
   });
 
   //get heap status, analog input value and all GPIO statuses in one json call
   server.on(HTTP_ROUTE_ALL, HTTP_GET, [](){
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     sendHeadersForCORS();
     String output = wifi.getInfoAll();
     server.setContentLength(output.length());
     server.send(200, RETURN_TEXT_JSON, output);
-#ifdef DEBUG
-    Serial.println(output);
-#endif
   });
   server.on(HTTP_ROUTE_ALL, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_BOARD, HTTP_GET, [](){
+#ifdef DEBUG
+    debugPrintGet();
+#endif
     sendHeadersForCORS();
     String output = wifi.getInfoBoard();
     server.setContentLength(output.length());
     server.send(200, RETURN_TEXT_JSON, output);
-#ifdef DEBUG
-    Serial.println(output);
-#endif
   });
   server.on(HTTP_ROUTE_BOARD, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_WIFI, HTTP_GET, requestWifiManager);
   server.on(HTTP_ROUTE_WIFI, HTTP_DELETE, []() {
+#ifdef DEBUG
+    debugPrintDelete();
+#endif
     returnOK("Reseting wifi. Please power cycle your board in 10 seconds");
     wifiReset = true;
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, []() {
-    Serial.println("/wifi/config");
-    requestWifiManager();
-  });
+  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, requestWifiManager);
   server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_GET, []() {
+#ifdef DEBUG
+    debugPrintDelete();
+#endif
     returnOK("Reseting wifi. Please power cycle your board in 10 seconds");
     wifiReset = true;
     digitalWrite(LED_NOTIFY, LOW);
@@ -650,19 +691,23 @@ void setup() {
     httpUpdater.setup(&server);
     server.begin();
     MDNS.addService("http", "tcp", 80);
-#ifdef DEBUG
-    Serial.printf("Turning LED Notify light on\nStarting ntp...\n");
-#endif
-    digitalWrite(LED_NOTIFY, HIGH);
+    ledFlashes = 10;
+    ledInterval = 100;
+    ledLastFlash = millis();
+    ledState = false;
+    // digitalWrite(LED_NOTIFY, HIGH);
   } else {
-
+    ledFlashes = 2;
+    ledInterval = 500;
     wifiConnectTimeout = millis();
     tryConnectToAP = true;
 #ifdef DEBUG
-    Serial.printf("Stored creds, with try to connect for 6 seconds with %d bytes on heap\n", ESP.getFreeHeap());
+    Serial.printf("Stored creds, will try to connect for 10 seconds with %d bytes on heap\n", ESP.getFreeHeap());
 #endif
   }
-
+#ifdef DEBUG
+  Serial.printf("END OF SETUP HEAP: %d\n", ESP.getFreeHeap());
+#endif
 }
 
 /////////////////////////////////
@@ -671,9 +716,27 @@ void setup() {
 /////////////////////////////////
 /////////////////////////////////
 void loop() {
-  server.handleClient();
+
+  if (ledFlashes > 0) {
+    if (millis() > (ledLastFlash + ledInterval)) {
+      digitalWrite(LED_NOTIFY, ledState ? HIGH : LOW);
+      if (ledState) {
+        ledFlashes--;
+      }
+      ledState = !ledState;
+      ledLastFlash = millis();
+    }
+  }
+
+  if (!tryConnectToAP) {
+    server.handleClient();
+  }
 
   if (wifiReset) {
+#ifdef DEBUG
+    Serial.println("WiFi Reset");
+#endif
+    WiFi.mode(WIFI_STA);
     wifiReset = false;
     delay(1000);
     WiFi.disconnect();
@@ -699,23 +762,15 @@ void loop() {
 #endif
       tryConnectToAP = false;
       WiFi.mode(WIFI_AP);
-      WiFi.begin();
 #ifdef DEBUG
       Serial.printf("Started AP with %d bytes on head\n", ESP.getFreeHeap());
 #endif
       httpUpdater.setup(&server);
       server.begin();
       MDNS.addService("http", "tcp", 80);
-      digitalWrite(LED_NOTIFY, HIGH);
-      delay(250);
-      digitalWrite(LED_NOTIFY, LOW);
-      delay(250);
-      digitalWrite(LED_NOTIFY, HIGH);
-      delay(250);
-      digitalWrite(LED_NOTIFY, LOW);
-      delay(250);
-      digitalWrite(LED_NOTIFY, HIGH);
-      delay(250);
+      ledFlashes = 10;
+      ledInterval = 100;
+      ledLastFlash = millis();
     }
   }
 
@@ -771,7 +826,8 @@ void loop() {
 #ifdef DEBUG
     Serial.println("Calling restart");
 #endif
-    ESP.restart();
+    // wifiReset = true;
+    // ESP.restart();
   }
 
   int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
