@@ -9,7 +9,7 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
-#define SOFTWARE_VERSION "v2.0.0.2"
+#define SOFTWARE_VERSION "v2.0.0"
 
 #define ADS1299_VREF 4.5
 #define MCP3912_VREF 1.2
