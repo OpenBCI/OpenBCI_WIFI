@@ -1,3 +1,35 @@
+# v2.0.0
+
+### New Features
+
+* UDP support
+* WiFi Direct default support (thanks @jnaulty)
+* New docs (code of conduct, roadmap, contributing, readme)
+* When in WiFi direct mode, connect PC to WiFi Shield hotspot, and navigate to `192.168.4.1`
+* Now visit `192.168.4.1/wifi` in your browser to connect wifi shield to a new network
+* To erase your network credentials and use wifi direct, use GUI or go to ip address of wifi shield and go to /wifi/delete
+
+### Breaking Changes
+
+* No longer doing captive portal by default, must join network and go to 192.168.4.1
+
+### Work In Progress
+
+* MQTT Secure
+* Stability of wifi shield #48
+
+## Beta 2
+
+### Bug Fixes
+
+* Switch to Station if connect to wifi network success.
+
+## Beta 1
+
+### Bug Fixes
+
+* Can't connect to shield #51
+
 # v1.3.0
 
 At this time, can no longer support both RAW and JSON modes with a single binary file. Need optimized builds. We ended up having two modes that didnt work that well instead of highly optimized builds for the different operating modes.

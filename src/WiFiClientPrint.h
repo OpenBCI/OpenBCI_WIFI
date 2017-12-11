@@ -2,23 +2,31 @@
 
 #include "OpenBCI_Wifi_Definitions.h"
 #include <WiFiClient.h>
+#include <WiFiUdp.h>
 #include <Print.h>
 
-template<size_t BUFFER_SIZE = 1000>
+template<size_t BUFFER_SIZE = 1440>
 class WiFiClientPrint : public Print
 {
   public:
     WiFiClientPrint()
-      : _client(),
-        _length(0)
+      : _clientTCP(),
+        _length(0),
+        _mode(0)
     {
     }
     WiFiClientPrint(WiFiClient client)
-      : _client(client),
-        _length(0)
+      : _clientTCP(client),
+        _length(0),
+        _mode(0)
     {
     }
-
+    WiFiClientPrint(WiFiUDP client)
+      : _clientUDP(client),
+        _length(0),
+        _mode(1)
+    {
+    }
     ~WiFiClientPrint()
     {
 #ifdef DEBUG_ESP_PORT
@@ -45,24 +53,41 @@ class WiFiClientPrint : public Print
         // for (size_t i = 0; i < _length; i++) {
         //   Serial.print((char)_buffer[i]);
         // }
-        _client.write((const uint8_t*)_buffer, _length);
+        if (_mode == 0) {
+          _clientTCP.write((const uint8_t*)_buffer, _length);
+        } else {
+          _clientUDP.write((const uint8_t*)_buffer, _length);
+        }
         _length = 0;
       }
     }
 
     void setClient(WiFiClient client)
     {
-      _client = client;
+      _mode = 0;
+      _clientTCP = client;
+    }
+
+    void setClient(WiFiUDP client)
+    {
+      _mode = 1;
+      _clientUDP = client;
     }
 
     void stop()
     {
       flush();
-      _client.stop();
+      if (_mode == 0) {
+        _clientTCP.stop();
+      } else {
+        _clientUDP.stop();
+      }
     }
 
   private:
-    WiFiClient _client;
+    WiFiClient _clientTCP;
+    WiFiUDP _clientUDP;
     uint8_t _buffer[BUFFER_SIZE];
     size_t _length;
+    uint8_t _mode;
 };

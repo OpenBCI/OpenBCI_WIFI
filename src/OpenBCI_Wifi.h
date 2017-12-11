@@ -8,12 +8,15 @@
 *
 * Author: Push The World LLC (AJ Keller)
 */
-#define ARDUINOJSON_USE_LONG_LONG 1
-#define ARDUINOJSON_USE_DOUBLE 1
-
+// #define ARDUINOJSON_USE_LONG_LONG 1
+// #define ARDUINOJSON_USE_DOUBLE 1
+// #define RAW_TO_JSON
+// #define MQTT
+// #define MQTT_SECURE
 
 #ifndef __OpenBCI_Wifi__
 #define __OpenBCI_Wifi__
+
 #include <Arduino.h>
 #include <time.h>
 #include <ESP8266WiFi.h>
@@ -39,6 +42,7 @@ public:
   typedef enum OUTPUT_PROTOCOL {
     OUTPUT_PROTOCOL_NONE,
     OUTPUT_PROTOCOL_TCP,
+    OUTPUT_PROTOCOL_UDP,
     OUTPUT_PROTOCOL_MQTT,
     OUTPUT_PROTOCOL_WEB_SOCKETS,
     OUTPUT_PROTOCOL_SERIAL,
@@ -56,23 +60,20 @@ public:
   };
 
   // STRUCTS
+#ifdef RAW_TO_JSON
   typedef struct {
-    double channelData[NUM_CHANNELS_CYTON_DAISY];
+    double channelData[NUM_CHANNELS_GANGLION];
     unsigned long long timestamp;
     uint8_t sampleNumber;
   } Sample;
-
-  typedef struct {
-    boolean flushing;
-    boolean gotAllPackets;
-    uint8_t data[BYTES_PER_RAW_BUFFER];
-    int     positionWrite;
-  } RawBuffer;
+#endif
 
   // Functions and Methods
   OpenBCI_Wifi_Class();
   void begin(void);
+#ifdef RAW_TO_JSON
   void channelDataCompute(uint8_t *, uint8_t *, Sample *, uint8_t, uint8_t);
+#endif
   void debugPrintLLNumber(long long);
   void debugPrintLLNumber(long long, uint8_t);
   void debugPrintLLNumber(unsigned long long);
@@ -89,7 +90,9 @@ public:
   uint8_t getHead(void);
   String getInfoAll(void);
   String getInfoBoard(void);
+#ifdef MQTT
   String getInfoMQTT(boolean);
+#endif
   String getInfoTCP(boolean);
   int getJSONAdditionalBytes(uint8_t);
   size_t getJSONBufferSize(void);
@@ -117,7 +120,6 @@ public:
   int32_t int24To32(uint8_t *);
   boolean isAStreamByte(uint8_t);
   void loop(void);
-  boolean mqttConnect(void);
   boolean ntpActive(void);
   unsigned long long ntpGetPreciseAdjustment(unsigned long);
   unsigned long long ntpGetTime(void);
@@ -125,22 +127,19 @@ public:
   void passthroughBufferClear(void);
   uint8_t passthroughCommands(String);
   String perfectPrintByteHex(uint8_t);
-  boolean rawBufferAddStreamPacket(RawBuffer *, uint8_t *);
-  void rawBufferClean(RawBuffer *);
-  boolean rawBufferHasData(RawBuffer *);
-  byte rawBufferProcessPacket(uint8_t *);
-  boolean rawBufferReadyForNewPage(RawBuffer *);
-  void rawBufferReset(void);
-  void rawBufferReset(RawBuffer *);
-  boolean rawBufferSwitchToOtherBuffer(void);
   double rawToScaled(int32_t, double);
   void reset(void);
+#ifdef RAW_TO_JSON
   void sampleReset(void);
   void sampleReset(Sample *);
   void sampleReset(Sample *, uint8_t);
+#endif
   void setGains(uint8_t *);
   void setGains(uint8_t *, uint8_t *);
+#ifdef MQTT
   void setInfoMQTT(String, String, String, int);
+#endif
+  void setInfoUDP(String, int, boolean);
   void setInfoTCP(String, int, boolean);
   void setLatency(unsigned long);
   void setNumChannels(uint8_t);
@@ -164,6 +163,7 @@ public:
   boolean passthroughBufferLoaded;
   boolean jsonHasSampleNumbers;
   boolean jsonHasTimeStamps;
+  boolean redundancy;
   boolean tcpDelimiter;
 
   CLIENT_RESPONSE curClientResponse;
@@ -176,14 +176,17 @@ public:
   OUTPUT_MODE curOutputMode;
   OUTPUT_PROTOCOL curOutputProtocol;
 
-  RawBuffer *curRawBuffer;
-  RawBuffer rawBuffer[NUM_RAW_BUFFERS];
+  uint8_t rawBuffer[NUM_PACKETS_IN_RING_BUFFER_RAW][BYTES_PER_SPI_PACKET];
 
+#ifdef RAW_TO_JSON
   Sample sampleBuffer[NUM_PACKETS_IN_RING_BUFFER_JSON];
+#endif
 
+#ifdef MQTT
   String mqttBrokerAddress;
   String mqttUsername;
   String mqttPassword;
+#endif
   String outputString;
 
   uint8_t lastSampleNumber;
@@ -195,6 +198,8 @@ public:
 
   volatile uint8_t head;
   volatile uint8_t tail;
+  volatile uint32_t rawBufferHead;
+  volatile uint32_t rawBufferTail;
 
 private:
   // Functions
