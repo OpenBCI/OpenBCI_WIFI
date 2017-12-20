@@ -516,7 +516,8 @@ void setup() {
       out += HTTP_ROUTE_WIFI_DELETE;
       out += "'>Click to Erase Wifi Credentials</a></p><br>";
     }
-    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/2.0.0'>Swaggerhub</a> for the latest HTTP endpoints</p></html>";
+    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/2.0.0'>Swaggerhub</a> for the latest HTTP endpoints</p><br>";
+    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Shield Firmware: " + String(SOFTWARE_VERSION) + "</p></html>";
 
     server.send(200, "text/html", out);
   });

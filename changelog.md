@@ -1,3 +1,8 @@
+# v2.0.2
+
+* Reduce buffer size for better OTA Updates
+* Add firmware version to homepage
+
 # v2.0.1
 
 * Updates the swaggerhub to 2.0.0 to match new routes.
