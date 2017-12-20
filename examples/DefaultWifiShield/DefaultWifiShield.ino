@@ -348,10 +348,11 @@ void udpSetup() {
   }
   if (!root.containsKey(JSON_TCP_PORT)) return returnMissingRequiredParam(JSON_TCP_PORT);
   int port = root[JSON_TCP_PORT];
+
+  wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
   if (root.containsKey(JSON_TCP_OUTPUT)) {
     String outputModeStr = root[JSON_TCP_OUTPUT];
     if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_RAW))) {
-      wifi.setOutputMode(wifi.OUTPUT_MODE_RAW);
     } else if (outputModeStr.equals(wifi.getOutputModeString(wifi.OUTPUT_MODE_JSON))) {
       wifi.setOutputMode(wifi.OUTPUT_MODE_JSON);
     } else {
@@ -515,7 +516,8 @@ void setup() {
       out += HTTP_ROUTE_WIFI_DELETE;
       out += "'>Click to Erase Wifi Credentials</a></p><br>";
     }
-    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/1.3.0'>Swaggerhub</a> for the latest HTTP endpoints</p></html>";
+    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/2.0.0'>Swaggerhub</a> for the latest HTTP endpoints</p><br>";
+    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Shield Firmware: " + String(SOFTWARE_VERSION) + "</p></html>";
 
     server.send(200, "text/html", out);
   });
