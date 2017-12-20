@@ -1,3 +1,8 @@
+# v2.0.1
+
+* Updates the swaggerhub to 2.0.0 to match new routes.
+* Removed ability to change output on UDP to JSON because not supporting JSON right now.
+
 # v2.0.0
 
 ### New Features
