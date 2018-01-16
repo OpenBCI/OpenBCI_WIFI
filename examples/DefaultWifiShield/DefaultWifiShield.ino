@@ -175,7 +175,7 @@ void requestWifiManagerStart() {
   sendHeadersForCORS();
   // server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
 
-  String out = "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
+  String out = "<!DOCTYPE html><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><html lang=\"en\"><h1 style=\"margin:  auto\;width: 80%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
   if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
     out += "192.168.4.1";
   } else {
@@ -515,18 +515,31 @@ void setup() {
     debugPrintGet();
 #endif
     String ip = "192.168.4.1";
-    String out = "<!DOCTYPE html><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><html lang=\"en\"><h1 style=\"margin:  auto\;width: 90%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
+    String out = "<!DOCTYPE html><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><html lang=\"en\"><h1 style=\"margin:  auto\;width: 90%\;text-align: center\;\">Push The World</h1><br>";
     if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
       if (WiFi.SSID().equals("")) {
+        out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
         out += "192.168.4.1";
         out += HTTP_ROUTE_WIFI_CONFIG;
-        out += "'>Click to Configure Wifi</a></p><br>";
+        out += "'>Click to Configure Wifi</a><br>If the above link does not work type 192.168.4.1/wifi in web browser and press Enter or Go.<br>See updates on issue <a href='https://github.com/OpenBCI/OpenBCI_WIFI/issues/62'>#62</a> on Github.</p><br>";
       } else {
+        out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
+        out += "192.168.4.1";
+        out += HTTP_ROUTE_WIFI_CONFIG;
+        out += "'>Click to Configure Wifi</a><br>If the above link does not work type 192.168.4.1/wifi in web browser and press Enter or Go.<br>See updates on issue <a href='https://github.com/OpenBCI/OpenBCI_WIFI/issues/62'>#62</a> on Github.</p><br>";
+        out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
         out += "192.168.4.1";
         out += HTTP_ROUTE_WIFI_DELETE;
         out += "'>Click to Erase Wifi Credentials</a></p><br>";
       }
     } else {
+      out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
+      out += WiFi.localIP().toString();
+      out += HTTP_ROUTE_WIFI_CONFIG;
+      out += "'>Click to Configure Wifi</a><br>If the above link does not work type ";
+      out += WiFi.localIP().toString();
+      out += "/wifi in web browser and press Enter or Go.<br>See updates on issue <a href='https://github.com/OpenBCI/OpenBCI_WIFI/issues/62'>#62</a> on Github.</p><br>";
+      out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
       out += WiFi.localIP().toString();
       out += HTTP_ROUTE_WIFI_DELETE;
       out += "'>Click to Erase Wifi Credentials</a></p><br>";
