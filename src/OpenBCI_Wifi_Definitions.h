@@ -11,7 +11,7 @@
 
 #define SOFTWARE_VERSION "v2.0.3"
 
-#define DEBUG 1
+// #define DEBUG 1
 
 #ifdef RAW_TO_JSON
   #define ADS1299_VREF 4.5

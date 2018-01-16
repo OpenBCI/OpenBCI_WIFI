@@ -4,6 +4,7 @@
 
 * Reduce buffer size for better wifi manager
 * Fix LED flash when there are stored creds and shield attempts to connect
+* Add update wifi link to home page
 
 ### Bug Fixes
 

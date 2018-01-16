@@ -171,9 +171,7 @@ bool readRequest(WiFiClient& client) {
 void requestWifiManagerStart() {
 #ifdef DEBUG
   debugPrintGet();
-  Serial.println("requestWifiManagerStart");
 #endif
-  startWifiManager = true;
   sendHeadersForCORS();
   // server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
 
@@ -186,6 +184,12 @@ void requestWifiManagerStart() {
   out += HTTP_ROUTE;
   out += "'>Click to Go To WiFi Manager</a></p><html>";
   server.send(200, "text/html", out);
+
+  ledFlashes = 5;
+  ledInterval = 250;
+  ledLastFlash = millis();
+
+  startWifiManager = true;
 }
 
 JsonObject& getArgFromArgs(int args) {
@@ -510,7 +514,8 @@ void setup() {
 #ifdef DEBUG
     debugPrintGet();
 #endif
-    String out = "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
+    String ip = "192.168.4.1";
+    String out = "<!DOCTYPE html><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><html lang=\"en\"><h1 style=\"margin:  auto\;width: 90%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
     if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
       if (WiFi.SSID().equals("")) {
         out += "192.168.4.1";
@@ -526,8 +531,16 @@ void setup() {
       out += HTTP_ROUTE_WIFI_DELETE;
       out += "'>Click to Erase Wifi Credentials</a></p><br>";
     }
-    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/2.0.0'>Swaggerhub</a> for the latest HTTP endpoints</p><br>";
-    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Shield Firmware: " + String(SOFTWARE_VERSION) + "</p></html>";
+    out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
+    if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
+      out += "192.168.4.1/update";
+    } else {
+      out += WiFi.localIP().toString();
+      out += "/update";
+    }
+    out += "'>Click to Update WiFi Firmware</a></p><br>";
+    out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/2.0.0'>Swaggerhub</a> for the latest HTTP endpoints</p><br>";
+    out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"> Shield Firmware: " + String(SOFTWARE_VERSION) + "</p></html>";
 
     server.send(200, "text/html", out);
   });
@@ -839,12 +852,6 @@ void loop() {
       Serial.printf("Failed to connect with WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
     }
 #endif
-
-#ifdef DEBUG
-    Serial.println("Calling restart");
-#endif
-    // wifiReset = true;
-    // ESP.restart();
   }
 
   int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;
