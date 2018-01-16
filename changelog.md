@@ -1,7 +1,17 @@
 # v2.0.3
 
+### Enhancements
+
 * Reduce buffer size for better wifi manager
 * Fix LED flash when there are stored creds and shield attempts to connect
+
+### Bug Fixes
+
+* Hitting /wifi on some devices did not trigger wifi manager
+
+### Third party
+
+* Now building with v2.4.0 from ESP8266/Arduino
 
 # v2.0.2
 

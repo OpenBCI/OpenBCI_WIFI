@@ -168,15 +168,24 @@ bool readRequest(WiFiClient& client) {
   return false;
 }
 
-void requestWifiManager() {
+void requestWifiManagerStart() {
 #ifdef DEBUG
   debugPrintGet();
-  Serial.println("requestWifiManager");
-  delay(1000);
+  Serial.println("requestWifiManagerStart");
 #endif
   startWifiManager = true;
   sendHeadersForCORS();
-  server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
+  // server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
+
+  String out = "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
+  if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
+    out += "192.168.4.1";
+  } else {
+    out += WiFi.localIP().toString();
+  }
+  out += HTTP_ROUTE;
+  out += "'>Click to Go To WiFi Manager</a></p><html>";
+  server.send(200, "text/html", out);
 }
 
 JsonObject& getArgFromArgs(int args) {
@@ -505,7 +514,7 @@ void setup() {
     if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
       if (WiFi.SSID().equals("")) {
         out += "192.168.4.1";
-        out += HTTP_ROUTE_WIFI;
+        out += HTTP_ROUTE_WIFI_CONFIG;
         out += "'>Click to Configure Wifi</a></p><br>";
       } else {
         out += "192.168.4.1";
@@ -658,10 +667,7 @@ void setup() {
   });
   server.on(HTTP_ROUTE_BOARD, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI, HTTP_GET, []() {
-    delay(500);
-    requestWifiManager();
-  });
+  server.on(HTTP_ROUTE_WIFI, HTTP_GET, requestWifiManagerStart);
   server.on(HTTP_ROUTE_WIFI, HTTP_DELETE, []() {
 #ifdef DEBUG
     debugPrintDelete();
@@ -671,10 +677,7 @@ void setup() {
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, []() {
-    delay(500);
-    requestWifiManager();
-  });
+  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, requestWifiManagerStart);
   server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_GET, []() {
@@ -706,9 +709,9 @@ void setup() {
     ledState = false;
     // digitalWrite(LED_NOTIFY, HIGH);
   } else {
-    digitalWrite(LED_NOTIFY, LOW);
-    ledFlashes = 2;
-    ledInterval = 500;
+    ledState = false;
+    ledFlashes = 4;
+    ledInterval = 250;
     wifiConnectTimeout = millis();
     tryConnectToAP = true;
 #ifdef DEBUG
@@ -762,10 +765,14 @@ void loop() {
       httpUpdater.setup(&server);
       server.begin();
       MDNS.addService("http", "tcp", 80);
-      digitalWrite(LED_NOTIFY, HIGH);
+      // digitalWrite(LED_NOTIFY, HIGH);
 #ifdef DEBUG
       Serial.println("Connected to network, switching to station mode.");
 #endif
+      ledState = false;
+      ledFlashes = 2;
+      ledInterval = 500;
+      ledLastFlash = millis();
   } else if (millis() > (wifiConnectTimeout + 10000)) {
 #ifdef DEBUG
       Serial.printf("Failed to connect to network with %d bytes on head\n", ESP.getFreeHeap());
