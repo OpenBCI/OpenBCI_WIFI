@@ -1,3 +1,8 @@
+# v2.0.3
+
+* Reduce buffer size for better wifi manager
+* Fix LED flash when there are stored creds and shield attempts to connect
+
 # v2.0.2
 
 * Reduce buffer size for better OTA Updates

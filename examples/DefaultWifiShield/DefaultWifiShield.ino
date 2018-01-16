@@ -172,6 +172,7 @@ void requestWifiManager() {
 #ifdef DEBUG
   debugPrintGet();
   Serial.println("requestWifiManager");
+  delay(1000);
 #endif
   startWifiManager = true;
   sendHeadersForCORS();
@@ -657,7 +658,10 @@ void setup() {
   });
   server.on(HTTP_ROUTE_BOARD, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI, HTTP_GET, requestWifiManager);
+  server.on(HTTP_ROUTE_WIFI, HTTP_GET, []() {
+    delay(500);
+    requestWifiManager();
+  });
   server.on(HTTP_ROUTE_WIFI, HTTP_DELETE, []() {
 #ifdef DEBUG
     debugPrintDelete();
@@ -667,7 +671,10 @@ void setup() {
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, requestWifiManager);
+  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, []() {
+    delay(500);
+    requestWifiManager();
+  });
   server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_GET, []() {
@@ -699,6 +706,7 @@ void setup() {
     ledState = false;
     // digitalWrite(LED_NOTIFY, HIGH);
   } else {
+    digitalWrite(LED_NOTIFY, LOW);
     ledFlashes = 2;
     ledInterval = 500;
     wifiConnectTimeout = millis();
