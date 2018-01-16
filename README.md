@@ -21,6 +21,10 @@ This document (the README file) is a hub to give you some information about the 
 * [How can you get involved?](#get-involved)
 * [Get in touch](#contact-us)
 * [Find out more](#find-out-more)
+* [Installation](#install)
+* [Building](#build)
+* [Running](#running)
+* [License](#license)
 
 ## What are we doing?
 
@@ -103,18 +107,7 @@ And of course, you'll want to know our:
 
 Thank you so much (Danke schön! Merci beaucoup!) for visiting the project and we do hope that you'll join us on this amazing journey to make programming with OpenBCI fun and easy.
 
-# Documentation
-
-### Table of Contents:
----
-
-1. [Installation](#install)
-2. [Building](#build)
-3. [Running](#running)
-4. [License](#license)
-
-
-### <a name="install"></a> Installation:
+## <a name="install"></a> Installation:
 
 Use the `DefaultWifiShield.ino` in examples.
 
@@ -129,7 +122,7 @@ The ESP8266 runs arduino as well so there are several installs that need to happ
 The library we are interested in using is the [`SPISlave`](https://github.com/esp8266/Arduino/tree/master/libraries/SPISlave).
 
 
-### <a name="build"></a> Building and Flashing:
+## <a name="build"></a> Building and Flashing:
 
 There are two steps to flashing code. Compiling the codebase, and then flashing it onto the wifi module.
 Makefiles make it a lot easier. Especially if you use [makeEspArduino](https://github.com/plerup/makeEspArduino). Follow the instructions from the project's github.
@@ -156,7 +149,7 @@ The `make` command runs the default commands from `makeEspArduino` with OpenBCI_
 
     `make SKETCH=examples/WifiShieldJSON/WifiShieldJSON.ino UPLOAD_PORT=/dev/cu.usbserial-AI02BAAJ flash`
 
-### <a name="running"></a> Running:
+## <a name="running"></a> Running:
 
 There are two modes that the OpenBCI WiFi shield can run in
 

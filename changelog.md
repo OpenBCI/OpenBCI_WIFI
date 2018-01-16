@@ -6,7 +6,7 @@
 * Fix LED flash when there are stored creds and shield attempts to connect
 * Add update wifi link to home page
 
-### Bug Fixes
+### Work In Progress
 
 * Hitting /wifi on some devices did not trigger wifi manager
 
