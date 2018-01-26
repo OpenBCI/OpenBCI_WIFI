@@ -722,6 +722,7 @@ void setup() {
 #endif
 
   if (WiFi.SSID().equals("")) {
+    WiFi.softAP(wifi.getName().c_str());
     WiFi.mode(WIFI_AP);
 #ifdef DEBUG
     Serial.printf("No stored creds, turning wifi into access point with %d bytes on heap\n", ESP.getFreeHeap());
