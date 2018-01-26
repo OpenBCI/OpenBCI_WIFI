@@ -1,3 +1,9 @@
+# v2.0.4
+
+### Bug Fixes
+
+* Access point name not set until wifi manager was ran for the first time.
+
 # v2.0.3
 
 ### Enhancements
