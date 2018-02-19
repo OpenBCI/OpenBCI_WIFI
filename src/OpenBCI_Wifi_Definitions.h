@@ -9,7 +9,7 @@
 #ifndef __OpenBCI_Wifi_Definitions__
 #define __OpenBCI_Wifi_Definitions__
 
-#define SOFTWARE_VERSION "v2.0.3"
+#define SOFTWARE_VERSION "v2.0.4"
 
 // #define DEBUG 1
 
