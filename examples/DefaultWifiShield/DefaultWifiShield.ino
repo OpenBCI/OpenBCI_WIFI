@@ -457,6 +457,7 @@ void setup() {
   Serial.begin(230400);
   Serial.setDebugOutput(true);
   Serial.println("Serial started");
+  Serial.println("Version: " + String(SOFTWARE_VERSION));
   #endif
 
   wifi.begin();
