@@ -168,14 +168,28 @@ bool readRequest(WiFiClient& client) {
   return false;
 }
 
-void requestWifiManager() {
+void requestWifiManagerStart() {
 #ifdef DEBUG
   debugPrintGet();
-  Serial.println("requestWifiManager");
 #endif
-  startWifiManager = true;
   sendHeadersForCORS();
-  server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
+  // server.send(301, "text/html", "<meta http-equiv=\"refresh\" content=\"1; URL='/'\" />");
+
+  String out = "<!DOCTYPE html><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><html lang=\"en\"><h1 style=\"margin:  auto\;width: 80%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
+  if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
+    out += "192.168.4.1";
+  } else {
+    out += WiFi.localIP().toString();
+  }
+  out += HTTP_ROUTE;
+  out += "'>Click to Go To WiFi Manager</a></p><html>";
+  server.send(200, "text/html", out);
+
+  ledFlashes = 5;
+  ledInterval = 250;
+  ledLastFlash = millis();
+
+  startWifiManager = true;
 }
 
 JsonObject& getArgFromArgs(int args) {
@@ -500,24 +514,46 @@ void setup() {
 #ifdef DEBUG
     debugPrintGet();
 #endif
-    String out = "<!DOCTYPE html><html lang=\"en\"><h1 style=\"margin:  auto\;width: 50%\;text-align: center\;\">Push The World</h1><br><p style=\"margin:  auto\;width: 50%\;text-align: center\;\"><a href='http://";
+    String ip = "192.168.4.1";
+    String out = "<!DOCTYPE html><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><html lang=\"en\"><h1 style=\"margin:  auto\;width: 90%\;text-align: center\;\">Push The World</h1><br>";
     if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
       if (WiFi.SSID().equals("")) {
+        out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
         out += "192.168.4.1";
-        out += HTTP_ROUTE_WIFI;
-        out += "'>Click to Configure Wifi</a></p><br>";
+        out += HTTP_ROUTE_WIFI_CONFIG;
+        out += "'>Click to Configure Wifi</a><br>If the above link does not work type 192.168.4.1/wifi in web browser and press Enter or Go.<br>See updates on issue <a href='https://github.com/OpenBCI/OpenBCI_WIFI/issues/62'>#62</a> on Github.</p><br>";
       } else {
+        out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
+        out += "192.168.4.1";
+        out += HTTP_ROUTE_WIFI_CONFIG;
+        out += "'>Click to Configure Wifi</a><br>If the above link does not work type 192.168.4.1/wifi in web browser and press Enter or Go.<br>See updates on issue <a href='https://github.com/OpenBCI/OpenBCI_WIFI/issues/62'>#62</a> on Github.</p><br>";
+        out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
         out += "192.168.4.1";
         out += HTTP_ROUTE_WIFI_DELETE;
         out += "'>Click to Erase Wifi Credentials</a></p><br>";
       }
     } else {
+      out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
+      out += WiFi.localIP().toString();
+      out += HTTP_ROUTE_WIFI_CONFIG;
+      out += "'>Click to Configure Wifi</a><br>If the above link does not work type ";
+      out += WiFi.localIP().toString();
+      out += "/wifi in web browser and press Enter or Go.<br>See updates on issue <a href='https://github.com/OpenBCI/OpenBCI_WIFI/issues/62'>#62</a> on Github.</p><br>";
+      out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
       out += WiFi.localIP().toString();
       out += HTTP_ROUTE_WIFI_DELETE;
       out += "'>Click to Erase Wifi Credentials</a></p><br>";
     }
-    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/2.0.0'>Swaggerhub</a> for the latest HTTP endpoints</p><br>";
-    out += "<p style=\"margin:  auto\;width: 50%\;text-align: center\;\"> Shield Firmware: " + String(SOFTWARE_VERSION) + "</p></html>";
+    out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"><a href='http://";
+    if (WiFi.localIP().toString().equals("192.168.4.1") || WiFi.localIP().toString().equals("0.0.0.0")) {
+      out += "192.168.4.1/update";
+    } else {
+      out += WiFi.localIP().toString();
+      out += "/update";
+    }
+    out += "'>Click to Update WiFi Firmware</a></p><br>";
+    out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"> Please visit <a href='https://app.swaggerhub.com/apis/pushtheworld/openbci-wifi-server/2.0.0'>Swaggerhub</a> for the latest HTTP endpoints</p><br>";
+    out += "<p style=\"margin:  auto\;width: 80%\;text-align: center\;\"> Shield Firmware: " + String(SOFTWARE_VERSION) + "</p></html>";
 
     server.send(200, "text/html", out);
   });
@@ -657,7 +693,7 @@ void setup() {
   });
   server.on(HTTP_ROUTE_BOARD, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI, HTTP_GET, requestWifiManager);
+  server.on(HTTP_ROUTE_WIFI, HTTP_GET, requestWifiManagerStart);
   server.on(HTTP_ROUTE_WIFI, HTTP_DELETE, []() {
 #ifdef DEBUG
     debugPrintDelete();
@@ -667,7 +703,7 @@ void setup() {
   });
   server.on(HTTP_ROUTE_WIFI, HTTP_OPTIONS, sendHeadersForOptions);
 
-  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, requestWifiManager);
+  server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_GET, requestWifiManagerStart);
   server.on(HTTP_ROUTE_WIFI_CONFIG, HTTP_OPTIONS, sendHeadersForOptions);
 
   server.on(HTTP_ROUTE_WIFI_DELETE, HTTP_GET, []() {
@@ -686,6 +722,7 @@ void setup() {
 #endif
 
   if (WiFi.SSID().equals("")) {
+    WiFi.softAP(wifi.getName().c_str());
     WiFi.mode(WIFI_AP);
 #ifdef DEBUG
     Serial.printf("No stored creds, turning wifi into access point with %d bytes on heap\n", ESP.getFreeHeap());
@@ -699,8 +736,9 @@ void setup() {
     ledState = false;
     // digitalWrite(LED_NOTIFY, HIGH);
   } else {
-    ledFlashes = 2;
-    ledInterval = 500;
+    ledState = false;
+    ledFlashes = 4;
+    ledInterval = 250;
     wifiConnectTimeout = millis();
     tryConnectToAP = true;
 #ifdef DEBUG
@@ -754,10 +792,14 @@ void loop() {
       httpUpdater.setup(&server);
       server.begin();
       MDNS.addService("http", "tcp", 80);
-      digitalWrite(LED_NOTIFY, HIGH);
+      // digitalWrite(LED_NOTIFY, HIGH);
 #ifdef DEBUG
       Serial.println("Connected to network, switching to station mode.");
 #endif
+      ledState = false;
+      ledFlashes = 2;
+      ledInterval = 500;
+      ledLastFlash = millis();
   } else if (millis() > (wifiConnectTimeout + 10000)) {
 #ifdef DEBUG
       Serial.printf("Failed to connect to network with %d bytes on head\n", ESP.getFreeHeap());
@@ -824,12 +866,6 @@ void loop() {
       Serial.printf("Failed to connect with WiFi Manager with %d bytes on heap\n" , ESP.getFreeHeap());
     }
 #endif
-
-#ifdef DEBUG
-    Serial.println("Calling restart");
-#endif
-    // wifiReset = true;
-    // ESP.restart();
   }
 
   int packetsToSend = wifi.rawBufferHead - wifi.rawBufferTail;

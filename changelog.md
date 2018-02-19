@@ -1,3 +1,25 @@
+# v2.0.4
+
+### Bug Fixes
+
+* Access point name not set until wifi manager was ran for the first time.
+
+# v2.0.3
+
+### Enhancements
+
+* Reduce buffer size for better wifi manager
+* Fix LED flash when there are stored creds and shield attempts to connect
+* Add update wifi link to home page
+
+### Work In Progress
+
+* Hitting /wifi on some devices did not trigger wifi manager
+
+### Third party
+
+* Now building with v2.4.0 from ESP8266/Arduino
+
 # v2.0.2
 
 * Reduce buffer size for better OTA Updates

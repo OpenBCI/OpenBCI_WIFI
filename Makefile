@@ -8,45 +8,45 @@
 #            makeEspArduino Source      #
 #########################################
 # from: https://github.com/plerup/makeEspArduino
-makeEspArduino = $(HOME)/makeEspArduino/makeEspArduino.mk
+makeEspArduino ?= $(HOME)/makeEspArduino/makeEspArduino.mk
 
 #########################################
 #            Arduino Lib                #
 #########################################
-ARDUINO_LIBS = $(HOME)/Documents/Arduino/libraries
+ARDUINO_LIBS ?= $(HOME)/Documents/Arduino/libraries
 
 #########################################
 #            Arduino Sketch             #
 #########################################
-SKETCH = $(ARDUINO_LIBS)/OpenBCI_WIFI/examples/DefaultWifiShield/DefaultWifiShield.ino
+SKETCH ?= $(ARDUINO_LIBS)/OpenBCI_WIFI/examples/DefaultWifiShield/DefaultWifiShield.ino
 
 #########################################
 #            OpenBCI Lib                #
 #########################################
-OPENBCI_WIFI_DIR = $(ARDUINO_LIBS)/OpenBCI_WIFI
-OPENBCI_WIFI_LIB = $(OPENBCI_WIFI_DIR)/src
+OPENBCI_WIFI_DIR ?= $(ARDUINO_LIBS)/OpenBCI_WIFI
+OPENBCI_WIFI_LIB ?= $(OPENBCI_WIFI_DIR)/src
 
 #########################################
 #            ESP8266 Lib                #
 #########################################
-ESP_ROOT = $(HOME)/esp8266
-ESP_LIBS = $(ESP_ROOT)/libraries
+ESP_ROOT ?= $(HOME)/esp8266
+ESP_LIBS ?= $(ESP_ROOT)/libraries
 
 #########################################
 #            Board Info                 #
 #########################################
-HTTP_ADDR=OpenBCI-2114.local
-UPLOAD_PORT = /dev/ttyUSB0
-# BOARD = openbci
-BOARD = huzzah
-FLASH_DEF = 4M1M
-# F_CPU = 160000000l
+HTTP_ADDR ?= OpenBCI-2114.local
+UPLOAD_PORT ?= /dev/ttyUSB0
+# BOARD ?= openbci
+BOARD ?= huzzah
+FLASH_DEF ?= 4M1M
+# F_CPU ?= 160000000l
 
 
 #########################################
 #            Include/Exclude Libs       #
 #########################################
-LIBS = $(OPENBCI_WIFI_LIB) \
+LIBS ?= $(OPENBCI_WIFI_LIB) \
        $(ARDUINO_LIBS)/WiFiManager \
        $(ARDUINO_LIBS)/ArduinoJson \
        $(ARDUINO_LIBS)/PubSubClient \
@@ -64,7 +64,7 @@ LIBS = $(OPENBCI_WIFI_LIB) \
        $(ESP_LIBS)/ESP8266HTTPUpdateServer \
        $(ESP_LIBS)/ArduinoOTA
 
-EXCLUDE_DIRS = $(ARDUINO_LIBS)/ArduinoJson/test \
+EXCLUDE_DIRS ?= $(ARDUINO_LIBS)/ArduinoJson/test \
 	       $(ARDUINO_LIBS)/ArduinoJson/third-party \
 	       $(ARDUINO_LIBS)/ArduinoJson/fuzzing \
 	       $(ARDUINO_LIBS)/WebSockets/examples \
