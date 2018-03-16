@@ -499,7 +499,7 @@ void setup() {
   });
 
   // Setup SPI Slave registers and pins
-  SPISlave.begin();
+  // SPISlave.begin();
 
   // Set the status register (if the master reads it, it will read this value)
   SPISlave.setStatus(209);
@@ -731,6 +731,7 @@ void setup() {
     httpUpdater.setup(&server);
     server.begin();
     MDNS.addService("http", "tcp", 80);
+    SPISlave.begin();
     ledFlashes = 10;
     ledInterval = 100;
     ledLastFlash = millis();
@@ -793,6 +794,7 @@ void loop() {
       httpUpdater.setup(&server);
       server.begin();
       MDNS.addService("http", "tcp", 80);
+      SPISlave.begin();
       // digitalWrite(LED_NOTIFY, HIGH);
 #ifdef DEBUG
       Serial.println("Connected to network, switching to station mode.");
@@ -813,6 +815,7 @@ void loop() {
       httpUpdater.setup(&server);
       server.begin();
       MDNS.addService("http", "tcp", 80);
+      SPISlave.begin();
       ledFlashes = 10;
       ledInterval = 100;
       ledLastFlash = millis();
