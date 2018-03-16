@@ -40,7 +40,7 @@ UPLOAD_PORT ?= /dev/ttyUSB0
 # BOARD ?= openbci
 BOARD ?= huzzah
 FLASH_DEF ?= 4M1M
-# F_CPU ?= 160000000l
+F_CPU ?= 80000000l
 
 
 #########################################
