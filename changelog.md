@@ -1,3 +1,9 @@
+# v2.0.5
+
+### Bug Fixes
+
+* Setting up SPI slave too early could lead to crash
+
 # v2.0.4
 
 ### Bug Fixes
