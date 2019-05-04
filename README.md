@@ -56,7 +56,7 @@ Using WiFi physically solves limitations with the current state-of-the-art open 
 
 ## Who are we?
 
-The founder of the OpenBCI WiFi Shield Library is [AJ Keller][link_aj_keller] with [Push The World][link_ptw]. As we continue to stabilize the hardware, the people contributing to this repo is the [OpenBCI][link_openbci] at large. WiFi library contributors want to stream data _fast_ from their bio-sensors.
+The founder of the OpenBCI WiFi Shield Library is [OpenBCI][link_openbci]. As we continue to stabilize the hardware, the people contributing to this repo is the [OpenBCI][link_openbci] at large. WiFi library contributors want to stream data _fast_ from their bio-sensors.
 
 <a href="https://www.mozillascience.org/about">
   <img
@@ -65,8 +65,6 @@ The founder of the OpenBCI WiFi Shield Library is [AJ Keller][link_aj_keller] wi
     width=140
   </img>
 </a>
-
-[AJ][link_aj_keller] is an invited member of the 4th cohort [Open Leaders Cohort][link_openleaderscohort] of the [Mozilla Science Lab][link_mozsci] who brought together open science advocates from around the world to participate in the first [Working Open Workshop][link_mozwow] in Berlin in February 2016. The [training exercises][link_mozwow] (which are free and easy to reuse) focused on how to build and effectively engage communities so they can work together to develop tools and resources for the greater good.
 
 ## What do we need?
 
@@ -87,7 +85,7 @@ Please note that it's very important to us that we maintain a positive and suppo
 
 ## Contact us
 
-If you want to report a problem or suggest an enhancement we'd love for you to [open an issue](../../issues) at this github repository because then we can get right on it. But you can also contact [AJ][link_aj_keller] by email (pushtheworldllc AT gmail DOT com) or on [twitter](https://twitter.com/aj-ptw).
+If you want to report a problem or suggest an enhancement we'd love for you to [open an issue](../../issues) at this github repository because then we can get right on it. But you can also contact [OpenBCI][link_openbci] by email (contact@openbci.com).
 
 You can also hang out, ask questions and share stories in the [OpenBCI NodeJS room](https://gitter.im/OpenBCI/OpenBCI_NodeJS?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) on Gitter.
 
@@ -113,7 +111,7 @@ Use the `DefaultWifiShield.ino` in examples.
 
 You need to clone the [ESP8266 library from github](https://github.com/esp8266/Arduino#using-git-version).
 
-For the firmware that runs on ESP8266 see [OpenBCI_Wifi](https://github.com/PushTheWorld/OpenBCI_Wifi) on PushTheWorld’s github repository.
+For the firmware that runs on ESP8266 see [OpenBCI_Wifi](https://github.com/OpenBCI/OpenBCI_WIFI) on the OpenBCI github repository.
 
 For the software that runs on OpenBCI, we will start from scratch with an ino file that just does SPI.
 
