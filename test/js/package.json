@@ -8,23 +8,22 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PushTheWorld/OpenBCI_Wifi.git"
+    "url": "git+https://github.com/OpenBCI/OpenBCI_WIFI"
   },
   "keywords": [
     "openbci",
     "wifi",
     "esp8266",
-    "pushtheworld",
     "push",
     "the",
     "world"
   ],
-  "author": "AJ Keller",
+  "author": "OpenBCI",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/PushTheWorld/OpenBCI_Wifi/issues"
+    "url": "https://github.com/OpenBCI/OpenBCI_WIFI/issues"
   },
-  "homepage": "https://github.com/PushTheWorld/OpenBCI_Wifi#readme",
+  "homepage": "https://github.com/OpenBCI/OpenBCI_WIFI#readme",
   "dependencies": {
     "lodash": "^4.17.4",
     "openbci-utilities": "^0.2.0",
